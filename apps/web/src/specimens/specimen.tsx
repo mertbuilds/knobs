@@ -111,6 +111,12 @@ const styles = create({
     flexWrap: 'wrap',
     gap: 6,
   },
+  // The chips of one specimen, a row for each kind.
+  chipRows: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.s3,
+  },
   // An icon sits a step closer to the edge than a letter does.
   chipWithIcon: {
     alignItems: 'center',
@@ -196,19 +202,21 @@ export function Row({
 /**
  * The frame every use case sits in: a calm label, one sentence that names the
  * real case, the piece of product that reads the browser, and the chips that
- * turn its knob.
+ * turn its knob. `more` is a second row of chips, for the ones of another kind.
  */
 export function Specimen({
   children,
   chips,
   icon: Icon,
   label,
+  more,
   scene,
 }: {
   children?: ReactNode;
   chips: ReactNode;
   icon: LucideIcon;
   label: string;
+  more?: ReactNode;
   scene: string;
 }) {
   return (
@@ -221,8 +229,9 @@ export function Specimen({
         <p {...props(styles.scene)}>{scene}</p>
       </div>
       {children}
-      <div {...props(styles.chips)} aria-label={label} role="group">
-        {chips}
+      <div {...props(styles.chipRows)} aria-label={label} role="group">
+        <div {...props(styles.chips)}>{chips}</div>
+        {more !== undefined && <div {...props(styles.chips)}>{more}</div>}
       </div>
     </div>
   );

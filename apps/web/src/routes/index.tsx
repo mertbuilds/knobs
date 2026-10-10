@@ -710,25 +710,29 @@ function Landing() {
         <h2 {...props(styles.sectionHeading)}>{m.try_title()}</h2>
         <p {...props(styles.text)}>{m.try_intro()}</p>
         <div {...props(styles.specimens)}>
-          <LanguageSpecimen />
-          <LocationSpecimen />
-          <TimeSpecimen />
           <Specimen
             chips={
               <>
-                <Chip demo="iphone" icon={SmartphoneIcon} label={m.try_iphone()} />
-                <Chip demo="pixel" icon={SmartphoneIcon} label={m.try_pixel()} />
                 <Chip demo="duo" icon={SmartphoneIcon} label={m.try_duo()} />
                 <Chip demo="fold" icon={FoldHorizontalIcon} label={m.try_fold()} />
+                <Chip demo="iphone" icon={SmartphoneIcon} label={m.try_iphone()} />
+                <Chip demo="pixel" icon={SmartphoneIcon} label={m.try_pixel()} />
+              </>
+            }
+            icon={SmartphoneIcon}
+            label={m.try_device()}
+            more={
+              <>
                 <Chip demo="mat" icon={PaletteIcon} label={m.try_mat()} />
                 <Chip demo="scheme" icon={SunMoonIcon} label={m.try_scheme()} />
                 <Chip demo="reset" icon={RotateCcwIcon} label={m.try_reset()} />
               </>
             }
-            icon={SmartphoneIcon}
-            label={m.try_device()}
             scene={m.try_device_scene()}
           />
+          <LanguageSpecimen />
+          <LocationSpecimen />
+          <TimeSpecimen />
         </div>
         <p {...props(styles.seenTitle)}>{m.seen_title()}</p>
         <SeenList />
