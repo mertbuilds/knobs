@@ -1,6 +1,6 @@
 import { colors, font, radius, shadow, spacing } from '@knobs/ui/tokens.stylex';
 import { create, firstThatWorks, props } from '@stylexjs/stylex';
-import { ClipboardCheckIcon, XIcon } from 'lucide-react';
+import { ClipboardCheckIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ICON } from '../lib/icon.ts';
@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import { Layer } from './layer.tsx';
 import {
   closeTour,
+  exploreKnobs,
   isTop,
   startTour,
   STOPS,
@@ -16,7 +17,7 @@ import {
   tourKnobs,
   useProgress,
 } from './progress.ts';
-import { type Aim, aimAt, aimAtPanel, type Say } from './targets.ts';
+import { type Aim, aimAt, aimAtPanel, aimAtSearch, type Say } from './targets.ts';
 
 const LINES: Record<Say, () => string> = {
   addDevice: m.tour_add_device,
@@ -25,11 +26,13 @@ const LINES: Record<Say, () => string> = {
   duo: m.tour_duo,
   entryDevice: m.tour_entry_device,
   entryMat: m.tour_entry_mat,
+  explore: m.tour_explore,
   filter: m.tour_filter,
   grab: m.tour_grab,
   iphone: m.tour_iphone,
   mat: m.tour_mat,
   open: m.tour_open,
+  pick: m.tour_pick,
   rowDevice: m.tour_row_device,
   rowMat: m.tour_row_mat,
   scroll: m.tour_scroll,
@@ -44,6 +47,9 @@ const KEYS: Partial<Record<Say, () => string>> = {
   grab: m.hint_grab_key,
   open: m.hint_panel_key,
 };
+
+// The targets on a device's screen, where the frame takes its stronger line.
+const ON_SCREEN: ReadonlySet<Say> = new Set<Say>(['bars', 'scroll']);
 
 const styles = create({
   // grab's label bar, with what to do next in it.
@@ -158,6 +164,42 @@ const styles = create({
     pointerEvents: 'auto',
     whiteSpace: 'pre-wrap',
   },
+  // The panel's chip as a button, 4 round inside the bubble's 8 and 13: the track ground, raised on hover.
+  explore: {
+    alignItems: 'center',
+    backgroundColor: {
+      ':hover': colors.raised,
+      default: colors.track,
+    },
+    borderRadius: radius.base,
+    borderStyle: 'none',
+    boxShadow: {
+      ':hover': shadow.lift,
+      default: 'none',
+    },
+    color: colors.fg,
+    columnGap: spacing.s2,
+    cursor: 'pointer',
+    display: 'flex',
+    flexShrink: 0,
+    fontFamily: 'inherit',
+    fontSize: 13,
+    lineHeight: '20px',
+    outlineColor: colors.muted,
+    outlineOffset: 1,
+    outlineStyle: {
+      ':focus-visible': 'solid',
+      default: 'none',
+    },
+    outlineWidth: 1,
+    paddingBlock: spacing.s1,
+    paddingInline: spacing.s2,
+    pointerEvents: 'auto',
+    transitionDuration: '120ms',
+    transitionProperty: 'background-color, box-shadow',
+    transitionTimingFunction: 'ease-out',
+    whiteSpace: 'nowrap',
+  },
   grow: {
     flexGrow: 1,
     minWidth: 0,
@@ -198,8 +240,18 @@ const styles = create({
     transitionProperty: 'background-color, color',
     transitionTimingFunction: 'ease-out',
   },
+  // The install command and what to do after it: side by side, or one under the other in a narrow bubble.
+  next: {
+    alignItems: 'center',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: spacing.s1,
+  },
   // The install command, whose copy button takes the pointer.
   takes: {
+    flexBasis: 'auto',
+    flexGrow: 1,
+    minWidth: 0,
     pointerEvents: 'auto',
   },
 });
@@ -217,6 +269,8 @@ export function Tour({ install }: { install: ReactNode }) {
   // What the layer last found to say, which follows the page, not only the stop.
   const [say, setSay] = useState<Say | null>(null);
   const ended = progress.phase === 'end';
+  // The list of knobs did not open: the panel's search is the place, for a moment.
+  const exploring = progress.phase === 'explore';
   const showing = progress.phase !== 'off' && isTop();
   // The scroll just done keeps the screen a moment, to watch the bars move.
   const stop = progress.watching ? 'scroll' : STOPS.find((id) => !progress.done.includes(id));
@@ -238,11 +292,11 @@ export function Tour({ install }: { install: ReactNode }) {
   const aim = (): Aim => {
     const knobs = tourKnobs();
     let next: Aim = { clip: null, el: null, say: ended ? null : 'open' };
-    if (knobs !== undefined) {
-      next = ended || stop === undefined ? aimAtPanel(knobs) : aimAt(stop, knobs);
-    }
-    if (progress.watching && next.say === 'scroll') {
-      next = { ...next, say: 'bars' };
+    if (exploring) {
+      next = aimAtSearch();
+    } else if (knobs !== undefined) {
+      next =
+        ended || stop === undefined ? aimAtPanel(knobs) : aimAt(stop, knobs, progress.watching);
     }
     setSay(next.say);
     return next;
@@ -261,21 +315,25 @@ export function Tour({ install }: { install: ReactNode }) {
           <Layer
             aim={aim}
             boxed={!ended}
-            pulseKey={stop ?? 'end'}
+            pulseKey={exploring ? 'explore' : progress.watching ? 'bars' : (stop ?? 'end')}
             said={ended ? m.tour_copied() : (line ?? '')}
+            strong={say !== null && ON_SCREEN.has(say)}
           >
             {line !== null && (
               <div {...props(styles.bar)}>
                 {line}
                 {key !== undefined && <Key>{key}</Key>}
-                <button
-                  {...props(styles.barClose)}
-                  aria-label={m.tour_close()}
-                  onClick={closeTour}
-                  type="button"
-                >
-                  <XIcon {...ICON} />
-                </button>
+                {/* While grab is on every click on the page is a pick: the caption takes none. */}
+                {say !== 'pick' && (
+                  <button
+                    {...props(styles.barClose)}
+                    aria-label={m.tour_close()}
+                    onClick={closeTour}
+                    type="button"
+                  >
+                    <XIcon {...ICON} />
+                  </button>
+                )}
               </div>
             )}
             {ended && (
@@ -298,7 +356,13 @@ export function Tour({ install }: { install: ReactNode }) {
                   <pre {...props(styles.copied)}>{progress.grabbed}</pre>
                 )}
                 <p {...props(styles.bubbleLine)}>{m.tour_end()}</p>
-                <div {...props(styles.takes)}>{install}</div>
+                <div {...props(styles.next)}>
+                  <div {...props(styles.takes)}>{install}</div>
+                  <button {...props(styles.explore)} onClick={exploreKnobs} type="button">
+                    <SlidersHorizontalIcon {...ICON} />
+                    {m.tour_explore()}
+                  </button>
+                </div>
               </div>
             )}
           </Layer>,

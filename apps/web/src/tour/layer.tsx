@@ -50,6 +50,13 @@ const styles = create({
     top: 0,
     willChange: 'transform',
   },
+  // On a device's dark screen half a blue line is lost: the whole blue, a line of the label
+  // bar's text color outside it, which is light on a light page and dark on a dark one, and the
+  // soft ring beyond.
+  boxStrong: {
+    borderColor: colors.accent,
+    boxShadow: `0 0 0 1px ${colors.grabBarText}, 0 0 0 4px color-mix(in srgb, ${colors.accent} 35%, transparent)`,
+  },
   // Read by screen readers, never drawn.
   hidden: {
     clipPath: 'inset(50%)',
@@ -115,6 +122,10 @@ type Size = { height: number; width: number };
 
 const SIDES: ReadonlyArray<Side> = ['left', 'right', 'bottom', 'top'];
 
+/** A place for the caption: a side of the target, of the box around it (`out`), or the window's bottom. */
+type Seat = Side | `out-${Side}` | 'dock';
+type Placed = { seat: Seat; x: number; y: number };
+
 function boxOf(node: Element): Box {
   const { bottom, left, right, top } = node.getBoundingClientRect();
   return { bottom, left, right, top };
@@ -146,11 +157,11 @@ function reveal(node: Element, box: Element): void {
  * What of the target shows in the window, a pixel grid apart. A target scrolled
  * out of its list gives the list, and one off the window gives nothing.
  */
-function visible(aim: Aim, view: Size): Box | null {
+function visible(aim: Aim, view: Size, spot: Box | null): Box | null {
   if (aim.el === null) {
     return null;
   }
-  let box = boxOf(aim.el);
+  let box = spot ?? boxOf(aim.el);
   if (aim.clip !== null) {
     const within = boxOf(aim.clip);
     box = cut(box, within) ?? within;
@@ -170,54 +181,90 @@ function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(value, high));
 }
 
+function meets(a: Box, b: Box): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 /**
  * Where the caption goes: on the side of the target with room for it, the one
- * it is on already while that still fits, never off the window. With no
- * target it sits at the bottom of the window.
+ * it is on already while that still fits, never off the window. With `outer`,
+ * the box around the target such as the phone around its screen, it goes
+ * outside that box first, level with the target, and never over `avoid`. With
+ * no target, and with `docks` where there is no room outside, it sits at the
+ * bottom of the window.
  */
 function place(
   around: Box | null,
   size: Size,
   view: Size,
-  was: Side | null,
-): { side: Side | null; x: number; y: number } {
-  if (around === null) {
-    return {
-      side: null,
-      x: Math.round((view.width - size.width) / 2),
-      y: Math.max(MARGIN, view.height - size.height - DOCK),
-    };
-  }
-  const room: Record<Side, number> = {
-    bottom: view.height - around.bottom - GAP - MARGIN - size.height,
-    left: around.left - GAP - MARGIN - size.width,
-    right: view.width - around.right - GAP - MARGIN - size.width,
-    top: around.top - GAP - MARGIN - size.height,
+  was: Seat | null,
+  outer: Box | null,
+  avoid: Box | null,
+  docks: boolean,
+): Placed {
+  const dock: Placed = {
+    seat: 'dock',
+    x: Math.round((view.width - size.width) / 2),
+    y: Math.max(MARGIN, view.height - size.height - DOCK),
   };
-  const side =
-    was !== null && room[was] >= 0
-      ? was
-      : (SIDES.find((name) => room[name] >= 0) ??
-        SIDES.reduce((best, name) => (room[name] > room[best] ? name : best)));
+  if (around === null) {
+    return dock;
+  }
   const across = (around.left + around.right - size.width) / 2;
   const along = (around.top + around.bottom - size.height) / 2;
-  const x =
-    side === 'left'
-      ? around.left - GAP - size.width
-      : side === 'right'
-        ? around.right + GAP
-        : across;
-  const y =
-    side === 'top'
-      ? around.top - GAP - size.height
-      : side === 'bottom'
-        ? around.bottom + GAP
-        : along;
-  return {
-    side,
-    x: Math.round(clamp(x, MARGIN, Math.max(MARGIN, view.width - MARGIN - size.width))),
-    y: Math.round(clamp(y, MARGIN, Math.max(MARGIN, view.height - MARGIN - size.height))),
+  const high = { x: view.width - MARGIN - size.width, y: view.height - MARGIN - size.height };
+  const seatAt = (seat: Seat): { fits: boolean; room: number; spot: Placed } => {
+    if (seat === 'dock') {
+      return { fits: docks && outer !== null, room: 0, spot: dock };
+    }
+    const out = seat.startsWith('out-');
+    const from = out ? outer : around;
+    const side = SIDES.find((name) => seat.endsWith(name)) ?? 'left';
+    if (from === null) {
+      return { fits: false, room: Number.NEGATIVE_INFINITY, spot: dock };
+    }
+    const x =
+      side === 'left' ? from.left - GAP - size.width : side === 'right' ? from.right + GAP : across;
+    const y =
+      side === 'top' ? from.top - GAP - size.height : side === 'bottom' ? from.bottom + GAP : along;
+    const room =
+      side === 'left'
+        ? x - MARGIN
+        : side === 'right'
+          ? high.x - x
+          : side === 'top'
+            ? y - MARGIN
+            : high.y - y;
+    const spot = {
+      seat,
+      x: Math.round(clamp(x, MARGIN, Math.max(MARGIN, high.x))),
+      y: Math.round(clamp(y, MARGIN, Math.max(MARGIN, high.y))),
+    };
+    const box = {
+      bottom: spot.y + size.height,
+      left: spot.x,
+      right: spot.x + size.width,
+      top: spot.y,
+    };
+    return { fits: room >= 0 && (avoid === null || !meets(box, avoid)), room, spot };
   };
+  // Outside the box around the target first. A caption with no frame never goes inside it.
+  const seats: ReadonlyArray<Seat> =
+    outer === null
+      ? SIDES
+      : [...SIDES.map((name): Seat => `out-${name}`), ...(docks ? (['dock'] as const) : SIDES)];
+  const kept = was !== null && seats.includes(was) ? seatAt(was) : null;
+  if (kept?.fits === true) {
+    return kept.spot;
+  }
+  const tried = seats.map(seatAt);
+  const best = tried.find(({ fits }) => fits) ?? tried.reduce((a, b) => (b.room > a.room ? b : a));
+  return best.spot;
+}
+
+/** Is the node there and laid out? */
+function shown(node: Element | null | undefined): node is Element {
+  return node !== null && node !== undefined && node.getClientRects().length > 0;
 }
 
 /** The target's own corner radius, which the frame follows from `PAD` out. */
@@ -257,6 +304,7 @@ export function Layer({
   children,
   pulseKey,
   said,
+  strong,
 }: {
   aim: () => Aim;
   /** Draw the frame around the target, or only stand beside it. */
@@ -266,6 +314,8 @@ export function Layer({
   pulseKey: string;
   /** What assistive tech is told, once per change. */
   said: string;
+  /** The target is on a device's screen, where the frame needs a stronger line to show. */
+  strong: boolean;
 }) {
   const layer = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -313,7 +363,7 @@ export function Layer({
     let target: Element | null = null;
     let radius = 0;
     let revealedIn: Element | null = null;
-    let side: Side | null = null;
+    let seat: Seat | null = null;
     let framed = false;
     let glideUntil = 0;
     let drawn = '';
@@ -340,13 +390,28 @@ export function Layer({
       revealedIn = clip;
       const root = document.documentElement;
       const view = { height: root.clientHeight, width: root.clientWidth };
-      const at = visible(now.aim, view);
+      // A target that moves by itself, such as the browser's bars, says where it is now.
+      const spot = el === null ? null : (now.aim.spot?.() ?? null);
+      const round = Math.round(spot?.radius ?? radius);
+      const at = visible(now.aim, view, spot);
+      const outer = at === null || !shown(now.aim.beside) ? null : boxOf(now.aim.beside);
+      const avoid = at === null || !shown(now.aim.avoid) ? null : boxOf(now.aim.avoid);
+      const bare = now.aim.bare === true;
       const key = [
         at?.left,
         at?.top,
         at?.right,
         at?.bottom,
-        radius,
+        outer?.left,
+        outer?.top,
+        outer?.right,
+        outer?.bottom,
+        avoid?.left,
+        avoid?.top,
+        avoid?.right,
+        avoid?.bottom,
+        bare,
+        round,
         view.width,
         view.height,
         size.width,
@@ -364,11 +429,12 @@ export function Layer({
           glideUntil = time + GLIDE;
         }
         target = el;
-        side = null;
+        seat = null;
       }
       const moving = time < glideUntil ? GLIDING : calm.matches ? 'none' : FADE;
+      const framing = now.boxed && !bare;
       const around =
-        at === null || !now.boxed
+        at === null || !framing
           ? at
           : {
               bottom: at.bottom + PAD,
@@ -376,19 +442,19 @@ export function Layer({
               right: at.right + PAD,
               top: at.top - PAD,
             };
-      framed = around !== null && now.boxed;
+      framed = around !== null && framing;
       frame.style.transition = moving;
       if (around !== null && framed) {
         frame.style.transform = `translate(${around.left}px, ${around.top}px)`;
         frame.style.width = `${around.right - around.left}px`;
         frame.style.height = `${around.bottom - around.top}px`;
-        frame.style.borderRadius = `${radius + PAD}px`;
+        frame.style.borderRadius = `${round + PAD}px`;
       }
       frame.style.opacity = framed ? '1' : '0';
-      const spot = place(around, size, view, side);
-      side = spot.side;
+      const put = place(around, size, view, seat, outer, avoid, bare);
+      seat = put.seat;
       note.style.transition = moving;
-      note.style.transform = `translate(${spot.x}px, ${spot.y}px)`;
+      note.style.transform = `translate(${put.x}px, ${put.y}px)`;
       note.style.opacity = '1';
     };
     id = requestAnimationFrame(step);
@@ -402,7 +468,7 @@ export function Layer({
 
   return (
     <div {...props(styles.layer)} data-devknobs="tour" ref={layer}>
-      <div {...props(styles.box)} aria-hidden="true" ref={box}>
+      <div {...props(styles.box, strong && styles.boxStrong)} aria-hidden="true" ref={box}>
         <span {...props(styles.pulse)} key={pulseKey} />
       </div>
       <div {...props(styles.tip)} ref={tip}>

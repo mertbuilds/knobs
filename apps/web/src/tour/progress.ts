@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { track } from '../lib/analytics.ts';
-import { DUO, grabbing, IPHONE } from './targets.ts';
+import { DUO, grabbing, IPHONE, openBrowse } from './targets.ts';
 
-export type Knobs = Pick<typeof import('devknobs'), 'PRESETS' | 'getState'>;
+export type Knobs = Pick<typeof import('devknobs'), 'PRESETS' | 'getState' | 'setState'>;
 
 /** The stops of the tour, in the order it asks for them. */
 export const STOPS = ['open', 'duo', 'scroll', 'unfold', 'iphone', 'mat', 'grab'] as const;
@@ -13,9 +13,12 @@ export type Progress = {
   readonly done: ReadonlyArray<StopId>;
   /** What grab put on the clipboard for the pick that ended the tour, or null where it could not be read. */
   readonly grabbed: string | null;
-  /** Off, on its way through the stops, or done and showing the pick and how to install. */
-  readonly phase: 'end' | 'off' | 'on';
-  /** The page in the frame was just scrolled, so the tour stays on the screen a moment. */
+  /**
+   * Off, on its way through the stops, done and showing the pick and how to install, or pointing
+   * at the panel's search for a moment, where its list of knobs did not open.
+   */
+  readonly phase: 'end' | 'explore' | 'off' | 'on';
+  /** The page in the frame was just scrolled, so the tour stays on the browser's bars a while. */
   readonly watching: boolean;
 };
 
@@ -24,6 +27,7 @@ type Signal = { text: string | null; type: 'grab' } | { type: 'scroll' };
 
 type Owner = {
   close(): void;
+  explore(): void;
   report(signal: Signal): void;
   snapshot(): Progress;
   start(): void;
@@ -43,8 +47,12 @@ const LOOK_EVERY = 120;
 // How far the page in the frame has to travel before it counts as a scroll.
 const SCROLL_FAR = 200;
 
-// How long the tour stays on the screen after the scroll, to watch the bars.
-const WATCH_FOR = 1600;
+// How long the tour stays on the bars after the last scroll it heard of, and at most, in ms.
+const WATCH_AFTER = 2000;
+const WATCH_MOST = 6000;
+
+// How long the tour points at the panel's search when its list of knobs did not open, in ms.
+const EXPLORE_FOR = 4000;
 
 // The field grab copies from: its value is the text that goes to the clipboard.
 const GRAB_FIELD = 'textarea[data-devknobs="grab"]';
@@ -61,6 +69,9 @@ let matAtStart: string | undefined;
 let needsOther = false;
 let looking: ReturnType<typeof setInterval> | undefined;
 let watchTimer: ReturnType<typeof setTimeout> | undefined;
+// When the watch of the bars ends at the latest, however long the page is scrolled.
+let watchEnd = 0;
+let exploreTimer: ReturnType<typeof setTimeout> | undefined;
 // The owner's first-impression mode: nothing is read or kept, so the tour always starts.
 let fresh = false;
 let offered = false;
@@ -130,6 +141,18 @@ function complete(stop: StopId): void {
   emit();
 }
 
+/** Stay on the bars until the page has been still for a while, and never past the watch's end. */
+function keepWatching(): void {
+  clearTimeout(watchTimer);
+  watchTimer = setTimeout(
+    () => {
+      progress = { ...progress, watching: false };
+      emit();
+    },
+    Math.max(0, Math.min(WATCH_AFTER, watchEnd - performance.now())),
+  );
+}
+
 /** Is a phone up with its browser's bars around the page? */
 export function hasBars(from: Knobs): boolean {
   const state = from.getState();
@@ -187,25 +210,53 @@ const local: Owner = {
     }
     stopLooking();
     clearTimeout(watchTimer);
+    clearTimeout(exploreTimer);
     progress = { ...progress, phase: 'off', watching: false };
     emit();
   },
+  explore() {
+    if (progress.phase !== 'end') {
+      return;
+    }
+    track('tour_explore', {});
+    stopLooking();
+    progress = { ...progress, phase: 'off' };
+    emit();
+    knobs?.setState({ panel: { open: true } });
+    // The panel is in by the next frame, with its "add knob" button to press.
+    requestAnimationFrame(() => {
+      if (progress.phase !== 'off' || openBrowse()) {
+        return;
+      }
+      progress = { ...progress, phase: 'explore' };
+      emit();
+      exploreTimer = setTimeout(() => {
+        progress = { ...progress, phase: 'off' };
+        emit();
+      }, EXPLORE_FOR);
+    });
+  },
   report(signal) {
-    if (progress.phase === 'off') {
+    if (progress.phase !== 'on' && progress.phase !== 'end') {
       return;
     }
     if (signal.type === 'scroll') {
-      if (knobs === undefined || !hasBars(knobs) || progress.done.includes('scroll')) {
+      if (knobs === undefined || !hasBars(knobs)) {
+        return;
+      }
+      // The page is still being scrolled: the bars are still worth the look.
+      if (progress.watching) {
+        keepWatching();
+        return;
+      }
+      if (progress.done.includes('scroll')) {
         return;
       }
       complete('scroll');
       if (progress.phase === 'on' && progress.done.includes('scroll')) {
         progress = { ...progress, watching: true };
-        clearTimeout(watchTimer);
-        watchTimer = setTimeout(() => {
-          progress = { ...progress, watching: false };
-          emit();
-        }, WATCH_FOR);
+        watchEnd = performance.now() + WATCH_MOST;
+        keepWatching();
         emit();
       }
       return;
@@ -229,6 +280,7 @@ const local: Owner = {
     }
     // All done: the tour starts over, from the knobs as they stand now.
     if (progress.done.length === STOPS.length) {
+      clearTimeout(exploreTimer);
       const state = knobs?.getState();
       matAtStart = state?.mat;
       needsOther = state?.device === IPHONE;
@@ -296,6 +348,10 @@ export function openTour(): () => void {
   let from = window.scrollY;
   const onScroll = () => {
     const now = to.snapshot();
+    if (now.watching) {
+      // Each one keeps the tour on the bars a little longer.
+      to.report({ type: 'scroll' });
+    }
     // Not asked for yet, or done: a tour taken again measures from here.
     if (now.phase !== 'on' || now.done.includes('scroll')) {
       from = window.scrollY;
@@ -352,6 +408,11 @@ export function startTour(): void {
 
 export function closeTour(): void {
   ownerOf().close();
+}
+
+/** Ends the finished tour and opens the panel on its list of every knob. */
+export function exploreKnobs(): void {
+  ownerOf().explore();
 }
 
 /** Is Escape the tour's to take? Not while the panel is open or grab is on: it is theirs. */
