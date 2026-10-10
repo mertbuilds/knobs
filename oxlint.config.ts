@@ -25,6 +25,8 @@ export default defineConfig({
         '**/test/**',
         '**/scripts/**',
         'packages/ui/.storybook/**',
+        // Development tools, never in a build: their words are not site copy.
+        'apps/web/src/dev/**',
       ],
       rules: {
         'react/jsx-no-literals': 'off',

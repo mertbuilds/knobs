@@ -1,5 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
-import { useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { clientEnv } from '../lib/env.ts';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -9,6 +9,32 @@ import '../app.css';
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   // Dev-only: StyleX HMR runtime injects styles; production CSS is emitted into app.css at build.
   void import('virtual:stylex:runtime');
+}
+
+// Dev-only: the fold tuning panel (`src/dev/foldtune.tsx`), for `?tune` on the
+// top page, never on the copy in a device's frame. A build drops all of this
+// and the file with it. The address is read once, as the page loads: the panel
+// stays for the visit whatever the address turns into after.
+const FoldTune = import.meta.env.DEV ? lazy(() => import('../dev/foldtune.tsx')) : null;
+const tuning =
+  import.meta.env.DEV &&
+  typeof window !== 'undefined' &&
+  window.top === window &&
+  new URLSearchParams(window.location.search).has('tune');
+const never = () => () => {};
+
+function DevFoldTune() {
+  // False on the server and while hydrating, so the panel never meets the server's markup.
+  const tune = useSyncExternalStore(
+    never,
+    () => tuning,
+    () => false,
+  );
+  return FoldTune !== null && tune ? (
+    <Suspense>
+      <FoldTune />
+    </Suspense>
+  ) : null;
 }
 
 /**
@@ -66,6 +92,7 @@ function RootComponent() {
   return (
     <RootDocument>
       <Outlet />
+      {import.meta.env.DEV && <DevFoldTune />}
     </RootDocument>
   );
 }

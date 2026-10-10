@@ -7,6 +7,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import react from '@vitejs/plugin-react';
 import { build, defineConfig, type Plugin, searchForWorkspaceRoot } from 'vite';
 import web from './package.json' with { type: 'json' };
+import { tuneEndpoint } from './vite.tune.ts';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 
@@ -85,6 +86,7 @@ function localDevknobs(): Plugin {
 
 export default defineConfig({
   plugins: [
+    tuneEndpoint(resolve(import.meta.dirname, '.tune')),
     localDevknobs(),
     cloudflare({ viteEnvironment: { name: 'ssr' } }),
     tanstackStart(),
