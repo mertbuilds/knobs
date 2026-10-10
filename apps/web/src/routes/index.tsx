@@ -328,7 +328,7 @@ const styles = create({
   },
   // `middle` puts the mark's centre on the centre of the name's x-height.
   logo: {
-    marginInlineEnd: spacing.s2,
+    marginInlineEnd: 6,
     verticalAlign: 'middle',
   },
   wordmark: {
@@ -546,7 +546,7 @@ function Landing() {
     <main {...props(styles.page)}>
       <header {...props(styles.section)}>
         <h1 {...props(styles.wordmark)}>
-          <KnobsMark style={styles.logo} />
+          <KnobsMark size={20} style={styles.logo} />
           {m.app_name()}
         </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>

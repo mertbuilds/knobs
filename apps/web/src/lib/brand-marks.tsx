@@ -27,7 +27,7 @@ export function NpmMark({ size = 16 }: MarkProps) {
  * The knobs logo: a copy of `src/assets/logo.svg`, the master. Its colors are
  * its own, the same on the light and the dark ground.
  */
-export function KnobsMark({ size = 28, style }: MarkProps & { style?: StyleXStyles | undefined }) {
+export function KnobsMark({ size = 20, style }: MarkProps & { style?: StyleXStyles | undefined }) {
   return (
     <svg aria-hidden="true" height={size} viewBox="0 0 200 200" width={size} {...props(style)}>
       <defs>
