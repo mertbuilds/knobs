@@ -101,7 +101,6 @@ export function TimeSpecimen() {
       }
       icon={ClockIcon}
       label={m.try_time()}
-      scene={m.try_time_scene()}
     >
       <div {...props(cardStyles.card)}>
         <Row start={time?.greeting ?? BLANK} />

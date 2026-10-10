@@ -700,15 +700,7 @@ function Landing() {
       </header>
 
       <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
-        <p {...props(styles.text)}>{m.how_frame()}</p>
-        <p {...props(styles.text)}>{m.how_patch()}</p>
-        <p {...props(styles.text)}>{m.how_setup()}</p>
-      </section>
-
-      <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.try_title()}</h2>
-        <p {...props(styles.text)}>{m.try_intro()}</p>
         <div {...props(styles.specimens)}>
           <Specimen
             chips={
@@ -728,7 +720,6 @@ function Landing() {
                 <Chip demo="reset" icon={RotateCcwIcon} label={m.try_reset()} />
               </>
             }
-            scene={m.try_device_scene()}
           />
           <LanguageSpecimen />
           <LocationSpecimen />
@@ -835,6 +826,14 @@ function Landing() {
           {m.features_readme()}
           <ArrowUpRightIcon {...ICON} />
         </a>
+      </section>
+
+      <section {...props(styles.section)}>
+        <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
+        <p {...props(styles.text)}>{m.how_frame()}</p>
+        <p {...props(styles.text)}>{m.how_patch()}</p>
+        <p {...props(styles.text)}>{m.how_chips()}</p>
+        <p {...props(styles.text)}>{m.how_setup()}</p>
       </section>
 
       <section {...props(styles.section)}>

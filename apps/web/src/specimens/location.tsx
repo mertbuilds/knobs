@@ -193,7 +193,6 @@ export function LocationSpecimen() {
       }
       icon={MapPinIcon}
       label={m.try_location()}
-      scene={m.try_location_scene()}
     >
       <div {...props(cardStyles.card)}>
         <div {...props(styles.body)}>

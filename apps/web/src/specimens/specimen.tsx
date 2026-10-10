@@ -124,23 +124,12 @@ const styles = create({
     display: 'inline-flex',
     paddingInline: '8px 10px',
   },
-  head: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s1,
-  },
   label: {
     alignItems: 'center',
     columnGap: spacing.s2,
     display: 'inline-flex',
     fontSize: 13,
     fontWeight: font.weightMedium,
-    margin: 0,
-  },
-  scene: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 1.5,
     margin: 0,
   },
   specimen: {
@@ -200,9 +189,8 @@ export function Row({
 }
 
 /**
- * The frame every use case sits in: a calm label, one sentence that names the
- * real case, the piece of product that reads the browser, and the chips that
- * turn its knob. `more` is a second row of chips, for the ones of another kind.
+ * The frame every use case sits in: a calm label, the piece of product that
+ * reads the browser, and the chips that turn its knob. `more` is a second row of chips, for the ones of another kind.
  */
 export function Specimen({
   children,
@@ -210,24 +198,19 @@ export function Specimen({
   icon: Icon,
   label,
   more,
-  scene,
 }: {
   children?: ReactNode;
   chips: ReactNode;
   icon: LucideIcon;
   label: string;
   more?: ReactNode;
-  scene: string;
 }) {
   return (
     <div {...props(styles.specimen)}>
-      <div {...props(styles.head)}>
-        <h3 {...props(styles.label)}>
-          <Icon {...ICON} />
-          {label}
-        </h3>
-        <p {...props(styles.scene)}>{scene}</p>
-      </div>
+      <h3 {...props(styles.label)}>
+        <Icon {...ICON} />
+        {label}
+      </h3>
       {children}
       <div {...props(styles.chipRows)} aria-label={label} role="group">
         <div {...props(styles.chips)}>{chips}</div>

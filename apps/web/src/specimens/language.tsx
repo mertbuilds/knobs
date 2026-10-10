@@ -64,7 +64,6 @@ export function LanguageSpecimen() {
       }
       icon={LanguagesIcon}
       label={m.try_language()}
-      scene={m.try_language_scene()}
     >
       <div {...props(cardStyles.card)} lang={receipt?.tag}>
         <Row start={receipt?.greeting ?? BLANK} />
