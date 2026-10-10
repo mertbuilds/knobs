@@ -1,10 +1,20 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
 // Where the fold tuning panel (`src/dev/foldtune.tsx`) saves and reads back.
 const PATH = '/__tune/fold';
+
+// The reference images the card lists and the reference view shows, from `<dir>/ref`.
+const REF = '/__tune/ref';
+const REF_FILE = /^[a-z0-9-]+\.(png|avif|jpg|webp)$/;
+const REF_TYPES: Record<string, string> = {
+  avif: 'image/avif',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
 
 // A spec and its values are a few hundred bytes. Nothing larger is read.
 const LIMIT = 64 * 1024;
@@ -23,6 +33,11 @@ function text(value: unknown): string | null {
   return typeof value === 'string' ? value.slice(0, 512) : null;
 }
 
+/** A name the card sent along, such as a preset's: a string of 64 at most. */
+function short(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 64;
+}
+
 /** What drew the fold, as the panel read it: two strings, each cut at 300. */
 function infoOf(value: unknown): { drawnBy: string; why: string } | null {
   if (
@@ -38,7 +53,8 @@ function infoOf(value: unknown): { drawnBy: string; why: string } | null {
 /**
  * What a save may hold, or null for a body that is not one: a spec of keyed
  * entries, a finite number for keys of that spec only, the changed ones
- * as `{ from, to }`, and `info` when the panel sent one.
+ * as `{ from, to }`, and `info`, `preset`, `angle` and `ref` when the panel
+ * sent them.
  */
 function saveOf(body: unknown): Record<string, unknown> | null {
   if (!isRecord(body) || !Array.isArray(body['spec']) || !isRecord(body['values'])) {
@@ -67,9 +83,20 @@ function saveOf(body: unknown): Record<string, unknown> | null {
   if (info === null) {
     return null;
   }
+  const { angle, preset, ref } = body;
+  if (
+    (angle !== undefined && !finite(angle)) ||
+    (preset !== undefined && !short(preset)) ||
+    (ref !== undefined && !short(ref))
+  ) {
+    return null;
+  }
   return {
+    ...(angle !== undefined && { angle }),
     changed,
     ...(info !== undefined && { info }),
+    ...(preset !== undefined && { preset }),
+    ...(ref !== undefined && { ref }),
     savedAt: text(body['savedAt']),
     spec,
     userAgent: text(body['userAgent']),
@@ -118,18 +145,22 @@ function parse(body: string): unknown {
  * Dev only: `POST /__tune/fold` writes the values picked in the fold tuning
  * panel to `<dir>/fold.json`, and `GET` gives the file back. The values are
  * read from that file when they are baked into devknobs, so it is on disk and
- * not in the browser. Listed first, and added to the server ahead of Vite's
+ * not in the browser. `GET /__tune/ref` lists the reference images in
+ * `<dir>/ref`, and `GET /__tune/ref/<file>` gives one, from this origin so a
+ * picture drawn of the page can hold it. Listed first, and added to the server ahead of Vite's
  * own middlewares, so it answers before the app's handler sees the path.
  */
 export function tuneEndpoint(dir: string): Plugin {
   const file = resolve(dir, 'fold.json');
+  const refs = resolve(dir, 'ref');
   return {
     apply: (_config, { command, isPreview }) => command === 'serve' && !isPreview,
     // A save is not a change to the page: no reload for it.
     config: () => ({ server: { watch: { ignored: [`${dir}/**`] } } }),
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (req.url?.split('?')[0] !== PATH) {
+        const path = req.url?.split('?')[0];
+        if (path === undefined || (path !== PATH && path !== REF && !path.startsWith(`${REF}/`))) {
           next();
           return;
         }
@@ -140,7 +171,47 @@ export function tuneEndpoint(dir: string): Plugin {
           res.end(body);
         };
         const refuse = (status: number, error: string) => answer(status, JSON.stringify({ error }));
+        const listRefs = async () => {
+          if (req.method !== 'GET') {
+            res.setHeader('allow', 'GET');
+            refuse(405, 'GET');
+            return;
+          }
+          if (!sameOrigin(req, false)) {
+            refuse(403, 'same origin only');
+            return;
+          }
+          const names = await readdir(refs).catch(() => []);
+          answer(
+            200,
+            JSON.stringify({ files: names.filter((name) => REF_FILE.test(name)).sort() }),
+          );
+        };
+        // An `<img>` names no origin, so an image is given to any GET: the name rule keeps it to this folder.
+        const sendRef = async (name: string) => {
+          const type = REF_TYPES[REF_FILE.exec(name)?.[1] ?? ''];
+          const image =
+            type === undefined || req.method !== 'GET'
+              ? null
+              : await readFile(resolve(refs, name)).catch(() => null);
+          if (type === undefined || image === null) {
+            refuse(404, 'no such image');
+            return;
+          }
+          res.statusCode = 200;
+          res.setHeader('content-type', type);
+          res.setHeader('cache-control', 'no-store');
+          res.end(image);
+        };
         const handle = async () => {
+          if (path === REF) {
+            await listRefs();
+            return;
+          }
+          if (path !== PATH) {
+            await sendRef(path.slice(REF.length + 1));
+            return;
+          }
           if (req.method !== 'GET' && req.method !== 'POST') {
             res.setHeader('allow', 'GET, POST');
             refuse(405, 'GET or POST');
@@ -173,7 +244,7 @@ export function tuneEndpoint(dir: string): Plugin {
           if (save === null) {
             refuse(
               400,
-              'values must be finite numbers for keys of the posted spec, info two strings',
+              'values must be finite numbers for keys of the posted spec, info two strings, preset and ref short strings, angle a finite number',
             );
             return;
           }

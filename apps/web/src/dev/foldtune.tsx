@@ -33,11 +33,19 @@ interface Info {
 
 /** The hook devknobs puts on the top page's window once its fold code has run. */
 interface FoldTune {
+  /** The hinge's angle, 0 shut to 180 open flat, or null with no Duo up. Not on older builds. */
+  angle?(): number | null;
   get(): Record<string, number>;
   /** Not on older builds. */
   info?(): { drawnBy: 'webgl' | 'layers' | 'none'; why: string };
+  /** Named sets of values. Not on older builds. */
+  presets?(): Record<string, Record<string, number>>;
   reset(): void;
   set(key: string, value: number): void;
+  /** The picture of the page the fold draws on the turning screen, as a PNG. Not on older builds. */
+  shot?(): Promise<Blob | null>;
+  /** Why `shot` gave none. */
+  shotWhy?(): string;
   spec: Array<Entry>;
   subscribe(listener: () => void): () => void;
 }
@@ -47,6 +55,19 @@ type Values = Record<string, number>;
 const HOOK = Symbol.for('devknobs.foldtune');
 const STORE = 'knobs:foldtune';
 const ENDPOINT = '/__tune/fold';
+const REFS = '/__tune/ref';
+const JADON = 'https://iphone-duo-tawny.vercel.app/';
+
+// The reference page this visit is on (`src/dev/reference.tsx`), read once as the card loads.
+const REF_NOW =
+  typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('ref');
+
+/** What goes with the values into a copy and a save, each only when there is one. */
+interface Extra {
+  angle?: number;
+  preset?: string;
+  ref?: string;
+}
 
 // The card's width, and the gutter it keeps to the window's edges.
 const CARD = 300;
@@ -135,6 +156,139 @@ function infoOf(tune: FoldTune): Info | null {
   }
 }
 
+/** The hook's named sets, each cut to its finite numbers. None on a build that has none. */
+function presetsOf(tune: FoldTune): Record<string, Values> {
+  const found: Record<string, Values> = {};
+  if (typeof tune.presets !== 'function') {
+    return found;
+  }
+  try {
+    const all: unknown = tune.presets();
+    if (typeof all !== 'object' || all === null) {
+      return found;
+    }
+    for (const [name, set] of Object.entries(all)) {
+      if (typeof set !== 'object' || set === null) {
+        continue;
+      }
+      const values: Values = {};
+      for (const [key, value] of Object.entries(set)) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          values[key] = value;
+        }
+      }
+      found[name] = values;
+    }
+  } catch {
+    // A hook that throws has no presets to show.
+  }
+  return found;
+}
+
+/** How many of the spec's keys the preset sets, when the values are all the preset's. Else 0. */
+function fits(spec: ReadonlyArray<Entry>, values: Values, preset: Values): number {
+  let count = 0;
+  for (const entry of spec) {
+    const want = preset[entry.key];
+    if (want === undefined) {
+      continue;
+    }
+    if (differs(values[entry.key] ?? entry.default, want)) {
+      return 0;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/** The preset the values are, the one with the most keys when several fit, or none. */
+function presetOf(
+  spec: ReadonlyArray<Entry>,
+  values: Values,
+  presets: Record<string, Values>,
+): string | undefined {
+  let best: string | undefined;
+  let most = 0;
+  for (const [name, preset] of Object.entries(presets)) {
+    const count = fits(spec, values, preset);
+    if (count > most) {
+      best = name;
+      most = count;
+    }
+  }
+  return best;
+}
+
+/** The hinge's angle, null with no Duo up, or undefined on a build that does not say. */
+function angleOf(tune: FoldTune): number | null | undefined {
+  if (typeof tune.angle !== 'function') {
+    return undefined;
+  }
+  try {
+    const angle: unknown = tune.angle();
+    return typeof angle === 'number' && Number.isFinite(angle) ? angle : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Why the hook gave no picture, in its words where it has them. */
+function shotWhyOf(tune: FoldTune): string {
+  try {
+    const why: unknown = tune.shotWhy?.();
+    return typeof why === 'string' && why !== '' ? why : 'no picture';
+  } catch {
+    return 'no picture';
+  }
+}
+
+/** Hand the picture to the browser as a download, named by its size. */
+async function download(blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `knobs-page-${image.naturalWidth}x${image.naturalHeight}.png`;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    // After the download has taken the picture: a revoke in the same task can stop it.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+/** The names of the reference pages, from files named `<name>-inner.*` and `<name>-outer.*`. */
+function refNames(files: unknown): Array<string> {
+  const names = new Set<string>();
+  for (const file of Array.isArray(files) ? files : []) {
+    const name =
+      typeof file === 'string' ? /^(.+)-(?:inner|outer)\.[a-z0-9]+$/.exec(file)?.[1] : null;
+    if (typeof name === 'string') {
+      names.add(name);
+    }
+  }
+  return [...names].sort();
+}
+
+/** Load this address with `ref` set, or without it for the page itself, the card kept. */
+function goTo(ref: string | null): void {
+  const url = new URL(window.location.href);
+  if (ref === null) {
+    url.searchParams.delete('ref');
+  } else {
+    url.searchParams.set('ref', ref);
+  }
+  if (!url.searchParams.has('tune')) {
+    url.searchParams.set('tune', '');
+  }
+  window.location.assign(url.href);
+}
+
 function drawnLine(info: Info): string {
   return info.drawnBy === 'none' ? 'not drawn yet' : `drawn by ${info.drawnBy}`;
 }
@@ -145,14 +299,25 @@ function shown(value: number, entry: Entry): string {
   return `${value.toFixed(decimals)}${entry.unit ?? ''}`;
 }
 
-/** The values as JSON, then the changed ones against their defaults, then what drew the fold. */
-function copyText(spec: ReadonlyArray<Entry>, values: Values, info: Info | null): string {
+/**
+ * The values as JSON, then the changed ones against their defaults, then what
+ * drew the fold, then the preset, the angle and the reference page.
+ */
+function copyText(
+  spec: ReadonlyArray<Entry>,
+  values: Values,
+  info: Info | null,
+  extra: Extra,
+): string {
   const lines = spec
     .filter((entry) => differs(values[entry.key] ?? entry.default, entry.default))
     .map((entry) => `// ${entry.key}: ${entry.default} -> ${values[entry.key]}`);
   const changed = lines.length === 0 ? '// none changed' : lines.join('\n');
   const drawn = info === null ? '' : `\n// info\n// ${JSON.stringify(info)}\n`;
-  return `${JSON.stringify(values, null, 2)}\n\n// defaults\n${changed}\n${drawn}`;
+  const more = Object.entries(extra)
+    .map(([key, value]) => `// ${key}: ${typeof value === 'number' ? value.toFixed(1) : value}\n`)
+    .join('');
+  return `${JSON.stringify(values, null, 2)}\n\n// defaults\n${changed}\n${drawn}${more}`;
 }
 
 function clock(date: Date): string {
@@ -186,6 +351,14 @@ const styles = create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacing.s1,
+  },
+  // The angle: the note's line, its number in the readouts' face.
+  angle: {
+    alignItems: 'baseline',
+    columnGap: spacing.s1,
+    display: 'flex',
+    fontFamily: font.mono,
+    fontVariantNumeric: 'tabular-nums',
   },
   // A small panel: hairline, 13 round, its rows 4 inside it, so 8 round. It
   // sits in the window's bottom left corner, away from the devknobs panel,
@@ -281,6 +454,21 @@ const styles = create({
     paddingBlock: spacing.s1,
     paddingInline: 6,
   },
+  link: {
+    color: {
+      ':hover': colors.fg,
+      default: 'inherit',
+    },
+    outlineColor: colors.muted,
+    outlineOffset: 2,
+    outlineStyle: {
+      ':focus-visible': 'solid',
+      default: 'none',
+    },
+    outlineWidth: 1,
+    textDecorationLine: 'underline',
+    textUnderlineOffset: '3px',
+  },
   name: {
     color: colors.muted,
     flexGrow: 1,
@@ -292,6 +480,20 @@ const styles = create({
     margin: 0,
     paddingBottom: spacing.s1,
     paddingInline: 6,
+  },
+  // The chip that is the one in use: its hover ground and ink, held.
+  on: {
+    backgroundColor: colors.card,
+    color: colors.fg,
+  },
+  // A row of chips to pick one of, after the word for what they are.
+  picks: {
+    alignItems: 'baseline',
+  },
+  picksName: {
+    color: colors.muted,
+    fontSize: font.sizeXs,
+    lineHeight: 1.4,
   },
   range: {
     accentColor: colors.fg,
@@ -368,7 +570,11 @@ function Rows({ tune }: { tune: FoldTune }) {
   const comparing = useRef(false);
   const [held, setHeld] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
-  const [said, setSaid] = useState<{ on: 'copy' | 'save'; text: string } | null>(null);
+  const [said, setSaid] = useState<{ on: 'angle' | 'copy' | 'save'; text: string } | null>(null);
+  const [presets] = useState(() => presetsOf(tune));
+  const [angle, setAngle] = useState(() => angleOf(tune));
+  const [making, setMaking] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
 
   useEffect(
     () =>
@@ -396,6 +602,28 @@ function Rows({ tune }: { tune: FoldTune }) {
       clearInterval(timer);
     };
   }, [tune]);
+
+  // The angle moves with the fold: on each notice, and on a light poll while the card is open.
+  useEffect(() => {
+    if (typeof tune.angle !== 'function') {
+      return;
+    }
+    const read = () => setAngle(angleOf(tune));
+    const stop = tune.subscribe(read);
+    const timer = setInterval(read, 250);
+    return () => {
+      stop();
+      clearInterval(timer);
+    };
+  }, [tune]);
+
+  useEffect(() => {
+    if (why === null) {
+      return;
+    }
+    const timer = setTimeout(() => setWhy(null), 4000);
+    return () => clearTimeout(timer);
+  }, [why]);
 
   useEffect(() => {
     let live = true;
@@ -440,6 +668,51 @@ function Rows({ tune }: { tune: FoldTune }) {
     apply(tune, saved?.values);
     take();
   };
+  const pick = (preset: Values) => {
+    apply(tune, preset);
+    take();
+  };
+
+  const preset = presetOf(tune.spec, values, presets);
+  const extra: Extra = {
+    ...(typeof angle === 'number' && { angle }),
+    ...(preset !== undefined && { preset }),
+    ...(REF_NOW !== null && { ref: REF_NOW }),
+  };
+
+  const copyAngle = () => {
+    if (typeof angle !== 'number') {
+      return;
+    }
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(angle.toFixed(1)))
+      .then(
+        () => setSaid({ on: 'angle', text: 'copied' }),
+        () => setSaid({ on: 'angle', text: 'copy failed' }),
+      );
+  };
+  const picture = () => {
+    if (making) {
+      return;
+    }
+    setMaking(true);
+    Promise.resolve()
+      .then(() => tune.shot?.())
+      .then((blob) => {
+        if (blob === null || blob === undefined) {
+          setWhy(shotWhyOf(tune));
+          return;
+        }
+        return download(blob);
+      })
+      .then(
+        () => setMaking(false),
+        () => {
+          setMaking(false);
+          setWhy('no picture');
+        },
+      );
+  };
 
   const hold = () => {
     if (comparing.current) {
@@ -474,7 +747,7 @@ function Rows({ tune }: { tune: FoldTune }) {
 
   const copy = () => {
     Promise.resolve()
-      .then(() => navigator.clipboard.writeText(copyText(tune.spec, values, info)))
+      .then(() => navigator.clipboard.writeText(copyText(tune.spec, values, info, extra)))
       .then(
         () => setSaid({ on: 'copy', text: 'copied' }),
         () => setSaid({ on: 'copy', text: 'copy failed' }),
@@ -490,6 +763,7 @@ function Rows({ tune }: { tune: FoldTune }) {
     }
     const now = new Date();
     const body = {
+      ...extra,
       changed,
       ...(info !== null && { info }),
       savedAt: now.toISOString(),
@@ -518,6 +792,29 @@ function Rows({ tune }: { tune: FoldTune }) {
         <div {...props(styles.note, styles.info)}>
           <div>{drawnLine(info)}</div>
           {info.why !== '' && <div>{info.why}</div>}
+        </div>
+      )}
+      {Object.keys(presets).length > 0 && (
+        <div {...props(styles.actions, styles.picks)}>
+          <span {...props(styles.picksName)}>presets</span>
+          {Object.entries(presets).map(([name, set]) => {
+            const on = fits(tune.spec, values, set) > 0;
+            return (
+              <Chip aria-pressed={on} key={name} onClick={() => pick(set)} style={on && styles.on}>
+                {name}
+              </Chip>
+            );
+          })}
+        </div>
+      )}
+      {angle !== undefined && (
+        <div {...props(styles.note, styles.angle)}>
+          <span>{angle === null ? 'no Duo up' : `angle ${angle.toFixed(1)}`}</span>
+          {angle !== null && (
+            <button {...props(styles.reset)} onClick={copyAngle} type="button">
+              {said?.on === 'angle' ? said.text : 'copy'}
+            </button>
+          )}
         </div>
       )}
       {tune.spec.map((entry) => {
@@ -576,8 +873,73 @@ function Rows({ tune }: { tune: FoldTune }) {
         </Chip>
         {saved !== null && <Chip onClick={load}>load last saved</Chip>}
       </div>
+      {typeof tune.shot === 'function' && (
+        <>
+          <div {...props(styles.actions)}>
+            <Chip disabled={making} onClick={picture}>
+              {making ? 'making' : 'page picture'}
+            </Chip>
+          </div>
+          {why !== null && <p {...props(styles.note)}>{why}</p>}
+          <p {...props(styles.note)}>
+            Drop it into Custom in{' '}
+            <a {...props(styles.link)} href={JADON} rel="noreferrer" target="_blank">
+              {"jadon's demo"}
+            </a>
+            , set the same angle
+          </p>
+        </>
+      )}
       <p {...props(styles.note)}>Hold the fold slider in the panel at an angle, then drag</p>
     </>
+  );
+}
+
+/** The reference pages there are images for, and the page itself: a press loads that one. */
+function Refs() {
+  const [names, setNames] = useState<ReadonlyArray<string>>([]);
+
+  useEffect(() => {
+    let live = true;
+    fetch(REFS)
+      .then((response) => (response.ok ? (response.json() as Promise<{ files?: unknown }>) : null))
+      .then(
+        (list) => {
+          if (live && list !== null) {
+            setNames(refNames(list.files));
+          }
+        },
+        () => {},
+      );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (names.length === 0 && REF_NOW === null) {
+    return null;
+  }
+  return (
+    <div {...props(styles.actions, styles.picks)}>
+      <span {...props(styles.picksName)}>reference</span>
+      {names.map((name) => (
+        <Chip
+          aria-pressed={name === REF_NOW}
+          key={name}
+          onClick={() => goTo(name)}
+          style={name === REF_NOW && styles.on}
+        >
+          {name}
+        </Chip>
+      ))}
+      <Chip
+        aria-pressed={REF_NOW === null}
+        onClick={() => goTo(null)}
+        style={REF_NOW === null && styles.on}
+      >
+        page
+      </Chip>
+    </div>
   );
 }
 
@@ -679,6 +1041,7 @@ export default function FoldTunePanel() {
       </div>
       {open && (
         <div {...props(styles.body)}>
+          <Refs />
           {tune === null ? (
             <p {...props(styles.line)}>Pick the iPhone Duo in the panel and fold it once</p>
           ) : (

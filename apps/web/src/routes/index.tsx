@@ -1,6 +1,6 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import {
   ArrowUpRightIcon,
   BugIcon,
@@ -14,7 +14,7 @@ import {
   SunMoonIcon,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Layers } from '../demo/layers.tsx';
 import { Requests } from '../demo/requests.tsx';
 import { track } from '../lib/analytics.ts';
@@ -27,8 +27,28 @@ import { openTour, watchKnobs } from '../tour/progress.ts';
 import { Tour } from '../tour/tour.tsx';
 
 export const Route = createFileRoute('/')({
-  component: Landing,
+  component: import.meta.env.DEV ? DevPage : Landing,
 });
+
+// Dev-only: a reference image in place of the page (`src/dev/reference.tsx`),
+// for `ref=<name>` in the address, on the top page and on the copy in a
+// device's frame, which loads the same address. The server reads the same
+// address, so both draw the same shell. A build drops all of this and the file
+// with it, and reads no `ref`.
+const Reference = import.meta.env.DEV ? lazy(() => import('../dev/reference.tsx')) : null;
+
+function DevPage() {
+  const name = useLocation({
+    select: (location) => new URLSearchParams(location.searchStr).get('ref'),
+  });
+  return Reference !== null && name !== null && /^[a-z0-9-]+$/.test(name) ? (
+    <Suspense>
+      <Reference name={name} />
+    </Suspense>
+  ) : (
+    <Landing />
+  );
+}
 
 // The one breakpoint on the page. A device or a width puts the page in a frame
 // that size, so these columns collapse the way they do on a real phone.
