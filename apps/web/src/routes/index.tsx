@@ -15,14 +15,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Guide } from '../guide/guide.tsx';
-import { mountKnobs, unmountKnobs } from '../guide/knobs.ts';
-import { openGuide, watchKnobs } from '../guide/progress.ts';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, NpmMark } from '../lib/brand-marks.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key, withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
+import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
+import { openTour, watchKnobs } from '../tour/progress.ts';
+import { Tour } from '../tour/tour.tsx';
 
 export const Route = createFileRoute('/')({
   component: Landing,
@@ -516,8 +516,8 @@ function Landing() {
   // the stored scheme or language does not wait.
   useEffect(() => {
     // Before the panel, so the copy of this page in a device's frame finds the
-    // guide's progress on the page above.
-    const closeGuide = openGuide();
+    // tour on the page above.
+    const closeTour = openTour();
     const start = () => void mountKnobs().then(watchKnobs);
     let cancel: (() => void) | undefined;
     if (hasStoredKnobs()) {
@@ -531,7 +531,7 @@ function Landing() {
     return () => {
       cancel?.();
       document.removeEventListener('click', trackClick);
-      closeGuide();
+      closeTour();
       unmountKnobs();
     };
   }, []);
@@ -550,9 +550,9 @@ function Landing() {
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <Guide
+      <Tour
         install={
-          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_guide" />
+          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
         }
       />
 
