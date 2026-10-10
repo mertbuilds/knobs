@@ -12,7 +12,8 @@ nothing gets added until the site needs it.
 apps/
   web/    TanStack Start (React 19, React Compiler) → Cloudflare Workers.
           Client-first: SSR, routes, Paraglide i18n. No auth, no database.
-          One server route: `/api/op/$`, the OpenPanel analytics proxy.
+          Two server routes: `/api/op/$`, the OpenPanel analytics proxy, and
+          `/api/demo/$`, what the demo request buttons ask for.
 packages/
   ui/     StyleX tokens + Base UI wrappers + Storybook. The devknobs panel's tokens.
   env/    Zod-validated client env schema. All env access goes through here.
@@ -85,6 +86,11 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - The client id comes from `VITE_OPENPANEL_CLIENT_ID`. Unset means the script is never injected. The id is public; the secret half never leaves the analytics host. CI reads the repo variable `OPENPANEL_CLIENT_ID` for production builds, and leaves it unset on PR previews.
 - The OpenPanel project allows `knobs.dev` only, so local events answer `401 Ingestion: Invalid cors or secret`; dev traffic cannot reach the numbers even with the id in `apps/web/.env`. A 401 from `https://knobs.localhost` means the proxy works, not that it is broken.
 - `src/routes/api.op.$.ts` reverse-proxies the vendor so a blocker that knows its host does not drop the page views: `/api/op/op1.js` serves the script, everything else goes to `<host>/api/*`. It forwards `cf-connecting-ip` as `openpanel-client-ip` **and** `x-client-ip`; without those OpenPanel counts every visit as the same device. It answers crawler POSTs with a bare 200 instead of forwarding them.
+
+### Demo requests
+
+- `src/demo/requests.tsx` is a row of chips under the layers demo, one request each, so the devknobs requests view has every kind to show: fetch and XHR in each method and outcome, streams, and an image, stylesheet, script and font. The chips send no analytics events (the delegated listener reports anchors and the panel only), and nothing of theirs goes through `/api/op`. Three leave the site on purpose: `network error` and `xhr error` ask `https://demo.invalid/`, which never resolves, and `cors blocked` and `no-cors` ask `https://example.com/`.
+- `src/routes/api.demo.$.ts` serves them under `/api/demo/*`: `json`, `echo` (GET, POST 201, PUT, PATCH, DELETE 204), `status/:code` (a fixed set of error codes), `redirect` (302 to `json`), `slow?ms=`, `big?kb=`, `text`, `html`, `bin`, `stream`, `events`, `asset.css`, `asset.js`, `asset.png`, `asset.woff2`. Every path but `echo` is GET only; another method gets a 405. It holds no state and makes no outbound request. Caps: `slow` 3000 ms, `big` 512 KB (one row repeated), `echo` reads 16 KB of the body, `stream` is 10 lines over 3 seconds, `events` is 4 events over 3 seconds. Every answer is `cache-control: no-store` and `x-robots-tag: noindex`. The echo names a fixed list of request headers and sends back a value only for `content-type`, `accept` and the demo's own fake token (`src/demo/fake.ts`); any other value comes back as `sent`. The `html` answer has no `<head>`, so `server.ts` adds no early script to it.
 
 ### Deploy
 

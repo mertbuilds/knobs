@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Layers } from '../demo/layers.tsx';
+import { Requests } from '../demo/requests.tsx';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
 import { ICON } from '../lib/icon.ts';
@@ -653,6 +654,7 @@ function Landing() {
           <Feature detail={m.feature_debug_detail()} icon={BugIcon} name={m.feature_debug()} />
         </dl>
         <Layers />
+        <Requests />
         <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
         <Hints />
         <a
