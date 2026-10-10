@@ -28,7 +28,9 @@ declare class HTMLRewriter {
  * and stylesheets React hoists there, so a reload with a device set paints the
  * device's mat from the first frame instead of the page full width. It takes
  * the place of the empty slot `__root.tsx` renders for it, so React hydrates
- * the slot onto this script and every other head script onto its own.
+ * the slot onto this script and every other head script onto its own. The slot
+ * sets `dangerouslySetInnerHTML`, so React does not compare the script's text;
+ * an empty slot alone fails hydration on that text.
  */
 function withEarlyScript(response: Response): Response {
   if (!response.headers.get('content-type')?.startsWith('text/html')) {

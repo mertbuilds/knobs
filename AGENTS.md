@@ -70,7 +70,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - The checkout is `DEVKNOBS_PATH` (shell env; absolute, or relative to the repo root), else `../devknobs` beside the repo, which also fits the `knobs.dev.<branch>` worktrees. To test a devknobs worktree: `DEVKNOBS_PATH=../devknobs.<branch> pnpm dev`.
 - Dev start prints which one is in use: `devknobs: local <path>`, or `devknobs: npm <version>` when no checkout is there.
 - Types, `vite build`, CI and prod use the pinned npm `devknobs` only. Device images come from the checkout's `assets/bezels` (a dev middleware maps the source's `src/engine/bezels/` URLs there).
-- The early script (`devknobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, into the empty `script[data-devknobs-early]` slot `__root.tsx` renders so hydration lines up). Builds inline the npm package's `dist/early.global.js`; under `vite dev` the plugin bundles the checkout's `src/early.ts` instead and rebuilds it when its sources change.
+- The early script (`devknobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, in place of the `script[data-devknobs-early]` slot `__root.tsx` renders, so each head script hydrates onto its own). The slot needs both `dangerouslySetInnerHTML={{ __html: '' }}` and `suppressHydrationWarning`: without the first, React finds the server's script text in an element it expects empty, fails hydration and renders the whole document again on the client; the second silences the dev warning that the text differs. Builds inline the npm package's `dist/early.global.js`; under `vite dev` the plugin bundles the checkout's `src/early.ts` instead and rebuilds it when its sources change.
 
 ### Analytics
 

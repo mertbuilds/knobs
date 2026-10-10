@@ -71,8 +71,15 @@ function RootDocument({ children }: { children: ReactNode }) {
   return (
     <html lang={getLocale()}>
       <head>
-        {/* The slot src/server.ts fills with devknobs' early script, first in head. */}
-        <script data-devknobs-early="" suppressHydrationWarning />
+        {/* The slot src/server.ts fills with devknobs' early script, first in head.
+            dangerouslySetInnerHTML tells React the script's content is set text, so
+            hydration does not fail on the text the server put there.
+            suppressHydrationWarning silences the dev warning that the text differs. */}
+        <script
+          dangerouslySetInnerHTML={{ __html: '' }}
+          data-devknobs-early=""
+          suppressHydrationWarning
+        />
         <HeadContent />
         {clientId === undefined ? null : (
           <script dangerouslySetInnerHTML={{ __html: analyticsScript(clientId) }} />
