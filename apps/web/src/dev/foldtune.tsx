@@ -25,9 +25,17 @@ interface Entry {
   value: number;
 }
 
+/** What drew the last fold, and why that one. */
+interface Info {
+  drawnBy: string;
+  why: string;
+}
+
 /** The hook devknobs puts on the top page's window once its fold code has run. */
 interface FoldTune {
   get(): Record<string, number>;
+  /** Not on older builds. */
+  info?(): { drawnBy: 'webgl' | 'layers' | 'none'; why: string };
   reset(): void;
   set(key: string, value: number): void;
   spec: Array<Entry>;
@@ -107,19 +115,44 @@ function findHook(): FoldTune | null {
   return tune;
 }
 
+/** What the hook says drew the fold, or null on a build that does not say. */
+function infoOf(tune: FoldTune): Info | null {
+  if (typeof tune.info !== 'function') {
+    return null;
+  }
+  try {
+    const info: unknown = tune.info();
+    if (typeof info !== 'object' || info === null) {
+      return null;
+    }
+    const { drawnBy, why } = info as Record<string, unknown>;
+    return {
+      drawnBy: typeof drawnBy === 'string' ? drawnBy : 'none',
+      why: typeof why === 'string' ? why : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function drawnLine(info: Info): string {
+  return info.drawnBy === 'none' ? 'not drawn yet' : `drawn by ${info.drawnBy}`;
+}
+
 /** As many decimals as the step has, so the readout does not jump in width. */
 function shown(value: number, entry: Entry): string {
   const decimals = String(entry.step).split('.')[1]?.length ?? 0;
   return `${value.toFixed(decimals)}${entry.unit ?? ''}`;
 }
 
-/** The values as JSON, then the changed ones against their defaults. */
-function copyText(spec: ReadonlyArray<Entry>, values: Values): string {
+/** The values as JSON, then the changed ones against their defaults, then what drew the fold. */
+function copyText(spec: ReadonlyArray<Entry>, values: Values, info: Info | null): string {
   const lines = spec
     .filter((entry) => differs(values[entry.key] ?? entry.default, entry.default))
     .map((entry) => `// ${entry.key}: ${entry.default} -> ${values[entry.key]}`);
   const changed = lines.length === 0 ? '// none changed' : lines.join('\n');
-  return `${JSON.stringify(values, null, 2)}\n\n// defaults\n${changed}\n`;
+  const drawn = info === null ? '' : `\n// info\n// ${JSON.stringify(info)}\n`;
+  return `${JSON.stringify(values, null, 2)}\n\n// defaults\n${changed}\n${drawn}`;
 }
 
 function clock(date: Date): string {
@@ -233,6 +266,11 @@ const styles = create({
     transitionTimingFunction: 'ease-out',
     width: 22,
   },
+  // What drew the fold: the note's text, which wraps and can be copied.
+  info: {
+    overflowWrap: 'anywhere',
+    userSelect: 'text',
+  },
   label: {
     flexGrow: 1,
     minWidth: 0,
@@ -325,6 +363,7 @@ type Saved = { values?: unknown };
 
 function Rows({ tune }: { tune: FoldTune }) {
   const [values, setValues] = useState<Values>(() => tune.get());
+  const [info, setInfo] = useState<Info | null>(() => infoOf(tune));
   // While the defaults stand in for the tuned values, the hook's are not the panel's.
   const comparing = useRef(false);
   const [held, setHeld] = useState(false);
@@ -342,6 +381,21 @@ function Rows({ tune }: { tune: FoldTune }) {
       }),
     [tune],
   );
+
+  // On each notice, and on a light poll for a build that gives none.
+  useEffect(() => {
+    const read = () => {
+      const next = infoOf(tune);
+      setInfo((last) => (last?.drawnBy === next?.drawnBy && last?.why === next?.why ? last : next));
+    };
+    read();
+    const stop = tune.subscribe(read);
+    const timer = setInterval(read, 500);
+    return () => {
+      stop();
+      clearInterval(timer);
+    };
+  }, [tune]);
 
   useEffect(() => {
     let live = true;
@@ -420,7 +474,7 @@ function Rows({ tune }: { tune: FoldTune }) {
 
   const copy = () => {
     Promise.resolve()
-      .then(() => navigator.clipboard.writeText(copyText(tune.spec, values)))
+      .then(() => navigator.clipboard.writeText(copyText(tune.spec, values, info)))
       .then(
         () => setSaid({ on: 'copy', text: 'copied' }),
         () => setSaid({ on: 'copy', text: 'copy failed' }),
@@ -437,6 +491,7 @@ function Rows({ tune }: { tune: FoldTune }) {
     const now = new Date();
     const body = {
       changed,
+      ...(info !== null && { info }),
       savedAt: now.toISOString(),
       spec: tune.spec,
       userAgent: navigator.userAgent,
@@ -459,6 +514,12 @@ function Rows({ tune }: { tune: FoldTune }) {
 
   return (
     <>
+      {info !== null && (
+        <div {...props(styles.note, styles.info)}>
+          <div>{drawnLine(info)}</div>
+          {info.why !== '' && <div>{info.why}</div>}
+        </div>
+      )}
       {tune.spec.map((entry) => {
         const value = values[entry.key] ?? entry.default;
         const changed = differs(value, entry.default);

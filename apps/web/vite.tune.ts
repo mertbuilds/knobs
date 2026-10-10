@@ -23,10 +23,22 @@ function text(value: unknown): string | null {
   return typeof value === 'string' ? value.slice(0, 512) : null;
 }
 
+/** What drew the fold, as the panel read it: two strings, each cut at 300. */
+function infoOf(value: unknown): { drawnBy: string; why: string } | null {
+  if (
+    !isRecord(value) ||
+    typeof value['drawnBy'] !== 'string' ||
+    typeof value['why'] !== 'string'
+  ) {
+    return null;
+  }
+  return { drawnBy: value['drawnBy'].slice(0, 300), why: value['why'].slice(0, 300) };
+}
+
 /**
  * What a save may hold, or null for a body that is not one: a spec of keyed
- * entries, a finite number for keys of that spec only, and the changed ones
- * as `{ from, to }`.
+ * entries, a finite number for keys of that spec only, the changed ones
+ * as `{ from, to }`, and `info` when the panel sent one.
  */
 function saveOf(body: unknown): Record<string, unknown> | null {
   if (!isRecord(body) || !Array.isArray(body['spec']) || !isRecord(body['values'])) {
@@ -51,8 +63,13 @@ function saveOf(body: unknown): Record<string, unknown> | null {
     }
     changed[key] = { from: value['from'], to: value['to'] };
   }
+  const info = body['info'] === undefined ? undefined : infoOf(body['info']);
+  if (info === null) {
+    return null;
+  }
   return {
     changed,
+    ...(info !== undefined && { info }),
     savedAt: text(body['savedAt']),
     spec,
     userAgent: text(body['userAgent']),
@@ -154,7 +171,10 @@ export function tuneEndpoint(dir: string): Plugin {
           }
           const save = saveOf(parse(body));
           if (save === null) {
-            refuse(400, 'values must be finite numbers for keys of the posted spec');
+            refuse(
+              400,
+              'values must be finite numbers for keys of the posted spec, info two strings',
+            );
             return;
           }
           await mkdir(dir, { recursive: true });
