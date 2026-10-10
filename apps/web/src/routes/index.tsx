@@ -326,12 +326,11 @@ const styles = create({
     columnGap: spacing.s2,
     display: 'inline-flex',
   },
-  // `middle` puts the mark's centre on the centre of the name's x-height.
-  logo: {
-    marginInlineEnd: 6,
-    verticalAlign: 'middle',
-  },
+  // The mark beside the name, centered on its line.
   wordmark: {
+    alignItems: 'center',
+    columnGap: 6,
+    display: 'flex',
     fontSize: 19,
     fontWeight: font.weightMedium,
     letterSpacing: '-0.01em',
@@ -546,7 +545,7 @@ function Landing() {
     <main {...props(styles.page)}>
       <header {...props(styles.section)}>
         <h1 {...props(styles.wordmark)}>
-          <KnobsMark size={20} style={styles.logo} />
+          <KnobsMark size={20} />
           {m.app_name()}
         </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>
