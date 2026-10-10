@@ -101,7 +101,7 @@ const styles = create({
     flexDirection: 'column',
     gap: GAP,
     left: 0,
-    maxWidth: `min(280px, calc(100vw - ${2 * MARGIN}px))`,
+    maxWidth: `min(420px, calc(100vw - ${2 * MARGIN}px))`,
     opacity: 0,
     position: 'absolute',
     top: 0,

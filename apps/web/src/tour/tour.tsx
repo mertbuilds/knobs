@@ -1,5 +1,5 @@
 import { colors, font, radius, shadow, spacing } from '@knobs/ui/tokens.stylex';
-import { create, props } from '@stylexjs/stylex';
+import { create, firstThatWorks, props } from '@stylexjs/stylex';
 import { ClipboardCheckIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,11 +17,6 @@ import {
   useProgress,
 } from './progress.ts';
 import { type Aim, aimAt, aimAtPanel, type Say } from './targets.ts';
-
-// A copied line longer than this loses its middle, so the bubble stays small.
-const CLIP_AT = 120;
-const CLIP_HEAD = 72;
-const CLIP_TAIL = 40;
 
 const LINES: Record<Say, () => string> = {
   addDevice: m.tour_add_device,
@@ -101,6 +96,7 @@ const styles = create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacing.s1,
+    maxHeight: firstThatWorks('calc(100dvh - 16px)', 'calc(100vh - 16px)'),
     maxWidth: '100%',
     padding: spacing.s1,
   },
@@ -144,7 +140,8 @@ const styles = create({
     paddingBlock: spacing.s1,
     paddingInline: '10px 4px',
   },
-  // What grab copied, as the page's code boxes show code.
+  // What grab copied, all of it, as the page's code boxes show code. A long
+  // one scrolls in its box, which takes the pointer to scroll and to select.
   copied: {
     backgroundColor: colors.card,
     borderRadius: radius.row,
@@ -152,9 +149,13 @@ const styles = create({
     fontSize: 12,
     lineHeight: '18px',
     margin: 0,
+    maxHeight: firstThatWorks('40dvh', '40vh'),
     overflowWrap: 'anywhere',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
     paddingBlock: 6,
     paddingInline: spacing.s2,
+    pointerEvents: 'auto',
     whiteSpace: 'pre-wrap',
   },
   grow: {
@@ -202,11 +203,6 @@ const styles = create({
     pointerEvents: 'auto',
   },
 });
-
-/** A long copied text without its middle, so its start and its end both show. */
-function clip(text: string): string {
-  return text.length > CLIP_AT ? `${text.slice(0, CLIP_HEAD)} … ${text.slice(-CLIP_TAIL)}` : text;
-}
 
 /**
  * The guided tour: a frame around the real control to use next, which moves on
@@ -299,7 +295,7 @@ export function Tour({ install }: { install: ReactNode }) {
                   </button>
                 </p>
                 {progress.grabbed !== null && (
-                  <pre {...props(styles.copied)}>{clip(progress.grabbed)}</pre>
+                  <pre {...props(styles.copied)}>{progress.grabbed}</pre>
                 )}
                 <p {...props(styles.bubbleLine)}>{m.tour_end()}</p>
                 <div {...props(styles.takes)}>{install}</div>
