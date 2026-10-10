@@ -13,6 +13,8 @@ export const IPHONE = 'iphone-18-pro';
 const HOOKS = {
   // The panel's "add knob" button under the rows, which opens the search. No stable hook: a class.
   add: 'button.add',
+  // The field over a long list of values, which narrows it as the visitor types. No stable hook: a class.
+  filter: 'input.filter',
   // The device row's fold slider, inside the device knob's line.
   foldSlider: '[role="slider"][aria-label="fold"]',
   // The page in a device's frame, inside the frame host's shadow root.
@@ -33,7 +35,7 @@ const HOOKS = {
   option: '[role="option"]',
   // The panel's host in the page. Its shadow root is open.
   panel: '[data-devknobs="panel"]',
-  // The open panel's own box, for the last bubble. No stable hook: a class.
+  // The open panel's own box, for the final bubble. No stable hook: a class.
   panelBox: '.panel',
   // The search results' list.
   results: '#devknobs-results',
@@ -63,7 +65,26 @@ const WORDS = {
   unfold: 'unfold',
 } as const;
 
-export type Say = 'bars' | 'duo' | 'grab' | 'iphone' | 'mat' | 'open' | 'scroll' | 'unfold';
+/** One caption each: the words name the control the frame is on, hop by hop. */
+export type Say =
+  | 'addDevice'
+  | 'addMat'
+  | 'bars'
+  | 'duo'
+  | 'entryDevice'
+  | 'entryMat'
+  | 'filter'
+  | 'grab'
+  | 'iphone'
+  | 'mat'
+  | 'open'
+  | 'rowDevice'
+  | 'rowMat'
+  | 'scroll'
+  | 'searchDevice'
+  | 'searchMat'
+  | 'settings'
+  | 'unfold';
 
 export type Aim = {
   /** The box the target scrolls in, which it is cut to, such as an option's list. */
@@ -100,12 +121,36 @@ export function grabbing(): boolean {
   }
 }
 
+/**
+ * A hop on the way to a row's editor: out of the settings, "add knob", the
+ * search field, the knob's entry in the results, an entry that sets the value
+ * itself, or the row's own line.
+ */
+type Hop = 'add' | 'entry' | 'line' | 'search' | 'settings' | 'value';
+
 /** A row's open editor, or the control that leads to it. */
-type Lead = Pick<Aim, 'clip' | 'el'>;
+type Lead = Pick<Aim, 'clip' | 'el'> & { readonly hop: Hop };
 type Way = { readonly row: Element } | Lead;
 
-function lead(el: Element | null | undefined, clip: Element | null = null): Lead {
-  return { clip, el: shown(el) ? el : null };
+/** What each hop says, for the two knobs the tour leads to. */
+const HOPS: Record<'device' | 'mat', Record<Exclude<Hop, 'settings' | 'value'>, Say>> = {
+  device: { add: 'addDevice', entry: 'entryDevice', line: 'rowDevice', search: 'searchDevice' },
+  mat: { add: 'addMat', entry: 'entryMat', line: 'rowMat', search: 'searchMat' },
+};
+
+function shownOr(el: Element | null | undefined): Element | null {
+  return shown(el) ? el : null;
+}
+
+function lead(hop: Hop, el: Element | null | undefined, clip: Element | null = null): Lead {
+  return { clip, el: shownOr(el), hop };
+}
+
+/** A hop framed, with its own words. `say` is what the entry that sets the value itself does. */
+function hopTo(way: Lead, knob: keyof typeof HOPS, say: Say): Aim {
+  const words =
+    way.hop === 'settings' ? 'settings' : way.hop === 'value' ? say : HOPS[knob][way.hop];
+  return { clip: way.clip, el: way.el, say: words };
 }
 
 /**
@@ -116,7 +161,7 @@ function lead(el: Element | null | undefined, clip: Element | null = null): Lead
 function wayTo(root: ShadowRoot, row: string, knob: string, value?: string): Way {
   const mode = root.querySelector(HOOKS.wrap)?.getAttribute('data-mode');
   if (mode === 'keys') {
-    return lead(root.querySelector(HOOKS.settings));
+    return lead('settings', root.querySelector(HOOKS.settings));
   }
   if (mode === 'results' || mode === 'browse') {
     const list = root.querySelector(HOOKS.results);
@@ -124,18 +169,20 @@ function wayTo(root: ShadowRoot, row: string, knob: string, value?: string): Way
     const entries = Array.from(list?.querySelectorAll(HOOKS.option) ?? []).filter(
       (entry) => entry.querySelector('span')?.textContent === knob,
     );
-    const entry =
-      entries.find((item) => value !== undefined && item.textContent.includes(value)) ?? entries[0];
-    return entry === undefined ? lead(root.querySelector(HOOKS.search)) : lead(entry, list);
+    const valued = entries.find((item) => value !== undefined && item.textContent.includes(value));
+    const entry = valued ?? entries[0];
+    return entry === undefined
+      ? lead('search', root.querySelector(HOOKS.search))
+      : lead(valued === undefined ? 'entry' : 'value', entry, list);
   }
   const box = root.querySelector(HOOKS.row(row));
   if (!shown(box)) {
-    return lead(root.querySelector(HOOKS.add));
+    return lead('add', root.querySelector(HOOKS.add));
   }
   const line = box.querySelector(HOOKS.rowLine);
   return line?.getAttribute('aria-expanded') === 'true'
     ? { row: box }
-    : lead(line, box.parentElement);
+    : lead('line', line, box.parentElement);
 }
 
 /** A device in the device row's list, or the way to it. */
@@ -143,7 +190,7 @@ function atDevice(root: ShadowRoot, knobs: Knobs, id: string, say: Say): Aim {
   const label = knobs.PRESETS.device.find((device) => device.id === id)?.label;
   const way = wayTo(root, 'device', WORDS.device, label);
   if (!('row' in way)) {
-    return { ...way, say };
+    return hopTo(way, 'device', say);
   }
   const list = way.row.querySelector(`${HOOKS.knob('device')} ${HOOKS.listbox}`);
   const option = Array.from(list?.querySelectorAll(HOOKS.option) ?? []).find(
@@ -152,14 +199,18 @@ function atDevice(root: ShadowRoot, knobs: Knobs, id: string, say: Say): Aim {
   if (shown(option)) {
     return { clip: list, el: option, say };
   }
-  // A filter typed in the list hides the device: the list itself is the place.
+  // A filter typed in the list hides the device: the filter is the place, to clear it.
+  const filter = way.row.querySelector(`${HOOKS.knob('device')} ${HOOKS.filter}`);
+  if (shown(filter)) {
+    return { clip: way.row.parentElement, el: filter, say: 'filter' };
+  }
   return { clip: null, el: shown(list) ? list : way.row, say };
 }
 
 function atFold(root: ShadowRoot): Aim {
   const way = wayTo(root, 'device', WORDS.device);
   if (!('row' in way)) {
-    return { ...way, say: 'unfold' };
+    return hopTo(way, 'device', 'unfold');
   }
   const line = way.row.querySelector(HOOKS.knob('device'));
   const chip = Array.from(line?.querySelectorAll('button') ?? []).find(
@@ -173,7 +224,7 @@ function atFold(root: ShadowRoot): Aim {
 function atMat(root: ShadowRoot): Aim {
   const way = wayTo(root, 'viewport', WORDS.mat);
   if (!('row' in way)) {
-    return { ...way, say: 'mat' };
+    return hopTo(way, 'mat', 'mat');
   }
   const swatches = way.row.querySelector(`${HOOKS.knob('mat')} ${HOOKS.swatches}`);
   return { clip: way.row.parentElement, el: shown(swatches) ? swatches : way.row, say: 'mat' };
@@ -204,10 +255,10 @@ function find(stop: StopId, knobs: Knobs): Aim {
     return { clip: null, el: null, say: 'open' };
   }
   if (!state.panel.open || stop === 'open') {
-    return { ...lead(root.querySelector(HOOKS.handle)), say: 'open' };
+    return { clip: null, el: shownOr(root.querySelector(HOOKS.handle)), say: 'open' };
   }
   if (stop === 'grab') {
-    return { ...lead(root.querySelector(HOOKS.grab)), say: 'grab' };
+    return { clip: null, el: shownOr(root.querySelector(HOOKS.grab)), say: 'grab' };
   }
   if (stop === 'iphone') {
     return atDevice(root, knobs, IPHONE, 'iphone');
@@ -231,7 +282,7 @@ export function aimAt(stop: StopId, knobs: Knobs): Aim {
   }
 }
 
-/** The open panel, or its handle: where the last bubble sits. */
+/** The open panel, or its handle: where the final bubble sits. */
 export function aimAtPanel(knobs: Knobs): Aim {
   try {
     const root = panelRoot();

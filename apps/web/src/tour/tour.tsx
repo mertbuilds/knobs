@@ -24,13 +24,23 @@ const CLIP_HEAD = 72;
 const CLIP_TAIL = 40;
 
 const LINES: Record<Say, () => string> = {
+  addDevice: m.tour_add_device,
+  addMat: m.tour_add_mat,
   bars: m.tour_bars,
   duo: m.tour_duo,
+  entryDevice: m.tour_entry_device,
+  entryMat: m.tour_entry_mat,
+  filter: m.tour_filter,
   grab: m.tour_grab,
   iphone: m.tour_iphone,
   mat: m.tour_mat,
   open: m.tour_open,
+  rowDevice: m.tour_row_device,
+  rowMat: m.tour_row_mat,
   scroll: m.tour_scroll,
+  searchDevice: m.tour_search_device,
+  searchMat: m.tour_search_mat,
+  settings: m.tour_settings,
   unfold: m.tour_unfold,
 };
 
@@ -187,7 +197,7 @@ const styles = create({
     transitionProperty: 'background-color, color',
     transitionTimingFunction: 'ease-out',
   },
-  // The one part of a bubble that takes the pointer: the install command's copy button.
+  // The install command, whose copy button takes the pointer.
   takes: {
     pointerEvents: 'auto',
   },
@@ -203,7 +213,8 @@ function clip(text: string): string {
  * by itself as the visitor uses it, and the one button on the page that starts
  * it again. Only the top page draws it. The copy of the page in a device's
  * frame shows the button alone, which starts the tour on the page above.
- * `install` is the install command, shown once every stop is done.
+ * `install` is the install command. Once every stop is done one bubble takes
+ * the caption's place: what the last pick copied, and how to install.
  */
 export function Tour({ install }: { install: ReactNode }) {
   const progress = useProgress();
@@ -255,7 +266,7 @@ export function Tour({ install }: { install: ReactNode }) {
             aim={aim}
             boxed={!ended}
             pulseKey={stop ?? 'end'}
-            said={ended ? m.tour_end() : progress.copied ? m.tour_copied() : (line ?? '')}
+            said={ended ? m.tour_copied() : (line ?? '')}
           >
             {line !== null && (
               <div {...props(styles.bar)}>
@@ -274,7 +285,10 @@ export function Tour({ install }: { install: ReactNode }) {
             {ended && (
               <div {...props(styles.bubble)}>
                 <p {...props(styles.bubbleLine)}>
-                  <span {...props(styles.grow)}>{m.tour_end()}</span>
+                  <span {...props(styles.icon)}>
+                    <ClipboardCheckIcon {...ICON} />
+                  </span>
+                  <span {...props(styles.grow)}>{m.tour_copied()}</span>
                   <button
                     {...props(styles.bubbleClose)}
                     aria-label={m.tour_close()}
@@ -284,20 +298,11 @@ export function Tour({ install }: { install: ReactNode }) {
                     <XIcon {...ICON} />
                   </button>
                 </p>
-                <div {...props(styles.takes)}>{install}</div>
-              </div>
-            )}
-            {progress.copied && (
-              <div {...props(styles.bubble)}>
-                <p {...props(styles.bubbleLine)}>
-                  <span {...props(styles.icon)}>
-                    <ClipboardCheckIcon {...ICON} />
-                  </span>
-                  {m.tour_copied()}
-                </p>
                 {progress.grabbed !== null && (
                   <pre {...props(styles.copied)}>{clip(progress.grabbed)}</pre>
                 )}
+                <p {...props(styles.bubbleLine)}>{m.tour_end()}</p>
+                <div {...props(styles.takes)}>{install}</div>
               </div>
             )}
           </Layer>,

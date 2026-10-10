@@ -5,17 +5,15 @@ import { DUO, grabbing, IPHONE } from './targets.ts';
 export type Knobs = Pick<typeof import('devknobs'), 'PRESETS' | 'getState'>;
 
 /** The stops of the tour, in the order it asks for them. */
-export const STOPS = ['open', 'duo', 'scroll', 'unfold', 'iphone', 'grab', 'mat'] as const;
+export const STOPS = ['open', 'duo', 'scroll', 'unfold', 'iphone', 'mat', 'grab'] as const;
 
 export type StopId = (typeof STOPS)[number];
 
 export type Progress = {
-  /** A pick was copied a moment ago, so its text shows. */
-  readonly copied: boolean;
   readonly done: ReadonlyArray<StopId>;
-  /** What grab put on the clipboard for the last pick, or null where it could not be read. */
+  /** What grab put on the clipboard for the pick that ended the tour, or null where it could not be read. */
   readonly grabbed: string | null;
-  /** Off, on its way through the stops, or done and showing how to install. */
+  /** Off, on its way through the stops, or done and showing the pick and how to install. */
   readonly phase: 'end' | 'off' | 'on';
   /** The page in the frame was just scrolled, so the tour stays on the screen a moment. */
   readonly watching: boolean;
@@ -48,16 +46,13 @@ const SCROLL_FAR = 200;
 // How long the tour stays on the screen after the scroll, to watch the bars.
 const WATCH_FOR = 1600;
 
-// How long a pick's copied text shows.
-const COPIED_FOR = 8000;
-
 // The field grab copies from: its value is the text that goes to the clipboard.
 const GRAB_FIELD = 'textarea[data-devknobs="grab"]';
 
 // Where a closed or finished tour is remembered, so a visitor who comes back is not asked again.
 const REMEMBER = 'knobs:tour';
 
-const START: Progress = { copied: false, done: [], grabbed: null, phase: 'off', watching: false };
+const START: Progress = { done: [], grabbed: null, phase: 'off', watching: false };
 
 let progress = START;
 let knobs: Knobs | undefined;
@@ -66,7 +61,6 @@ let matAtStart: string | undefined;
 let needsOther = false;
 let looking: ReturnType<typeof setInterval> | undefined;
 let watchTimer: ReturnType<typeof setTimeout> | undefined;
-let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 // The owner's first-impression mode: nothing is read or kept, so the tour always starts.
 let fresh = false;
 let offered = false;
@@ -193,8 +187,7 @@ const local: Owner = {
     }
     stopLooking();
     clearTimeout(watchTimer);
-    clearTimeout(copiedTimer);
-    progress = { ...progress, copied: false, phase: 'off', watching: false };
+    progress = { ...progress, phase: 'off', watching: false };
     emit();
   },
   report(signal) {
@@ -217,15 +210,17 @@ const local: Owner = {
       }
       return;
     }
-    // A later pick shows its own text.
-    progress = { ...progress, copied: true, grabbed: signal.text };
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => {
-      progress = { ...progress, copied: false };
+    // The pick is the last stop: one made before its turn does not count, so the
+    // text the tour ends on is the one just copied. A pick after the end shows its own.
+    if (progress.phase === 'on' && progress.done.length < STOPS.length - 1) {
+      return;
+    }
+    progress = { ...progress, grabbed: signal.text };
+    if (progress.phase === 'on') {
+      complete('grab');
+    } else {
       emit();
-    }, COPIED_FOR);
-    emit();
-    complete('grab');
+    }
   },
   snapshot: () => progress,
   start() {
@@ -239,8 +234,7 @@ const local: Owner = {
       needsOther = state?.device === IPHONE;
       progress = START;
     }
-    clearTimeout(copiedTimer);
-    progress = { ...progress, copied: false, phase: 'on' };
+    progress = { ...progress, phase: 'on' };
     emit();
     startLooking();
   },
