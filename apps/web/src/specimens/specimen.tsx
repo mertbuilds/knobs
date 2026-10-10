@@ -191,6 +191,7 @@ export function Row({
 /**
  * The frame every use case sits in: a calm label, the piece of product that
  * reads the browser, and the chips that turn its knob. `more` is a second row of chips, for the ones of another kind.
+ * Without an `icon` there is no heading, and the label only names the chips.
  */
 export function Specimen({
   children,
@@ -201,16 +202,18 @@ export function Specimen({
 }: {
   children?: ReactNode;
   chips: ReactNode;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   label: string;
   more?: ReactNode;
 }) {
   return (
     <div {...props(styles.specimen)}>
-      <h3 {...props(styles.label)}>
-        <Icon {...ICON} />
-        {label}
-      </h3>
+      {Icon !== undefined && (
+        <h3 {...props(styles.label)}>
+          <Icon {...ICON} />
+          {label}
+        </h3>
+      )}
       {children}
       <div {...props(styles.chipRows)} aria-label={label} role="group">
         <div {...props(styles.chips)}>{chips}</div>

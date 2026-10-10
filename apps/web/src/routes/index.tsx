@@ -711,7 +711,6 @@ function Landing() {
                 <Chip demo="pixel" icon={SmartphoneIcon} label={m.try_pixel()} />
               </>
             }
-            icon={SmartphoneIcon}
             label={m.try_device()}
             more={
               <>
