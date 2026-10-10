@@ -30,8 +30,12 @@ export const Route = createRootRoute({
   component: RootComponent,
   head: () => ({
     links: [
-      // The mark carries its own dark variant, so one file covers both schemes.
+      // The logo is the same on a light and a dark tab; the PNGs are for
+      // browsers that take no SVG icon.
       { href: '/favicon.svg', rel: 'icon', type: 'image/svg+xml' },
+      { href: '/favicon-32.png', rel: 'icon', sizes: '32x32', type: 'image/png' },
+      { href: '/favicon-16.png', rel: 'icon', sizes: '16x16', type: 'image/png' },
+      { href: '/apple-touch-icon.png', rel: 'apple-touch-icon', sizes: '180x180' },
       // Dev-only: link the unplugin's compiled CSS so SSR HTML is styled on first
       // paint (the virtual:stylex:runtime import only injects after hydration;
       // without this link every refresh flashes unstyled). Production CSS is

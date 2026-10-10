@@ -1,3 +1,5 @@
+import { props, type StyleXStyles } from '@stylexjs/stylex';
+
 /**
  * Brand marks from Simple Icons (CC0), drawn inline so two logos do not need a
  * package. Filled with `currentColor`, sized like the lucide icons beside them.
@@ -17,6 +19,53 @@ export function NpmMark({ size = 16 }: MarkProps) {
   return (
     <svg aria-hidden="true" fill="currentColor" height={size} viewBox="0 0 24 24" width={size}>
       <path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z" />
+    </svg>
+  );
+}
+
+/**
+ * The knobs logo: a copy of `src/assets/logo.svg`, the master. Its colors are
+ * its own, the same on the light and the dark ground.
+ */
+export function KnobsMark({ size = 28, style }: MarkProps & { style?: StyleXStyles | undefined }) {
+  return (
+    <svg aria-hidden="true" height={size} viewBox="0 0 200 200" width={size} {...props(style)}>
+      <defs>
+        <filter height="180%" id="knob-shadow" width="180%" x="-40%" y="-40%">
+          <feGaussianBlur stdDeviation="5" />
+        </filter>
+        <linearGradient id="knob-top" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#3b3b3a" />
+          <stop offset="1" stopColor="#262625" />
+        </linearGradient>
+      </defs>
+      <rect fill="#d6d6d2" height="200" rx="44" width="200" />
+      <g stroke="#1b1a17" strokeWidth="2.2">
+        <line x1="47.67" x2="42.02" y1="152.33" y2="157.98" />
+        <line x1="29.62" x2="22.01" y1="122.87" y2="125.34" />
+        <line x1="26.91" x2="19.01" y1="88.42" y2="87.17" />
+        <line x1="40.13" x2="33.66" y1="56.5" y2="51.8" />
+        <line x1="66.4" x2="62.77" y1="34.07" y2="26.94" />
+        <line x1="100" x2="100" y1="26" y2="18" />
+        <line x1="133.6" x2="137.23" y1="34.07" y2="26.94" />
+        <line x1="159.87" x2="166.34" y1="56.5" y2="51.8" />
+        <line x1="173.09" x2="180.99" y1="88.42" y2="87.17" />
+        <line x1="170.38" x2="177.99" y1="122.87" y2="125.34" />
+        <line x1="152.33" x2="157.98" y1="152.33" y2="157.98" />
+      </g>
+      <circle cx="100" cy="106" fill="#000" filter="url(#knob-shadow)" opacity="0.28" r="60" />
+      <circle cx="100" cy="100" fill="#1f1f1e" r="58" />
+      <circle cx="100" cy="100" fill="url(#knob-top)" r="51" />
+      <line
+        stroke="#f4f3ef"
+        strokeLinecap="round"
+        strokeWidth="5.5"
+        x1="112.86"
+        x2="130.21"
+        y1="84.68"
+        y2="64"
+      />
+      <circle cx="165.05" cy="165.05" fill="#f25c1b" r="4.5" />
     </svg>
   );
 }

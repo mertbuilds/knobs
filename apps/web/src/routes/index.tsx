@@ -17,7 +17,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Layers } from '../demo/layers.tsx';
 import { track } from '../lib/analytics.ts';
-import { GitHubMark, NpmMark } from '../lib/brand-marks.tsx';
+import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key, withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
@@ -326,6 +326,11 @@ const styles = create({
     columnGap: spacing.s2,
     display: 'inline-flex',
   },
+  // `middle` puts the mark's centre on the centre of the name's x-height.
+  logo: {
+    marginInlineEnd: spacing.s2,
+    verticalAlign: 'middle',
+  },
   wordmark: {
     fontSize: 19,
     fontWeight: font.weightMedium,
@@ -540,7 +545,10 @@ function Landing() {
   return (
     <main {...props(styles.page)}>
       <header {...props(styles.section)}>
-        <h1 {...props(styles.wordmark)}>{m.app_name()}</h1>
+        <h1 {...props(styles.wordmark)}>
+          <KnobsMark style={styles.logo} />
+          {m.app_name()}
+        </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>
         <CodeBox
           code={m.install_command()}
