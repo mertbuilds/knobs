@@ -8,24 +8,21 @@ import {
   ClockIcon,
   CopyIcon,
   CrosshairIcon,
-  FoldHorizontalIcon,
   LanguagesIcon,
-  PaletteIcon,
   PointerIcon,
-  RotateCcwIcon,
   SmartphoneIcon,
   SunMoonIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Guide } from '../guide/guide.tsx';
+import { mountKnobs, unmountKnobs } from '../guide/knobs.ts';
+import { openGuide, watchKnobs } from '../guide/progress.ts';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, NpmMark } from '../lib/brand-marks.tsx';
+import { ICON } from '../lib/icon.ts';
+import { Key, withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
-import { mountKnobs, runDemo, unmountKnobs } from '../specimens/demos.ts';
-import { LanguageSpecimen } from '../specimens/language.tsx';
-import { LocationSpecimen } from '../specimens/location.tsx';
-import { Chip, ICON, Specimen } from '../specimens/specimen.tsx';
-import { TimeSpecimen } from '../specimens/time.tsx';
 
 export const Route = createFileRoute('/')({
   component: Landing,
@@ -240,21 +237,6 @@ const styles = create({
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
-  // The panel's key chip: a hairline box around the key, nothing else.
-  kbd: {
-    borderColor: colors.border,
-    borderRadius: radius.base,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    boxSizing: 'border-box',
-    display: 'inline-block',
-    fontFamily: 'inherit',
-    fontSize: '0.85em',
-    lineHeight: 1.4,
-    minWidth: '1.6em',
-    paddingInline: 3,
-    textAlign: 'center',
-  },
   limits: {
     display: 'flex',
     flexDirection: 'column',
@@ -322,51 +304,6 @@ const styles = create({
     fontWeight: font.weightRegular,
     margin: 0,
   },
-  // A small panel: hairline, 13 round, rows 4 inside it, so 8 round.
-  seen: {
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
-    borderRadius: radius.panel,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    display: 'grid',
-    fontSize: 13,
-    gap: 1,
-    margin: 0,
-    maxWidth: 400,
-    padding: spacing.s1,
-  },
-  seenLabel: {
-    color: colors.muted,
-    flexShrink: 0,
-  },
-  seenRow: {
-    alignItems: 'baseline',
-    backgroundColor: {
-      ':hover': colors.card,
-      default: 'transparent',
-    },
-    borderRadius: radius.row,
-    columnGap: spacing.s2,
-    display: 'flex',
-    paddingBlock: spacing.s1,
-    paddingInline: '10px 8px',
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color',
-  },
-  seenTitle: {
-    color: colors.muted,
-    fontSize: 13,
-    margin: 0,
-  },
-  seenValue: {
-    flexGrow: 1,
-    fontVariantNumeric: 'tabular-nums',
-    margin: 0,
-    minWidth: 0,
-    overflowWrap: 'anywhere',
-    textAlign: 'end',
-  },
   self: {
     alignSelf: 'flex-start',
   },
@@ -381,12 +318,6 @@ const styles = create({
   },
   text: {
     margin: 0,
-  },
-  // The use cases, one under the other, each far enough apart to read alone.
-  specimens: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s8,
   },
   // An icon beside its label, centered on the line, a fixed gap apart.
   withIcon: {
@@ -414,63 +345,6 @@ function Feature({ detail, icon: Icon, name }: { detail: string; icon: LucideIco
   );
 }
 
-type Seen = {
-  language: string;
-  pointer: string;
-  scheme: string;
-  time: string;
-  width: string;
-  zone: string;
-};
-
-/** What the page's own code reads right now, so each knob shows up as a value. */
-function readSeen(): Seen {
-  const format = new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'short',
-    weekday: 'short',
-  });
-  return {
-    language: navigator.language,
-    pointer: matchMedia('(pointer: coarse)').matches
-      ? m.seen_pointer_touch()
-      : m.seen_pointer_mouse(),
-    scheme: matchMedia('(prefers-color-scheme: dark)').matches
-      ? m.seen_scheme_dark()
-      : m.seen_scheme_light(),
-    time: format.format(new Date()),
-    width: m.seen_width_value({ width: String(window.innerWidth) }),
-    zone: format.resolvedOptions().timeZone,
-  };
-}
-
-function SeenRow({ label, value }: { label: string; value: string | undefined }) {
-  return (
-    <div {...props(styles.seenRow)}>
-      <dt {...props(styles.seenLabel)}>{label}</dt>
-      <dd {...props(styles.seenValue)}>{value}</dd>
-    </div>
-  );
-}
-
-/**
- * Text with keys in it, each written `[[key]]` in the message, drawn as the
- * panel's key chips.
- */
-function withKeys(text: string) {
-  return text.split(/\[\[(.+?)\]\]/).map((part, index) =>
-    index % 2 === 1 ? (
-      <kbd {...props(styles.kbd)} key={index}>
-        {part}
-      </kbd>
-    ) : (
-      part
-    ),
-  );
-}
-
 /** The five shortcuts the panel's footer lists, in its order, drawn the same way. */
 function Hints() {
   const hints = [
@@ -484,7 +358,7 @@ function Hints() {
     <ul {...props(styles.hints)}>
       {hints.map(([key, word]) => (
         <li {...props(styles.hintItem)} key={word}>
-          <kbd {...props(styles.kbd)}>{key}</kbd>
+          <Key>{key}</Key>
           {word}
         </li>
       ))}
@@ -502,31 +376,6 @@ function GrabDemo() {
         {m.grab_demo_component()}
       </span>
     </div>
-  );
-}
-
-function SeenList() {
-  // Empty on the server and on the first client render, so hydration matches.
-  const [seen, setSeen] = useState<Seen | null>(null);
-  useEffect(() => {
-    const update = () => setSeen(readSeen());
-    update();
-    const timer = setInterval(update, 1000);
-    window.addEventListener('resize', update);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-  return (
-    <dl {...props(styles.seen)}>
-      <SeenRow label={m.seen_width()} value={seen?.width} />
-      <SeenRow label={m.seen_time()} value={seen?.time} />
-      <SeenRow label={m.seen_zone()} value={seen?.zone} />
-      <SeenRow label={m.seen_language()} value={seen?.language} />
-      <SeenRow label={m.seen_scheme()} value={seen?.scheme} />
-      <SeenRow label={m.seen_pointer()} value={seen?.pointer} />
-    </dl>
   );
 }
 
@@ -666,21 +515,23 @@ function Landing() {
   // the browser is idle; a reload with knobs already set loads it at once, so
   // the stored scheme or language does not wait.
   useEffect(() => {
+    // Before the panel, so the copy of this page in a device's frame finds the
+    // guide's progress on the page above.
+    const closeGuide = openGuide();
+    const start = () => void mountKnobs().then(watchKnobs);
     let cancel: (() => void) | undefined;
     if (hasStoredKnobs()) {
-      void mountKnobs();
+      start();
     } else {
-      cancel = whenIdle(() => void mountKnobs());
+      cancel = whenIdle(start);
     }
-    // The copy of this page inside a device's frame hands its buttons up here.
-    window.knobsDemo = runDemo;
     // One delegated listener for the whole page, panel included. Passive: it
     // never cancels the click it is reading.
     document.addEventListener('click', trackClick, { passive: true });
     return () => {
       cancel?.();
       document.removeEventListener('click', trackClick);
-      delete window.knobsDemo;
+      closeGuide();
       unmountKnobs();
     };
   }, []);
@@ -699,34 +550,11 @@ function Landing() {
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.try_title()}</h2>
-        <div {...props(styles.specimens)}>
-          <Specimen
-            chips={
-              <>
-                <Chip demo="duo" icon={SmartphoneIcon} label={m.try_duo()} />
-                <Chip demo="fold" icon={FoldHorizontalIcon} label={m.try_fold()} />
-                <Chip demo="iphone" icon={SmartphoneIcon} label={m.try_iphone()} />
-                <Chip demo="pixel" icon={SmartphoneIcon} label={m.try_pixel()} />
-              </>
-            }
-            label={m.try_device()}
-            more={
-              <>
-                <Chip demo="mat" icon={PaletteIcon} label={m.try_mat()} />
-                <Chip demo="scheme" icon={SunMoonIcon} label={m.try_scheme()} />
-                <Chip demo="reset" icon={RotateCcwIcon} label={m.try_reset()} />
-              </>
-            }
-          />
-          <LanguageSpecimen />
-          <LocationSpecimen />
-          <TimeSpecimen />
-        </div>
-        <p {...props(styles.seenTitle)}>{m.seen_title()}</p>
-        <SeenList />
-      </section>
+      <Guide
+        install={
+          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_guide" />
+        }
+      />
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.new_title()}</h2>
@@ -831,7 +659,6 @@ function Landing() {
         <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
         <p {...props(styles.text)}>{m.how_frame()}</p>
         <p {...props(styles.text)}>{m.how_patch()}</p>
-        <p {...props(styles.text)}>{m.how_chips()}</p>
         <p {...props(styles.text)}>{m.how_setup()}</p>
       </section>
 
