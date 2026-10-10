@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Layers } from '../demo/layers.tsx';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, NpmMark } from '../lib/brand-marks.tsx';
 import { ICON } from '../lib/icon.ts';
@@ -644,6 +645,7 @@ function Landing() {
           <Feature detail={m.feature_look_detail()} icon={SunMoonIcon} name={m.feature_look()} />
           <Feature detail={m.feature_debug_detail()} icon={BugIcon} name={m.feature_debug()} />
         </dl>
+        <Layers />
         <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
         <Hints />
         <a

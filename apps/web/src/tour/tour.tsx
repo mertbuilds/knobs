@@ -3,6 +3,7 @@ import { create, firstThatWorks, props } from '@stylexjs/stylex';
 import { ClipboardCheckIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Chip } from '../lib/chip.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
@@ -208,44 +209,16 @@ const styles = create({
     display: 'flex',
     flexShrink: 0,
   },
-  // The page's key chip as a button: a hairline box, nothing else.
-  start: {
-    alignSelf: 'flex-start',
-    backgroundColor: {
-      ':hover': colors.card,
-      default: 'transparent',
-    },
-    borderColor: colors.border,
-    borderRadius: radius.base,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    color: {
-      ':hover': colors.fg,
-      default: colors.muted,
-    },
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    fontSize: 13,
-    lineHeight: 1.4,
-    outlineColor: colors.muted,
-    outlineOffset: 2,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    paddingBlock: 2,
-    paddingInline: spacing.s2,
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color, color',
-    transitionTimingFunction: 'ease-out',
-  },
   // The install command and what to do after it: side by side, or one under the other in a narrow bubble.
   next: {
     alignItems: 'center',
     display: 'flex',
     flexWrap: 'wrap',
     gap: spacing.s1,
+  },
+  // The start button hugs its words in the page's column.
+  start: {
+    alignSelf: 'flex-start',
   },
   // The install command, whose copy button takes the pointer.
   takes: {
@@ -307,9 +280,9 @@ export function Tour({ install }: { install: ReactNode }) {
 
   return (
     <>
-      <button {...props(styles.start)} onClick={startTour} type="button">
+      <Chip onClick={startTour} style={styles.start}>
         {m.tour_start()}
-      </button>
+      </Chip>
       {showing &&
         createPortal(
           <Layer
