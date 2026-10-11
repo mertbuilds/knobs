@@ -13,6 +13,7 @@ import { type Outside, type OutsideFrame, outsideFrame, shown } from '../tour/kn
 import { raise } from '../tour/layer.tsx';
 import { closeTour, useProgress } from '../tour/progress.ts';
 import { isLocal, readVerdict, toAddress, type Verdict } from './address.ts';
+import { type Look, readLook } from './look.ts';
 
 // Space the bubble keeps from the window's edges.
 const MARGIN = 8;
@@ -116,14 +117,20 @@ const NOTES: Record<Note, () => string> = {
   unreachable: m.try_unreachable,
 };
 
-/** Asks the server whether the site lets itself be shown. Any failure to ask is `unchecked`. */
-async function frameable(url: URL, signal: AbortSignal): Promise<Verdict> {
+type Answer = { look: Look | null; verdict: Verdict };
+
+/**
+ * Asks the server whether the site lets itself be shown, and for the colours
+ * it names for itself. Any failure to ask is `unchecked`.
+ */
+async function frameable(url: URL, signal: AbortSignal): Promise<Answer> {
   try {
     const response = await fetch(`/api/frameable?url=${encodeURIComponent(url.href)}`, { signal });
     const data: unknown = response.ok ? await response.json() : null;
-    return readVerdict(data);
+    const verdict = readVerdict(data);
+    return { look: verdict === 'ok' ? readLook(data) : null, verdict };
   } catch {
-    return 'unchecked';
+    return { look: null, verdict: 'unchecked' };
   }
 }
 
@@ -219,12 +226,16 @@ export function Try({ install }: { install: ReactNode }) {
   }
 
   // The result goes out as one word. The address and its host never do.
-  const show = (url: URL, result: Verdict | 'local') => {
+  // The site's colours go with it only to a devknobs that takes them.
+  const show = (url: URL, result: Verdict | 'local', look: Look | null = null) => {
     if (progress.phase !== 'off') {
       // The tour points into the page in the frame, which an outside page is not.
       closeTour();
     }
-    const done = frame.show(url.href, { refused: result === 'refused' });
+    const done = frame.show(url.href, {
+      refused: result === 'refused',
+      ...(look !== null && typeof frame.look === 'function' ? { look } : {}),
+    });
     setNote(done ? null : 'invalid');
     if (done) {
       trackAbove('outside_show', { result });
@@ -247,7 +258,7 @@ export function Try({ install }: { install: ReactNode }) {
     const abort = new AbortController();
     asking.current = abort;
     setNote('checking');
-    void frameable(url, abort.signal).then((verdict) => {
+    void frameable(url, abort.signal).then(({ look, verdict }) => {
       if (abort.signal.aborted) {
         return;
       }
@@ -256,7 +267,7 @@ export function Try({ install }: { install: ReactNode }) {
         trackAbove('outside_show', { result: verdict });
         return;
       }
-      show(url, verdict);
+      show(url, verdict, look);
     });
   };
 

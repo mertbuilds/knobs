@@ -1,4 +1,5 @@
 import { held } from '../lib/live.ts';
+import type { Look } from '../try/look.ts';
 
 type Knobs = typeof import('devknobs');
 
@@ -13,13 +14,15 @@ export type Outside = {
 /**
  * devknobs' `frame`: an outside page in the device's frame. The pinned npm
  * package has none yet and a local checkout may, so it is typed here and
- * looked for when the panel mounts.
+ * looked for when the panel mounts. `look`, the colours of the device's own
+ * screen around the page, came later still, so it is asked for on its own.
  */
 export type OutsideFrame = {
   readonly get: () => Outside;
+  readonly look?: (look: Look | null) => void;
   readonly own: () => void;
   readonly refuse: () => void;
-  readonly show: (url: string, options?: { refused?: boolean }) => boolean;
+  readonly show: (url: string, options?: { look?: Look; refused?: boolean }) => boolean;
   readonly subscribe: (listener: (state: Outside) => void) => () => void;
 };
 
