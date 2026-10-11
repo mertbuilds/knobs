@@ -220,7 +220,7 @@
   "try_checking": "Checking the site",
   "try_invalid": "Enter a web address that starts with http or https",
   "try_unreachable": "That site did not answer",
-  "try_back": "Back to this site",
+  "try_back": "Back to knobs.dev",
   "try_bubble": "The site in the device. Arrow keys move this box",
   "try_minimize": "Minimize",
   "try_expand": "Expand",
