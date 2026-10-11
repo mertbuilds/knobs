@@ -22,3 +22,18 @@ export function track(name: string, props: EventProps): void {
   }
   window.op('track', name, props);
 }
+
+/**
+ * The same, from wherever the page runs. The copy of the page in a device's
+ * frame has no analytics of its own, so its event goes out from the page above.
+ */
+export function trackAbove(name: string, props: EventProps): void {
+  try {
+    const op = window.parent.op;
+    if (typeof op === 'function') {
+      op('track', name, props);
+    }
+  } catch {
+    // A parent on another origin, such as an embed, answers with an error.
+  }
+}

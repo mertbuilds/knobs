@@ -25,6 +25,7 @@ import { m } from '../paraglide/messages.js';
 import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
 import { openTour, watchKnobs } from '../tour/progress.ts';
 import { Tour } from '../tour/tour.tsx';
+import { Try } from '../try/try.tsx';
 
 export const Route = createFileRoute('/')({
   component: import.meta.env.DEV ? DevPage : Landing,
@@ -552,6 +553,15 @@ function Landing() {
           style={styles.installCode}
         />
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
+        <Try
+          install={
+            <CodeBox
+              code={m.install_command()}
+              copyLabel={m.copy_install()}
+              name="install_outside"
+            />
+          }
+        />
       </header>
 
       <Tour

@@ -3,6 +3,7 @@ import { create, firstThatWorks, props } from '@stylexjs/stylex';
 import { ClipboardCheckIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Bubble } from '../lib/bubble.tsx';
 import { Chip } from '../lib/chip.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key } from '../lib/keys.tsx';
@@ -90,22 +91,6 @@ const styles = create({
     transitionDuration: '120ms',
     transitionProperty: 'color',
     transitionTimingFunction: 'ease-out',
-  },
-  // A small panel: hairline, 13 round, its rows 4 inside it, so 8 round.
-  bubble: {
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
-    borderRadius: radius.panel,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    boxShadow: shadow.lift,
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s1,
-    maxHeight: firstThatWorks('calc(100dvh - 16px)', 'calc(100vh - 16px)'),
-    maxWidth: '100%',
-    padding: spacing.s1,
   },
   // The panel's small icon button: faint, and the track ground on hover.
   bubbleClose: {
@@ -310,7 +295,7 @@ export function Tour({ install }: { install: ReactNode }) {
               </div>
             )}
             {ended && (
-              <div {...props(styles.bubble)}>
+              <Bubble>
                 <p {...props(styles.bubbleLine)}>
                   <span {...props(styles.icon)}>
                     <ClipboardCheckIcon {...ICON} />
@@ -336,7 +321,7 @@ export function Tour({ install }: { install: ReactNode }) {
                     {m.tour_explore()}
                   </button>
                 </div>
-              </div>
+              </Bubble>
             )}
           </Layer>,
           document.body,

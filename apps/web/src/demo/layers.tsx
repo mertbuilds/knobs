@@ -3,6 +3,7 @@ import { create, firstThatWorks, props } from '@stylexjs/stylex';
 import { type MouseEvent, type PointerEvent, useId, useRef, useState } from 'react';
 import { Chips } from '../lib/card.tsx';
 import { Chip } from '../lib/chip.tsx';
+import { Field, Input } from '../lib/field.tsx';
 import { m } from '../paraglide/messages.js';
 
 const DARK = '@media (prefers-color-scheme: dark)';
@@ -12,28 +13,6 @@ const CARD = 264;
 const GUTTER = 16;
 
 const styles = create({
-  // A field's control, 4 inside its row, so 4 round.
-  control: {
-    backgroundColor: colors.raised,
-    borderRadius: radius.base,
-    borderStyle: 'none',
-    boxSizing: 'border-box',
-    color: colors.fg,
-    fontFamily: 'inherit',
-    // 16px, so a phone's browser does not zoom in on focus.
-    fontSize: font.sizeMd,
-    lineHeight: '1.5rem',
-    outlineColor: colors.muted,
-    outlineOffset: 1,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    paddingBlock: spacing.s1,
-    paddingInline: spacing.s2,
-    width: '100%',
-  },
   // The browser's own dialog, with none of its looks: a small panel, hairline
   // and 13 round, 16 from every edge of the viewport, which scrolls inside when
   // it is taller. No `display` here, so it stays hidden while it is closed.
@@ -81,20 +60,6 @@ const styles = create({
     gap: spacing.s1,
     paddingBlock: spacing.s1,
     paddingInline: '10px',
-  },
-  // A panel row, 4 inside the dialog, so 8 round, with its label over its control.
-  field: {
-    backgroundColor: colors.card,
-    borderRadius: radius.row,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s1,
-    padding: spacing.s1,
-  },
-  fieldLabel: {
-    color: colors.muted,
-    paddingInline: 6,
-    paddingTop: 2,
   },
   muted: {
     color: colors.muted,
@@ -214,14 +179,12 @@ export function Layers() {
             <p {...props(styles.muted)}>{m.layers_dialog_try()}</p>
             <p {...props(styles.muted)}>{m.layers_dialog_fields()}</p>
           </div>
-          <label {...props(styles.field)}>
-            <span {...props(styles.fieldLabel)}>{m.layers_dialog_text()}</span>
-            <input {...props(styles.control)} type="text" />
-          </label>
-          <label {...props(styles.field)}>
-            <span {...props(styles.fieldLabel)}>{m.layers_dialog_range()}</span>
+          <Field label={m.layers_dialog_text()}>
+            <Input type="text" />
+          </Field>
+          <Field label={m.layers_dialog_range()}>
             <input {...props(styles.range)} defaultValue={40} max={100} min={0} type="range" />
-          </label>
+          </Field>
           <div {...props(styles.dialogEnd)}>
             <Chip onClick={() => dialog.current?.close()}>{m.layers_dialog_close()}</Chip>
           </div>

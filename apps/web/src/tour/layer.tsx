@@ -277,7 +277,7 @@ function radiusOf(node: Element | null): number {
  * anything that joined before it. A manual popover closes no other and no
  * light dismiss closes it. Without popovers it stays a fixed layer on top.
  */
-function raise(layer: HTMLElement): void {
+export function raise(layer: HTMLElement): void {
   if (typeof layer.showPopover !== 'function') {
     return;
   }
