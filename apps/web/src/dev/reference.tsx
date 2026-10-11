@@ -1,5 +1,5 @@
 import { create, props } from '@stylexjs/stylex';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
 import { arriveAtReference } from './refscreen.ts';
 
@@ -11,18 +11,10 @@ import { arriveAtReference } from './refscreen.ts';
 
 const LIST = '/__tune/ref';
 
-// The Duo open: wider than it is tall, or wider than a cover screen gets.
-const OPEN = '(orientation: landscape), (width > 600px)';
-
-function watchOpen(listener: () => void): () => void {
-  const media = window.matchMedia(OPEN);
-  media.addEventListener('change', listener);
-  return () => media.removeEventListener('change', listener);
-}
-
-const isOpen = (): boolean | null => window.matchMedia(OPEN).matches;
-// Not known on the server or while hydrating, so the shell is all both draw.
-const unknown = (): boolean | null => null;
+// The Duo open: wider than it is tall, or wider than a cover screen gets. In
+// css and not in script, so devknobs' picture of the page at its other
+// screen's size, which runs no script, shows that screen's image.
+const OPEN = '@media (orientation: landscape), (width > 600px)';
 
 const styles = create({
   // Apple's screens are on true black, which no token is.
@@ -34,16 +26,20 @@ const styles = create({
     position: 'fixed',
   },
   image: {
-    display: 'block',
     height: '100%',
     objectFit: 'cover',
     objectPosition: 'center',
     width: '100%',
   },
+  inner: {
+    display: { default: 'none', [OPEN]: 'block' },
+  },
+  outer: {
+    display: { default: 'block', [OPEN]: 'none' },
+  },
 });
 
 export default function Reference({ name }: { name: string }) {
-  const open = useSyncExternalStore(watchOpen, isOpen, unknown);
   const [files, setFiles] = useState<ReadonlyArray<string>>([]);
 
   useEffect(() => {
@@ -78,11 +74,16 @@ export default function Reference({ name }: { name: string }) {
     };
   }, []);
 
-  const side = open === null ? null : `${name}-${open ? 'inner' : 'outer'}.`;
-  const file = side === null ? undefined : files.find((each) => each.startsWith(side));
+  const inner = files.find((each) => each.startsWith(`${name}-inner.`));
+  const outer = files.find((each) => each.startsWith(`${name}-outer.`));
   return (
     <main {...props(styles.ground)} data-ref={name}>
-      {file !== undefined && <img {...props(styles.image)} alt="" src={`${LIST}/${file}`} />}
+      {inner !== undefined && (
+        <img {...props(styles.image, styles.inner)} alt="" src={`${LIST}/${inner}`} />
+      )}
+      {outer !== undefined && (
+        <img {...props(styles.image, styles.outer)} alt="" src={`${LIST}/${outer}`} />
+      )}
     </main>
   );
 }
