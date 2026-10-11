@@ -1,6 +1,6 @@
-import { colors, font, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props } from '@stylexjs/stylex';
 import { useEffect, useState } from 'react';
+import { Card, Group } from '../lib/card.tsx';
 import { Chip } from '../lib/chip.tsx';
 import { m } from '../paraglide/messages.js';
 import { FAKE_SECRET } from './fake.ts';
@@ -16,34 +16,9 @@ const BURST = 20;
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
 const styles = create({
-  chips: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: spacing.s2,
-  },
-  group: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  },
-  groupLabel: {
-    color: colors.muted,
-    fontSize: font.sizeXs,
-    lineHeight: 1.4,
-  },
   // Out of sight, still in place: the chip keeps its label's width.
   hidden: {
     visibility: 'hidden',
-  },
-  line: {
-    color: colors.muted,
-    fontSize: 13,
-    margin: 0,
-  },
-  requests: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s3,
   },
   // The label and the outcome in one cell, so one takes the other's place.
   stack: {
@@ -233,7 +208,7 @@ function RequestChip({ label, send: sendRequest }: { label: string; send: Send }
  * view has each one to show. Nothing is drawn here but the outcome on the
  * pressed chip: the place to look is the panel.
  */
-export function Requests() {
+export function RequestsCard() {
   const groups: Array<{ chips: Array<[string, Send]>; label: string }> = [
     {
       chips: [
@@ -243,6 +218,13 @@ export function Requests() {
         [m.requests_put(), withBody('PUT')],
         [m.requests_patch(), withBody('PATCH')],
         [m.requests_delete(), () => send(`${API}/echo`, { method: 'DELETE' })],
+        [m.requests_headers(), withSecrets],
+        [m.requests_burst(), burst],
+      ],
+      label: m.requests_group_fetch(),
+    },
+    {
+      chips: [
         [m.requests_404(), () => send(`${API}/status/404`)],
         [m.requests_500(), () => send(`${API}/status/500`)],
         [m.requests_redirect(), () => send(`${API}/redirect`)],
@@ -252,16 +234,19 @@ export function Requests() {
         [m.requests_network_error(), () => send(NOWHERE, { signal: AbortSignal.timeout(5000) })],
         [m.requests_cors_blocked(), () => send(ELSEWHERE, { mode: 'cors' })],
         [m.requests_no_cors(), () => send(ELSEWHERE, { mode: 'no-cors' })],
+      ],
+      label: m.requests_group_outcomes(),
+    },
+    {
+      chips: [
         [m.requests_big_body(), () => send(`${API}/big`)],
         [m.requests_text(), () => send(`${API}/text`)],
         [m.requests_html(), () => send(`${API}/html`)],
         [m.requests_binary(), () => send(`${API}/bin`)],
         [m.requests_stream(), () => send(`${API}/stream`)],
         [m.requests_event_stream(), eventStream],
-        [m.requests_headers(), withSecrets],
-        [m.requests_burst(), burst],
       ],
-      label: m.requests_group_fetch(),
+      label: m.requests_group_bodies(),
     },
     {
       chips: [
@@ -283,18 +268,14 @@ export function Requests() {
     },
   ];
   return (
-    <div {...props(styles.requests)}>
-      <p {...props(styles.line)}>{m.requests_line()}</p>
+    <Card title={m.knob_requests()} wide>
       {groups.map((group) => (
-        <div {...props(styles.group)} key={group.label}>
-          <span {...props(styles.groupLabel)}>{group.label}</span>
-          <div {...props(styles.chips)}>
-            {group.chips.map(([label, sendRequest]) => (
-              <RequestChip key={label} label={label} send={sendRequest} />
-            ))}
-          </div>
-        </div>
+        <Group key={group.label} label={group.label}>
+          {group.chips.map(([label, sendRequest]) => (
+            <RequestChip key={label} label={label} send={sendRequest} />
+          ))}
+        </Group>
       ))}
-    </div>
+    </Card>
   );
 }

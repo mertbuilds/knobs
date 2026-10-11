@@ -15,10 +15,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Layers } from '../demo/layers.tsx';
-import { Requests } from '../demo/requests.tsx';
+import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
+import { Card, Cards, Line } from '../lib/card.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key, withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
@@ -107,7 +107,7 @@ const styles = create({
   codeText: {
     flexGrow: 1,
     fontFamily: font.mono,
-    fontSize: 12.5,
+    fontSize: '0.78125rem',
     lineHeight: '1.375rem',
     margin: 0,
     minWidth: 0,
@@ -152,34 +152,6 @@ const styles = create({
     transitionTimingFunction: 'ease-out',
     width: 22,
   },
-  feature: {
-    backgroundColor: colors.card,
-    borderRadius: radius.row,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s1,
-    paddingBlock: '10px 12px',
-    paddingInline: spacing.s3,
-  },
-  featureDetail: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  featureName: {
-    fontSize: 13,
-    fontWeight: font.weightMedium,
-  },
-  features: {
-    display: 'grid',
-    gap: spacing.s2,
-    gridTemplateColumns: {
-      default: '1fr',
-      [WIDE]: '1fr 1fr',
-    },
-    margin: 0,
-  },
   footer: {
     borderTopColor: colors.border,
     borderTopStyle: 'solid',
@@ -187,7 +159,7 @@ const styles = create({
     columnGap: spacing.s6,
     display: 'flex',
     flexWrap: 'wrap',
-    fontSize: 13,
+    fontSize: '0.8125rem',
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
@@ -198,7 +170,7 @@ const styles = create({
     borderRadius: radius.base,
     borderStyle: 'solid',
     borderWidth: 1,
-    fontSize: 19,
+    fontSize: '1.1875rem',
     fontWeight: font.weightMedium,
     letterSpacing: '-0.01em',
     lineHeight: 1.4,
@@ -222,7 +194,7 @@ const styles = create({
     color: colors.grabBarText,
     columnGap: 6,
     display: 'inline-flex',
-    fontSize: 13,
+    fontSize: '0.8125rem',
     lineHeight: '1rem',
     paddingBlock: 6,
     paddingInline: spacing.s2,
@@ -232,7 +204,7 @@ const styles = create({
   },
   hint: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     margin: 0,
   },
   hintItem: {
@@ -294,7 +266,7 @@ const styles = create({
   },
   note: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     margin: 0,
   },
   page: {
@@ -303,7 +275,7 @@ const styles = create({
     display: 'flex',
     flexDirection: 'column',
     fontFamily: font.family,
-    fontSize: 15,
+    fontSize: '0.9375rem',
     gap: spacing.s12,
     lineHeight: 1.6,
     marginInline: 'auto',
@@ -322,7 +294,7 @@ const styles = create({
   // Small and calm, like the panel's own labels.
   sectionHeading: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     fontWeight: font.weightRegular,
     margin: 0,
   },
@@ -336,7 +308,7 @@ const styles = create({
   },
   snippetLabel: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
   },
   text: {
     margin: 0,
@@ -352,7 +324,7 @@ const styles = create({
     alignItems: 'center',
     columnGap: 6,
     display: 'flex',
-    fontSize: 19,
+    fontSize: '1.1875rem',
     fontWeight: font.weightMedium,
     letterSpacing: '-0.01em',
     margin: 0,
@@ -361,13 +333,16 @@ const styles = create({
 
 function Feature({ detail, icon: Icon, name }: { detail: string; icon: LucideIcon; name: string }) {
   return (
-    <div {...props(styles.feature)}>
-      <dt {...props(styles.featureName, styles.withIcon)}>
-        <Icon {...ICON} />
-        {name}
-      </dt>
-      <dd {...props(styles.featureDetail)}>{detail}</dd>
-    </div>
+    <Card
+      title={
+        <>
+          <Icon {...ICON} />
+          {name}
+        </>
+      }
+    >
+      <Line>{detail}</Line>
+    </Card>
   );
 }
 
@@ -586,6 +561,12 @@ function Landing() {
       />
 
       <section {...props(styles.section)}>
+        <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
+        <p {...props(styles.text)}>{withKeys(m.stage_line())}</p>
+        <Stage />
+      </section>
+
+      <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.new_title()}</h2>
         <ul {...props(styles.limits)}>
           <li>
@@ -657,7 +638,7 @@ function Landing() {
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.features_title()}</h2>
-        <dl {...props(styles.features)}>
+        <Cards>
           <Feature
             detail={m.feature_devices_detail()}
             icon={SmartphoneIcon}
@@ -672,9 +653,7 @@ function Landing() {
           />
           <Feature detail={m.feature_look_detail()} icon={SunMoonIcon} name={m.feature_look()} />
           <Feature detail={m.feature_debug_detail()} icon={BugIcon} name={m.feature_debug()} />
-        </dl>
-        <Layers />
-        <Requests />
+        </Cards>
         <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
         <Hints />
         <a

@@ -1,6 +1,7 @@
 import { colors, font, palette, radius, shadow, spacing } from '@knobs/ui/tokens.stylex';
 import { create, firstThatWorks, props } from '@stylexjs/stylex';
 import { type MouseEvent, type PointerEvent, useId, useRef, useState } from 'react';
+import { Chips } from '../lib/card.tsx';
 import { Chip } from '../lib/chip.tsx';
 import { m } from '../paraglide/messages.js';
 
@@ -21,7 +22,7 @@ const styles = create({
     fontFamily: 'inherit',
     // 16px, so a phone's browser does not zoom in on focus.
     fontSize: font.sizeMd,
-    lineHeight: '24px',
+    lineHeight: '1.5rem',
     outlineColor: colors.muted,
     outlineOffset: 1,
     outlineStyle: {
@@ -52,7 +53,7 @@ const styles = create({
     boxSizing: 'border-box',
     color: colors.fg,
     fontFamily: font.family,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     lineHeight: 1.5,
     margin: 'auto',
     maxHeight: firstThatWorks('calc(100dvh - 32px)', 'calc(100vh - 32px)'),
@@ -95,26 +96,9 @@ const styles = create({
     paddingInline: 6,
     paddingTop: 2,
   },
-  layers: {
-    alignItems: 'center',
-    columnGap: spacing.s3,
-    display: 'flex',
-    flexWrap: 'wrap',
-    rowGap: spacing.s2,
-  },
-  line: {
-    color: colors.muted,
-    fontSize: 13,
-    margin: 0,
-  },
   muted: {
     color: colors.muted,
     margin: 0,
-  },
-  openers: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: spacing.s2,
   },
   // The browser's own popover, with none of its looks. It leaves the middle of
   // the viewport for a place under its button, set when the button is clicked,
@@ -129,7 +113,7 @@ const styles = create({
     boxSizing: 'border-box',
     color: colors.fg,
     fontFamily: font.family,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     inset: 'auto',
     lineHeight: 1.5,
     margin: 0,
@@ -155,7 +139,7 @@ const styles = create({
     width: '100%',
   },
   title: {
-    fontSize: 15,
+    fontSize: '0.9375rem',
     fontWeight: font.weightMedium,
     lineHeight: 1.4,
     margin: 0,
@@ -204,16 +188,15 @@ export function Layers() {
   };
 
   return (
-    <div {...props(styles.layers)}>
-      <p {...props(styles.line)}>{m.layers_line()}</p>
-      <div {...props(styles.openers)}>
+    <>
+      <Chips>
         <Chip aria-haspopup="dialog" onClick={() => dialog.current?.showModal()} ref={opener}>
           {m.layers_dialog_open()}
         </Chip>
         <Chip aria-expanded={popped} onClick={place} popoverTarget={cardId}>
           {m.layers_popover_open()}
         </Chip>
-      </div>
+      </Chips>
       <dialog
         {...props(styles.dialog)}
         aria-labelledby={titleId}
@@ -253,6 +236,6 @@ export function Layers() {
       >
         {m.layers_popover_text()}
       </div>
-    </div>
+    </>
   );
 }

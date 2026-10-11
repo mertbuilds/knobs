@@ -17,7 +17,17 @@ const EVENTS_GAP_MS = 750;
 const STATUSES = new Set([400, 401, 403, 404, 418, 429, 500, 502, 503]);
 
 /** The request headers the echo names. The others are never read. */
-const ECHO_HEADERS = ['accept', 'authorization', 'content-length', 'content-type', 'x-api-key'];
+const ECHO_HEADERS = [
+  'accept',
+  'authorization',
+  'content-length',
+  'content-type',
+  'x-api-key',
+  'x-devknobs-now',
+];
+/** The clock devknobs sends with "send to server" on: an instant, the way `toISOString` writes it. */
+const NOW_HEADER = 'x-devknobs-now';
+const INSTANT = /^[+-]?\d{4,6}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 /** The ones whose value is safe to send back as it came. */
 const ECHO_VALUES = new Set(['accept', 'content-type']);
 
@@ -114,8 +124,8 @@ async function bodyStart(request: Request): Promise<string> {
 /**
  * What the request was, for the page to see in its own answer: the method, the
  * names of a fixed few headers, and the body's start. A header's value comes
- * back only where it cannot be a visitor's secret: the two content headers, and
- * the demo's own fake token.
+ * back only where it cannot be a visitor's secret: the two content headers, the
+ * demo's own fake token, and the instant devknobs' clock sends.
  */
 async function echo(request: Request): Promise<Response> {
   if (request.method === 'DELETE') {
@@ -132,7 +142,11 @@ async function echo(request: Request): Promise<Response> {
     } else if (name === 'content-length') {
       headers[name] = String(capped(value, 0, Number.MAX_SAFE_INTEGER));
     } else {
-      headers[name] = value === FAKE_SECRET || value === `Bearer ${FAKE_SECRET}` ? value : 'sent';
+      const known =
+        value === FAKE_SECRET ||
+        value === `Bearer ${FAKE_SECRET}` ||
+        (name === NOW_HEADER && INSTANT.test(value));
+      headers[name] = known ? value : 'sent';
     }
   }
   return json(

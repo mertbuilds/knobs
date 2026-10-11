@@ -74,7 +74,7 @@ const styles = create({
     color: colors.fg,
     display: 'block',
     fontFamily: font.family,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     height: 'auto',
     inset: 0,
     lineHeight: '20px',

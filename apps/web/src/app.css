@@ -10,3 +10,10 @@ body {
   color: var(--foreground);
   margin: 0;
 }
+
+/* The demo's one-glyph font, for the inspect specimen that shows a web font and its fallback. */
+@font-face {
+  font-family: 'knobs specimen';
+  font-display: swap;
+  src: url('/api/demo/asset.woff2') format('woff2');
+}

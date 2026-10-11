@@ -3,10 +3,11 @@ import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import type { ComponentProps } from 'react';
 
 const styles = create({
-  // The page's key chip as a button: a hairline box, nothing else.
+  // The page's key chip as a button: a hairline box, and the track ground on hover, which shows
+  // on the page and on a card alike.
   chip: {
     backgroundColor: {
-      ':hover': colors.card,
+      ':hover': colors.track,
       default: 'transparent',
     },
     borderColor: colors.border,
@@ -19,7 +20,7 @@ const styles = create({
     },
     cursor: 'pointer',
     fontFamily: 'inherit',
-    fontSize: 13,
+    fontSize: '0.8125rem',
     lineHeight: 1.4,
     outlineColor: colors.muted,
     outlineOffset: 2,
