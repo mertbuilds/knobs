@@ -3,8 +3,9 @@ import { create, props } from '@stylexjs/stylex';
 import { type ReactNode, type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { trackAbove } from '../lib/analytics.ts';
-import { Bubble } from '../lib/bubble.tsx';
+import { Bubble, BubbleToggle } from '../lib/bubble.tsx';
 import { Chip } from '../lib/chip.tsx';
+import { type Offset, parseStored, type Stored } from '../lib/drag.ts';
 import { Field, Input, Submit } from '../lib/field.tsx';
 import { useLive } from '../lib/live.ts';
 import { m } from '../paraglide/messages.js';
@@ -16,6 +17,25 @@ import { isLocal, readVerdict, toAddress, type Verdict } from './address.ts';
 // Space the bubble keeps from the window's edges.
 const MARGIN = 8;
 const DOCK = 16;
+
+// Where the bubble was moved to and whether it is minimized, for the visit.
+const KEPT = 'knobs:outside';
+
+function readKept(): Stored {
+  try {
+    return parseStored(sessionStorage.getItem(KEPT));
+  } catch {
+    return parseStored(null);
+  }
+}
+
+function keep(kept: Stored): void {
+  try {
+    sessionStorage.setItem(KEPT, JSON.stringify(kept));
+  } catch {
+    // No storage: the bubble starts at the window's bottom each time.
+  }
+}
 
 const styles = create({
   form: {
@@ -32,6 +52,11 @@ const styles = create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  // The install command is not a place to drag from: its text can be selected.
+  install: {
+    cursor: 'auto',
+    userSelect: 'text',
   },
   line: {
     margin: 0,
@@ -56,7 +81,8 @@ const styles = create({
     paddingInline: '10px 4px',
   },
   // Over the device's mat at the window's bottom, in the top layer, with none
-  // of the look a popover comes with.
+  // of the look a popover comes with. It takes no pointer where the bubble was
+  // moved away from; the bubble takes its own.
   shown: {
     backgroundColor: 'transparent',
     borderStyle: 'none',
@@ -66,16 +92,17 @@ const styles = create({
     fontFamily: font.family,
     fontSize: '0.8125rem',
     height: 'auto',
-    left: '50%',
+    left: 0,
     lineHeight: 1.5,
     margin: 0,
+    marginInline: 'auto',
     maxWidth: `min(420px, calc(100vw - ${2 * MARGIN}px))`,
     overflow: 'visible',
     padding: 0,
+    pointerEvents: 'none',
     position: 'fixed',
-    right: 'auto',
+    right: 0,
     top: 'auto',
-    transform: 'translateX(-50%)',
     width: 'max-content',
     zIndex: 2_147_483_647,
   },
@@ -128,22 +155,43 @@ function Shown({
     frame.own();
     trackAbove('outside_back', {});
   };
+  const [start] = useState(readKept);
+  // What a site that refuses says is the point, so it is never minimized at first.
+  const [minimized, setMinimized] = useState(start.minimized && !state.refused);
+  const toggle = () => {
+    setMinimized(!minimized);
+    keep({ ...readKept(), minimized: !minimized });
+  };
+  const moved = (place: Offset) => keep({ ...readKept(), place });
   const local = URL.canParse(state.outside) && isLocal(new URL(state.outside));
   return createPortal(
     <div {...props(styles.shown)} aria-live="polite" data-devknobs="outside" ref={layer}>
-      <Bubble>
+      <Bubble drag={{ label: m.try_bubble(), onPlace: moved, place: start.place }}>
         <div {...props(styles.row)}>
           <span {...props(styles.host)}>{hostOf(state.outside)}</span>
           <Chip onClick={back}>{m.try_back()}</Chip>
+          <BubbleToggle
+            label={minimized ? m.try_expand() : m.try_minimize()}
+            minimized={minimized}
+            onToggle={toggle}
+          />
         </div>
-        {state.refused && (
+        {!minimized && (
           <>
-            <p {...props(styles.line)}>{m.try_refused()}</p>
-            {install}
+            {state.refused && (
+              <>
+                <p {...props(styles.line)}>{m.try_refused()}</p>
+                <div {...props(styles.install)} data-no-drag="">
+                  {install}
+                </div>
+              </>
+            )}
+            {local && !state.refused && (
+              <p {...props(styles.line, styles.muted)}>{m.try_local()}</p>
+            )}
+            <p {...props(styles.line, styles.muted)}>{m.try_works()}</p>
           </>
         )}
-        {local && !state.refused && <p {...props(styles.line, styles.muted)}>{m.try_local()}</p>}
-        <p {...props(styles.line, styles.muted)}>{m.try_works()}</p>
       </Bubble>
     </div>,
     document.body,
@@ -235,7 +283,13 @@ export function Try({ install }: { install: ReactNode }) {
         </p>
       </form>
       {state !== null && state.outside !== null && (
-        <Shown frame={frame} install={install} state={{ ...state, outside: state.outside }} />
+        <Shown
+          frame={frame}
+          install={install}
+          // A new site, and one that turns out to refuse, starts the bubble anew.
+          key={`${state.outside} ${state.refused}`}
+          state={{ ...state, outside: state.outside }}
+        />
       )}
     </>
   );
