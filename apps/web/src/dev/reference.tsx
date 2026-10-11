@@ -1,6 +1,7 @@
 import { create, props } from '@stylexjs/stylex';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
+import { arriveAtReference } from './refscreen.ts';
 
 /**
  * A development tool, never in a build: one of the reference images in
@@ -62,10 +63,19 @@ export default function Reference({ name }: { name: string }) {
     };
   }, []);
 
-  // The panel, as on the page itself, and no tour.
+  // The panel, as on the page itself, and no tour. The top page, not the copy
+  // in the device's frame, then takes the browser off the device.
   useEffect(() => {
-    void mountKnobs();
-    return unmountKnobs;
+    let live = true;
+    void mountKnobs().then((knobs) => {
+      if (live && window.top === window) {
+        arriveAtReference(knobs);
+      }
+    });
+    return () => {
+      live = false;
+      unmountKnobs();
+    };
   }, []);
 
   const side = open === null ? null : `${name}-${open ? 'inner' : 'outer'}.`;

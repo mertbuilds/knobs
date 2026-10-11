@@ -5,6 +5,7 @@ import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import { Chip } from '../lib/chip.tsx';
 import { ICON } from '../lib/icon.ts';
+import { leaveReference } from './refscreen.ts';
 
 /**
  * A development tool, never in a build: live sliders for the constants of
@@ -279,6 +280,7 @@ function refNames(files: unknown): Array<string> {
 function goTo(ref: string | null): void {
   const url = new URL(window.location.href);
   if (ref === null) {
+    leaveReference();
     url.searchParams.delete('ref');
   } else {
     url.searchParams.set('ref', ref);
