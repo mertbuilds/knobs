@@ -21,12 +21,10 @@ import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
 import { Card, Cards, Line } from '../lib/card.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key, withKeys } from '../lib/keys.tsx';
-import { useLive } from '../lib/live.ts';
 import { m } from '../paraglide/messages.js';
-import { mountKnobs, outsideFrame, unmountKnobs } from '../tour/knobs.ts';
+import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
 import { openTour, watchKnobs } from '../tour/progress.ts';
 import { Tour } from '../tour/tour.tsx';
-import { Try } from '../try/try.tsx';
 
 export const Route = createFileRoute('/')({
   component: import.meta.env.DEV ? DevPage : Landing,
@@ -509,30 +507,6 @@ function trackClick(event: MouseEvent) {
   track('link_click', { href: link.href, label: link.textContent?.trim() });
 }
 
-/**
- * "Test on your own site", after the tour and before the stage. devknobs'
- * `frame` is known once the panel is on the page, and the pinned npm package
- * has none, so the whole section, heading and all, is drawn only where it was
- * found.
- */
-function TrySection() {
-  const frame = useLive(outsideFrame);
-  if (frame === null) {
-    return null;
-  }
-  return (
-    <section {...props(styles.section)}>
-      <h2 {...props(styles.sectionHeading)}>{m.try_title()}</h2>
-      <p {...props(styles.text)}>{m.try_line()}</p>
-      <Try
-        install={
-          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_outside" />
-        }
-      />
-    </section>
-  );
-}
-
 function Landing() {
   // The panel is the demo, so it runs here in every environment, not gated on
   // dev the way an app embedding devknobs would gate it. Client-only: `mount`
@@ -585,8 +559,6 @@ function Landing() {
           <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
         }
       />
-
-      <TrySection />
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
