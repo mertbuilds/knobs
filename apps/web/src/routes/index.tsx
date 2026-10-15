@@ -1,26 +1,13 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import {
-  ArrowUpRightIcon,
-  BugIcon,
-  CheckIcon,
-  ClockIcon,
-  CopyIcon,
-  CrosshairIcon,
-  LanguagesIcon,
-  PointerIcon,
-  SmartphoneIcon,
-  SunMoonIcon,
-  type LucideIcon,
-} from 'lucide-react';
+import { CheckIcon, CopyIcon } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
 import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
-import { Card, Cards, Line } from '../lib/card.tsx';
 import { ICON } from '../lib/icon.ts';
-import { Key, withKeys } from '../lib/keys.tsx';
+import { withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
 import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
 import { openTour, watchKnobs } from '../tour/progress.ts';
@@ -87,21 +74,12 @@ function whenIdle(task: () => void): () => void {
 // panel still reaches `document` with the real button in its composed path.
 const PANEL = '[data-devknobs="panel"]';
 
-const DUO_CREDIT = 'https://github.com/jadon7/iphone-duo';
+const DOCS = 'https://github.com/mertbuilds/knobs/tree/main/packages/devknobs#readme';
 
 const NOTICES =
   'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
 const styles = create({
-  // The feature grid's own gap, so the line below it reads as a new block.
-  afterFeatures: {
-    marginTop: spacing.s2,
-  },
-  blocks: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s4,
-  },
   // A code box is a panel field: the card ground, 8 round, and the copy
   // button 4 inside it, so 4 round.
   code: {
@@ -128,7 +106,7 @@ const styles = create({
   codeLabel: {
     fontFamily: font.family,
   },
-  // A long single line, such as a grab line, breaks instead of scrolling.
+  // A long text, such as the install prompt, breaks instead of scrolling.
   codeWrap: {
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
@@ -175,80 +153,15 @@ const styles = create({
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
-  // grab's own box, drawn still: half its blue for the line, a tint inside.
-  grabBox: {
-    backgroundColor: `color-mix(in srgb, ${colors.accent} 8%, transparent)`,
-    borderColor: `color-mix(in srgb, ${colors.accent} 50%, transparent)`,
-    borderRadius: radius.base,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    fontSize: '1.1875rem',
-    fontWeight: font.weightMedium,
-    letterSpacing: '-0.01em',
-    lineHeight: 1.4,
-    paddingBlock: 2,
-    paddingInline: spacing.s1,
-  },
-  grabDemo: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.card,
-    borderRadius: radius.row,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    padding: spacing.s4,
-  },
-  // grab's label bar: its tag in gray, then the component.
-  grabPill: {
-    alignItems: 'center',
-    backgroundColor: colors.grabBar,
-    borderRadius: radius.bar,
-    color: colors.grabBarText,
-    columnGap: 6,
-    display: 'inline-flex',
-    fontSize: '0.8125rem',
-    lineHeight: '1rem',
-    paddingBlock: 6,
-    paddingInline: spacing.s2,
-  },
-  grabTag: {
-    color: colors.grabTag,
-  },
   hint: {
     color: colors.muted,
     fontSize: '0.8125rem',
     margin: 0,
   },
-  hintItem: {
-    alignItems: 'center',
-    columnGap: spacing.s1,
-    display: 'inline-flex',
-    whiteSpace: 'nowrap',
-  },
-  // The panel's footer row of key hints: a key chip and its word.
-  hints: {
-    alignItems: 'center',
-    color: colors.muted,
-    columnGap: spacing.s3,
-    display: 'flex',
-    flexWrap: 'wrap',
-    fontSize: font.sizeXs,
-    lineHeight: 1.4,
-    margin: 0,
-    padding: 0,
-    rowGap: 6,
-  },
   // Hugs the one short line instead of stretching an empty box across the hero.
   installCode: {
     alignSelf: 'flex-start',
     maxWidth: '100%',
-  },
-  limits: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s2,
-    margin: 0,
-    paddingInlineStart: spacing.s4,
   },
   link: {
     color: {
@@ -275,11 +188,6 @@ const styles = create({
     position: 'absolute',
     whiteSpace: 'nowrap',
     width: 1,
-  },
-  note: {
-    color: colors.muted,
-    fontSize: '0.8125rem',
-    margin: 0,
   },
   page: {
     backgroundColor: colors.bg,
@@ -310,17 +218,10 @@ const styles = create({
     fontWeight: font.weightRegular,
     margin: 0,
   },
-  self: {
-    alignSelf: 'flex-start',
-  },
   snippet: {
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
-  },
-  snippetLabel: {
-    color: colors.muted,
-    fontSize: '0.8125rem',
   },
   text: {
     margin: 0,
@@ -342,55 +243,6 @@ const styles = create({
     margin: 0,
   },
 });
-
-function Feature({ detail, icon: Icon, name }: { detail: string; icon: LucideIcon; name: string }) {
-  return (
-    <Card
-      title={
-        <>
-          <Icon {...ICON} />
-          {name}
-        </>
-      }
-    >
-      <Line>{detail}</Line>
-    </Card>
-  );
-}
-
-/** The five shortcuts the panel's footer lists, in its order, drawn the same way. */
-function Hints() {
-  const hints = [
-    [m.hint_panel_key(), m.hint_panel()],
-    [m.hint_search_key(), m.hint_search()],
-    [m.hint_grab_key(), m.hint_grab()],
-    [m.hint_replay_key(), m.hint_replay()],
-    [m.hint_reset_key(), m.hint_reset()],
-  ];
-  return (
-    <ul {...props(styles.hints)}>
-      {hints.map(([key, word]) => (
-        <li {...props(styles.hintItem)} key={word}>
-          <Key>{key}</Key>
-          {word}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** grab's box and label bar on the headline, drawn still, as a visitor sees them live. */
-function GrabDemo() {
-  return (
-    <div {...props(styles.grabDemo)} aria-hidden="true">
-      <span {...props(styles.grabBox)}>{m.app_name()}</span>
-      <span {...props(styles.grabPill)}>
-        <span {...props(styles.grabTag)}>{m.grab_demo_tag()}</span>
-        {m.grab_demo_component()}
-      </span>
-    </div>
-  );
-}
 
 /**
  * A code box with a copy button at its right edge. The code stays plain text,
@@ -459,27 +311,6 @@ function CodeBox({
   );
 }
 
-function Snippet({
-  code,
-  copyLabel,
-  label,
-  name,
-  wrap = false,
-}: {
-  code: string;
-  copyLabel: string;
-  label: string;
-  name: string;
-  wrap?: boolean;
-}) {
-  return (
-    <div {...props(styles.snippet)}>
-      <span {...props(styles.snippetLabel)}>{label}</span>
-      <CodeBox code={code} copyLabel={copyLabel} name={name} wrap={wrap} />
-    </div>
-  );
-}
-
 /**
  * A composed path is a list of `EventTarget`s: the shadow root, `document` and
  * `window` ride along with the elements. Only the elements answer `matches` and
@@ -533,8 +364,8 @@ function trackClick(event: MouseEvent) {
 function Landing() {
   // The panel is the demo, so it runs here in every environment, not gated on
   // dev the way an app embedding devknobs would gate it. Client-only: `mount`
-  // touches `document`, and SSR must never reach it. It starts collapsed to the
-  // edge tab the hero points at, and stays open across the reloads the device
+  // touches `document`, and SSR must never reach it. It starts collapsed to its
+  // edge tab, and stays open across the reloads the device
   // and locale knobs cause once a visitor opens it. A first visit loads it when
   // the browser is idle; a reload with knobs already set loads it at once, so
   // the stored scheme or language does not wait.
@@ -603,166 +434,14 @@ function Landing() {
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
-        <p {...props(styles.text)}>{withKeys(m.stage_line())}</p>
+        <p {...props(styles.text)}>{m.stage_line()}</p>
         <Stage />
       </section>
 
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.new_title()}</h2>
-        <ul {...props(styles.limits)}>
-          <li>
-            {m.new_duo()}{' '}
-            <a href={DUO_CREDIT} {...props(styles.link)}>
-              {m.new_duo_link()}
-            </a>
-            {m.new_duo_end()}
-          </li>
-          <li>{m.new_mat()}</li>
-          <li>{m.new_motion()}</li>
-          <li>{m.new_settings()}</li>
-          <li>{m.new_sides()}</li>
-          <li>{withKeys(m.new_keys())}</li>
-        </ul>
-      </section>
-
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading, styles.withIcon)}>
-          <CrosshairIcon {...ICON} />
-          {m.grab_title()}
-        </h2>
-        <p {...props(styles.text)}>{withKeys(m.grab_intro())}</p>
-        <p {...props(styles.text)}>{withKeys(m.grab_try())}</p>
-        <GrabDemo />
-        <Snippet
-          code={m.grab_example_code()}
-          copyLabel={m.copy_grab_example()}
-          label={m.grab_example_label()}
-          name="grab_example"
-          wrap
-        />
-        <p {...props(styles.text)}>{m.grab_context()}</p>
-        <ul {...props(styles.limits)}>
-          <li>{withKeys(m.grab_key_copy())}</li>
-          <li>{withKeys(m.grab_key_arrows())}</li>
-          <li>{withKeys(m.grab_key_shift())}</li>
-          <li>{withKeys(m.grab_key_escape())}</li>
-        </ul>
-        <p {...props(styles.text)}>{m.grab_lines()}</p>
-        <p {...props(styles.text)}>{m.grab_frame()}</p>
-        <p {...props(styles.text)}>{m.grab_replace()}</p>
-        <Snippet
-          code={m.grab_api_code()}
-          copyLabel={m.copy_grab_api()}
-          label={m.grab_api_label()}
-          name="grab_api"
-        />
-        <p {...props(styles.note)}>
-          {m.grab_credit_built()}{' '}
-          <a href="https://github.com/aidenybai/react-grab" {...props(styles.link)}>
-            {m.grab_credit_react_grab()}
-          </a>{' '}
-          {m.grab_credit_by()}{' '}
-          <a href="https://github.com/aidenybai/bippy" {...props(styles.link)}>
-            {m.grab_credit_bippy()}
-          </a>
-          {', '}
-          {m.grab_credit_carries()}{' '}
-          <a href="https://github.com/jridgewell/sourcemaps" {...props(styles.link)}>
-            {m.grab_credit_sourcemap()}
-          </a>{' '}
-          {m.grab_credit_end()}{' '}
-          <a href={NOTICES} {...props(styles.link)}>
-            {m.grab_credit_notices()}
-          </a>
-        </p>
-      </section>
-
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.features_title()}</h2>
-        <Cards>
-          <Feature
-            detail={m.feature_devices_detail()}
-            icon={SmartphoneIcon}
-            name={m.feature_devices()}
-          />
-          <Feature detail={m.feature_touch_detail()} icon={PointerIcon} name={m.feature_touch()} />
-          <Feature detail={m.feature_time_detail()} icon={ClockIcon} name={m.feature_time()} />
-          <Feature
-            detail={m.feature_language_detail()}
-            icon={LanguagesIcon}
-            name={m.feature_language()}
-          />
-          <Feature detail={m.feature_look_detail()} icon={SunMoonIcon} name={m.feature_look()} />
-          <Feature detail={m.feature_debug_detail()} icon={BugIcon} name={m.feature_debug()} />
-        </Cards>
-        <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
-        <Hints />
-        <a
-          href="https://github.com/mertbuilds/knobs/tree/main/packages/devknobs#knobs"
-          {...props(styles.link, styles.self, styles.withIcon)}
-        >
-          {m.features_readme()}
-          <ArrowUpRightIcon {...ICON} />
-        </a>
-      </section>
-
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
-        <p {...props(styles.text)}>{m.how_frame()}</p>
-        <p {...props(styles.text)}>{m.how_patch()}</p>
-        <p {...props(styles.text)}>{m.how_setup()}</p>
-      </section>
-
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.usage_title()}</h2>
-        <div {...props(styles.blocks)}>
-          <Snippet
-            code={m.usage_script_code()}
-            copyLabel={m.copy_script()}
-            label={m.usage_script_label()}
-            name="script"
-          />
-          <Snippet
-            code={m.usage_import_code()}
-            copyLabel={m.copy_import()}
-            label={m.usage_import_label()}
-            name="import"
-          />
-          <Snippet
-            code={m.usage_react_code()}
-            copyLabel={m.copy_react()}
-            label={m.usage_react_label()}
-            name="react"
-          />
-        </div>
-        <p {...props(styles.note)}>{m.usage_react_note()}</p>
-        <Snippet
-          code={m.usage_early_code()}
-          copyLabel={m.copy_early()}
-          label={m.usage_early_label()}
-          name="early"
-        />
-        <p {...props(styles.note)}>{m.usage_early_note()}</p>
-      </section>
-
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.limits_title()}</h2>
-        <ul {...props(styles.limits)}>
-          <li>{m.limits_ua()}</li>
-          <li>{m.limits_touch()}</li>
-          <li>{m.limits_phone()}</li>
-          <li>{m.limits_clock()}</li>
-          <li>{m.limits_devtools()}</li>
-        </ul>
-        <p {...props(styles.note)}>
-          {m.limits_bezels()}{' '}
-          <a href={NOTICES} {...props(styles.link)}>
-            {m.limits_bezels_link()}
-          </a>
-        </p>
-      </section>
-
       <footer {...props(styles.footer)}>
+        <a href={DOCS} {...props(styles.link)}>
+          {m.link_docs()}
+        </a>
         <a href="https://github.com/mertbuilds/knobs" {...props(styles.link, styles.withIcon)}>
           <GitHubMark />
           {m.link_github()}
@@ -770,6 +449,10 @@ function Landing() {
         <a href="https://www.npmjs.com/package/devknobs" {...props(styles.link, styles.withIcon)}>
           <NpmMark />
           {m.link_npm()}
+        </a>
+        {/* The licenses of grab's sources (react-grab, bippy) and the bezel images. */}
+        <a href={NOTICES} {...props(styles.link)}>
+          {m.link_notices()}
         </a>
         <a
           href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
