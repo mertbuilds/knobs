@@ -17,6 +17,7 @@ const styles = create({
     gap: spacing.s1,
     maxHeight: firstThatWorks('calc(100dvh - 16px)', 'calc(100vh - 16px)'),
     maxWidth: '100%',
+    overflowY: 'auto',
     padding: spacing.s1,
   },
 });

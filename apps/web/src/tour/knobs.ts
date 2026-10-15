@@ -10,7 +10,11 @@ let mounted = false;
  * run in the order they were asked for.
  */
 export function mountKnobs(): Promise<Knobs> {
-  loading ??= import('devknobs');
+  loading ??= import('devknobs').catch((error: unknown) => {
+    // A failed load is not kept, so the next mount tries again.
+    loading = undefined;
+    throw error;
+  });
   return loading.then((module) => {
     if (!mounted) {
       module.mount();

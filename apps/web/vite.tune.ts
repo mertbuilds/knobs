@@ -104,8 +104,37 @@ function saveOf(body: unknown): Record<string, unknown> | null {
   };
 }
 
-/** The page's own requests only: a write names this host as its origin, and no read comes from another site. */
-function sameOrigin(req: IncomingMessage, write: boolean): boolean {
+/**
+ * A host the dev server is known by, by Vite's own rule: an IP address,
+ * `localhost` or a `.localhost` name, or one in `server.allowedHosts`, where
+ * portless adds the name it serves the page at. A name that only resolves
+ * here, as a rebound DNS name does, is none of these.
+ */
+function devHost(hostname: string, allowed: ReadonlyArray<string> | true): boolean {
+  return (
+    allowed === true ||
+    /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname) ||
+    hostname.startsWith('[') ||
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    allowed.some((host) =>
+      host.startsWith('.')
+        ? hostname.endsWith(host) || hostname === host.slice(1)
+        : hostname === host,
+    )
+  );
+}
+
+/**
+ * The page's own requests only: a write names this host as its origin, and no
+ * read comes from another site. The origin must also be a known dev host,
+ * never just whatever host the request names.
+ */
+function sameOrigin(
+  req: IncomingMessage,
+  write: boolean,
+  allowed: ReadonlyArray<string> | true,
+): boolean {
   const site = req.headers['sec-fetch-site'];
   if (site !== undefined && site !== 'same-origin' && (write || site !== 'none')) {
     return false;
@@ -114,9 +143,13 @@ function sameOrigin(req: IncomingMessage, write: boolean): boolean {
   if (origin === undefined) {
     return !write;
   }
+  if (!URL.canParse(origin)) {
+    return false;
+  }
+  const from = new URL(origin);
   // Behind portless the proxy's host is the page's, and it may hand it on as forwarded.
   const hosts = [req.headers.host, req.headers['x-forwarded-host']].flat();
-  return URL.canParse(origin) && hosts.includes(new URL(origin).host);
+  return devHost(from.hostname, allowed) && hosts.includes(from.host);
 }
 
 /** The request's body as text, or null once it is over the limit. */
@@ -158,6 +191,7 @@ export function tuneEndpoint(dir: string): Plugin {
     // A save is not a change to the page: no reload for it.
     config: () => ({ server: { watch: { ignored: [`${dir}/**`] } } }),
     configureServer(server) {
+      const { allowedHosts: allowed } = server.config.server;
       server.middlewares.use((req, res, next) => {
         const path = req.url?.split('?')[0];
         if (path === undefined || (path !== PATH && path !== REF && !path.startsWith(`${REF}/`))) {
@@ -177,7 +211,7 @@ export function tuneEndpoint(dir: string): Plugin {
             refuse(405, 'GET');
             return;
           }
-          if (!sameOrigin(req, false)) {
+          if (!sameOrigin(req, false, allowed)) {
             refuse(403, 'same origin only');
             return;
           }
@@ -218,7 +252,7 @@ export function tuneEndpoint(dir: string): Plugin {
             return;
           }
           const write = req.method === 'POST';
-          if (!sameOrigin(req, write)) {
+          if (!sameOrigin(req, write, allowed)) {
             refuse(403, 'same origin only');
             return;
           }

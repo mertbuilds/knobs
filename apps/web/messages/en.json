@@ -98,7 +98,7 @@
   "pick_box": "A margin of 12 pixels, a border of 4 and a padding of 12",
   "pick_font": "AAA is a web font, the rest is its fallback",
   "pick_pseudo": "starts this line",
-  "pick_media": "This line is gray on a narrow screen and darker on a wide one",
+  "pick_media": "This line is gray on a narrow screen and in the full text color on a wide one",
   "pick_inherit_parent": "This line sets a font and",
   "pick_inherit_child": "this part inherits it",
   "knob_requests": "requests",

@@ -41,6 +41,13 @@ function DevPage() {
   const name = useLocation({
     select: (location) => new URLSearchParams(location.searchStr).get('ref'),
   });
+  // On the page itself, however it was reached, the top page gives back the
+  // browser knob a reference page took.
+  useEffect(() => {
+    if (name === null && window.top === window) {
+      void import('../dev/refscreen.ts').then(({ leaveReference }) => leaveReference());
+    }
+  }, [name]);
   return Reference !== null && name !== null && /^[a-z0-9-]+$/.test(name) ? (
     <Suspense>
       <Reference name={name} />

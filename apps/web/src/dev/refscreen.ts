@@ -1,3 +1,5 @@
+import { mountKnobs } from '../tour/knobs.ts';
+
 type Knobs = typeof import('devknobs');
 type Browser = ReturnType<Knobs['getState']>['browser'];
 
@@ -11,7 +13,6 @@ type Browser = ReturnType<Knobs['getState']>['browser'];
 const STORE = 'knobs:refscreen';
 const BROWSERS: ReadonlyArray<Browser> = ['auto', 'compact', 'bottom', 'top', 'off'];
 
-let knobs: Knobs | null = null;
 /** The browser knob as the visitor had it, while a reference page has it off. */
 let before: Browser | null = null;
 
@@ -31,7 +32,6 @@ function kept(): Browser | null {
  * reference page are the same visit, so a knob set by hand since stays.
  */
 export function arriveAtReference(module: Knobs): void {
-  knobs = module;
   before ??= kept();
   if (before !== null) {
     return;
@@ -50,11 +50,12 @@ export function arriveAtReference(module: Knobs): void {
   );
 }
 
-/** Before the page itself loads: the browser knob back, unless it was set by hand since. */
+/**
+ * On the way to the page itself, by the card, Back or the address: the
+ * browser knob back, unless it was set by hand since. Nothing is kept once it
+ * is back, so the page's later loads leave the knob alone.
+ */
 export function leaveReference(): void {
-  if (knobs === null) {
-    return;
-  }
   const was = before ?? kept();
   before = null;
   try {
@@ -62,7 +63,12 @@ export function leaveReference(): void {
   } catch {
     // Nothing kept there.
   }
-  if (was !== null && knobs.getState().browser === 'off') {
-    knobs.setState({ browser: was });
+  if (was === null) {
+    return;
   }
+  void mountKnobs().then((knobs) => {
+    if (knobs.getState().browser === 'off') {
+      knobs.setState({ browser: was });
+    }
+  });
 }

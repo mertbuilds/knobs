@@ -193,10 +193,17 @@ async function addToDatabase(): Promise<void> {
   }
 }
 
-async function addToCache(): Promise<void> {
-  const count = await cacheCount();
-  const cache = await caches.open(NAME);
-  await cache.put(CACHED, new Response(String(count + 1)));
+// A cache has no transaction, so its writes take turns: two quick presses never read the same count.
+let caching: Promise<void> = Promise.resolve();
+
+function addToCache(): Promise<void> {
+  const next = caching.then(async () => {
+    const count = await cacheCount();
+    const cache = await caches.open(NAME);
+    await cache.put(CACHED, new Response(String(count + 1)));
+  });
+  caching = next.catch(() => {});
+  return next;
 }
 
 /** Runs a write, then reads everything back, whether the write went through or not. */

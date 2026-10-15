@@ -213,9 +213,15 @@ function place(
   const across = (around.left + around.right - size.width) / 2;
   const along = (around.top + around.bottom - size.height) / 2;
   const high = { x: view.width - MARGIN - size.width, y: view.height - MARGIN - size.height };
+  const clear = (spot: Placed) =>
+    avoid === null ||
+    !meets(
+      { bottom: spot.y + size.height, left: spot.x, right: spot.x + size.width, top: spot.y },
+      avoid,
+    );
   const seatAt = (seat: Seat): { fits: boolean; room: number; spot: Placed } => {
     if (seat === 'dock') {
-      return { fits: docks && outer !== null, room: 0, spot: dock };
+      return { fits: docks && outer !== null && clear(dock), room: 0, spot: dock };
     }
     const out = seat.startsWith('out-');
     const from = out ? outer : around;
@@ -240,13 +246,7 @@ function place(
       x: Math.round(clamp(x, MARGIN, Math.max(MARGIN, high.x))),
       y: Math.round(clamp(y, MARGIN, Math.max(MARGIN, high.y))),
     };
-    const box = {
-      bottom: spot.y + size.height,
-      left: spot.x,
-      right: spot.x + size.width,
-      top: spot.y,
-    };
-    return { fits: room >= 0 && (avoid === null || !meets(box, avoid)), room, spot };
+    return { fits: room >= 0 && clear(spot), room, spot };
   };
   // Outside the box around the target first. A caption with no frame never goes inside it.
   const seats: ReadonlyArray<Seat> =
