@@ -19,7 +19,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
+      # Includes devknobs' build and typecheck (bun, tsc).
       - run: pnpm exec turbo run lint typecheck build
       - run: pnpm format:check
       - run: pnpm skills:check
@@ -35,7 +39,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
       # Storybook story tests run in real Chromium (vitest browser mode).
       - run: pnpm --filter @knobs/ui exec playwright install chromium --with-deps
+      # Storybook stories and devknobs' bun tests.
       - run: pnpm test
