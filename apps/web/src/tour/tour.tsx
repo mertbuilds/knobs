@@ -4,7 +4,6 @@ import { ClipboardCheckIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bubble } from '../lib/bubble.tsx';
-import { Chip } from '../lib/chip.tsx';
 import { ICON } from '../lib/icon.ts';
 import { Key } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
@@ -13,7 +12,6 @@ import {
   closeTour,
   exploreKnobs,
   isTop,
-  startTour,
   STOPS,
   takesEscape,
   tourKnobs,
@@ -201,10 +199,6 @@ const styles = create({
     flexWrap: 'wrap',
     gap: spacing.s1,
   },
-  // The start button hugs its words in the page's column.
-  start: {
-    alignSelf: 'flex-start',
-  },
   // The install command, whose copy button takes the pointer.
   takes: {
     flexBasis: 'auto',
@@ -216,9 +210,7 @@ const styles = create({
 
 /**
  * The guided tour: a frame around the real control to use next, which moves on
- * by itself as the visitor uses it, and the one button on the page that starts
- * it again. Only the top page draws it. The copy of the page in a device's
- * frame shows the button alone, which starts the tour on the page above.
+ * by itself as the visitor uses it. Only the top page draws it.
  * `install` is the install command. Once every stop is done one bubble takes
  * the caption's place: what the last pick copied, and how to install.
  */
@@ -264,68 +256,61 @@ export function Tour({ install }: { install: ReactNode }) {
   const key = ended || say === null ? undefined : KEYS[say]?.();
 
   return (
-    <>
-      <Chip onClick={startTour} style={styles.start}>
-        {m.tour_start()}
-      </Chip>
-      {showing &&
-        createPortal(
-          <Layer
-            aim={aim}
-            boxed={!ended}
-            pulseKey={exploring ? 'explore' : progress.watching ? 'bars' : (stop ?? 'end')}
-            said={ended ? m.tour_copied() : (line ?? '')}
-            strong={say !== null && ON_SCREEN.has(say)}
-          >
-            {line !== null && (
-              <div {...props(styles.bar)}>
-                {line}
-                {key !== undefined && <Key>{key}</Key>}
-                {/* While grab is on every click on the page is a pick: the caption takes none. */}
-                {say !== 'pick' && (
-                  <button
-                    {...props(styles.barClose)}
-                    aria-label={m.tour_close()}
-                    onClick={closeTour}
-                    type="button"
-                  >
-                    <XIcon {...ICON} />
-                  </button>
-                )}
-              </div>
+    showing &&
+    createPortal(
+      <Layer
+        aim={aim}
+        boxed={!ended}
+        pulseKey={exploring ? 'explore' : progress.watching ? 'bars' : (stop ?? 'end')}
+        said={ended ? m.tour_copied() : (line ?? '')}
+        strong={say !== null && ON_SCREEN.has(say)}
+      >
+        {line !== null && (
+          <div {...props(styles.bar)}>
+            {line}
+            {key !== undefined && <Key>{key}</Key>}
+            {/* While grab is on every click on the page is a pick: the caption takes none. */}
+            {say !== 'pick' && (
+              <button
+                {...props(styles.barClose)}
+                aria-label={m.tour_close()}
+                onClick={closeTour}
+                type="button"
+              >
+                <XIcon {...ICON} />
+              </button>
             )}
-            {ended && (
-              <Bubble>
-                <p {...props(styles.bubbleLine)}>
-                  <span {...props(styles.icon)}>
-                    <ClipboardCheckIcon {...ICON} />
-                  </span>
-                  <span {...props(styles.grow)}>{m.tour_copied()}</span>
-                  <button
-                    {...props(styles.bubbleClose)}
-                    aria-label={m.tour_close()}
-                    onClick={closeTour}
-                    type="button"
-                  >
-                    <XIcon {...ICON} />
-                  </button>
-                </p>
-                {progress.grabbed !== null && (
-                  <pre {...props(styles.copied)}>{progress.grabbed}</pre>
-                )}
-                <p {...props(styles.bubbleLine)}>{m.tour_end()}</p>
-                <div {...props(styles.next)}>
-                  <div {...props(styles.takes)}>{install}</div>
-                  <button {...props(styles.explore)} onClick={exploreKnobs} type="button">
-                    <SlidersHorizontalIcon {...ICON} />
-                    {m.tour_explore()}
-                  </button>
-                </div>
-              </Bubble>
-            )}
-          </Layer>,
-          document.body,
+          </div>
         )}
-    </>
+        {ended && (
+          <Bubble>
+            <p {...props(styles.bubbleLine)}>
+              <span {...props(styles.icon)}>
+                <ClipboardCheckIcon {...ICON} />
+              </span>
+              <span {...props(styles.grow)}>{m.tour_copied()}</span>
+              <button
+                {...props(styles.bubbleClose)}
+                aria-label={m.tour_close()}
+                onClick={closeTour}
+                type="button"
+              >
+                <XIcon {...ICON} />
+              </button>
+            </p>
+            {progress.grabbed !== null && <pre {...props(styles.copied)}>{progress.grabbed}</pre>}
+            <p {...props(styles.bubbleLine)}>{m.tour_end()}</p>
+            <div {...props(styles.next)}>
+              <div {...props(styles.takes)}>{install}</div>
+              <button {...props(styles.explore)} onClick={exploreKnobs} type="button">
+                <SlidersHorizontalIcon {...ICON} />
+                {m.tour_explore()}
+              </button>
+            </div>
+          </Bubble>
+        )}
+      </Layer>,
+      document.body,
+    )
   );
 }

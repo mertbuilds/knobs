@@ -65,8 +65,6 @@ const START: Progress = { done: [], grabbed: null, phase: 'off', watching: false
 let progress = START;
 let knobs: Knobs | undefined;
 let matAtStart: string | undefined;
-// A tour taken again starts on the iPhone the last one ended on: it has to be picked anew.
-let needsOther = false;
 let looking: ReturnType<typeof setInterval> | undefined;
 let watchTimer: ReturnType<typeof setTimeout> | undefined;
 // When the watch of the bars ends at the latest, however long the page is scrolled.
@@ -170,9 +168,6 @@ function look(): void {
   }
   seen = { grab: grabbing(), open: state.panel.open };
   matAtStart ??= state.mat;
-  if (state.device !== IPHONE) {
-    needsOther = false;
-  }
   if (state.panel.open) {
     complete('open');
   }
@@ -182,7 +177,7 @@ function look(): void {
       complete('unfold');
     }
   }
-  if (state.device === IPHONE && !needsOther) {
+  if (state.device === IPHONE) {
     complete('iphone');
   }
   if (state.mat !== matAtStart) {
@@ -278,14 +273,6 @@ const local: Owner = {
     if (progress.phase === 'on') {
       return;
     }
-    // All done: the tour starts over, from the knobs as they stand now.
-    if (progress.done.length === STOPS.length) {
-      clearTimeout(exploreTimer);
-      const state = knobs?.getState();
-      matAtStart = state?.mat;
-      needsOther = state?.device === IPHONE;
-      progress = START;
-    }
     progress = { ...progress, phase: 'on' };
     emit();
     startLooking();
@@ -352,7 +339,7 @@ export function openTour(): () => void {
       // Each one keeps the tour on the bars a little longer.
       to.report({ type: 'scroll' });
     }
-    // Not asked for yet, or done: a tour taken again measures from here.
+    // Not asked for yet, or done: the scroll measures from here.
     if (now.phase !== 'on' || now.done.includes('scroll')) {
       from = window.scrollY;
     } else if (Math.abs(window.scrollY - from) >= SCROLL_FAR) {
@@ -399,11 +386,6 @@ export function tourKnobs(): Knobs | undefined {
 /** Is this the top page, which draws the tour? The copy in a device's frame draws none. */
 export function isTop(): boolean {
   return ownerOf() === local;
-}
-
-/** Starts the tour at its first stop not done yet, or over when all are done. */
-export function startTour(): void {
-  ownerOf().start();
 }
 
 export function closeTour(): void {
