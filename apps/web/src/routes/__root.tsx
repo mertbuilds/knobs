@@ -46,7 +46,7 @@ function DevFoldTune() {
  */
 function analyticsScript(clientId: string): string {
   return (
-    'if(!navigator.webdriver&&window.top===window){window.op=window.op||function(){(window.op.q=window.op.q||[]).push(arguments)};' +
+    "if(location.hostname==='knobs.dev'&&!navigator.webdriver&&window.top===window){window.op=window.op||function(){(window.op.q=window.op.q||[]).push(arguments)};" +
     `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false});` +
     "var s=document.createElement('script');s.src='/api/op/op1.js';s.async=true;document.head.appendChild(s)}"
   );

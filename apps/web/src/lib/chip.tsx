@@ -37,7 +37,7 @@ const styles = create({
   },
 });
 
-/** The page's small button, the one that opens the demo layers. */
+/** The page's small button. */
 export function Chip({
   style,
   ...rest

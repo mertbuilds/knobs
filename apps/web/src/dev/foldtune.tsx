@@ -60,8 +60,7 @@ const REFS = '/__tune/ref';
 const JADON = 'https://iphone-duo-tawny.vercel.app/';
 
 // The reference page this visit is on (`src/dev/reference.tsx`), read once as the card loads.
-const REF_NOW =
-  typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('ref');
+const REF_NOW = new URLSearchParams(globalThis.location?.search ?? '').get('ref');
 
 /** What goes with the values into a copy and a save, each only when there is one. */
 interface Extra {
@@ -1009,6 +1008,9 @@ export default function FoldTunePanel() {
   };
 
   if (closed) {
+    return null;
+  }
+  if (typeof document === 'undefined') {
     return null;
   }
   // On the body and marked as devknobs' own, as the tour is: devknobs hides

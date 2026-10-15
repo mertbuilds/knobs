@@ -257,6 +257,7 @@ export function Tour({ install }: { install: ReactNode }) {
 
   return (
     showing &&
+    typeof document !== 'undefined' &&
     createPortal(
       <Layer
         aim={aim}
