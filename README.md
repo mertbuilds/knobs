@@ -1,8 +1,14 @@
 # knobs
 
-The marketing site for the `devknobs` npm package. <https://knobs.dev>
+The `devknobs` npm package and its site, <https://knobs.dev>, in one monorepo:
 
-A copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) with everything a
+| Path                 | What                                                               |
+| -------------------- | ------------------------------------------------------------------ |
+| `packages/devknobs/` | The `devknobs` npm package ([README](packages/devknobs/README.md)) |
+| `apps/web/`          | The site, knobs.dev                                                |
+| `packages/ui/`       | The site's StyleX components                                       |
+
+The site is a copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) with everything a
 landing page does not need taken out: no api, no database, no auth, no billing, no e2e. What is
 left is a TanStack Start app on Cloudflare Workers, the StyleX component package behind it, and
 the tooling that keeps both honest. The founding stack decisions are in
@@ -24,7 +30,7 @@ this repo keeps only the web half. Agent rules and workflow live in [AGENTS.md](
 
 ## Develop
 
-Prereqs: Node 24 (`nvm use`), pnpm 11 (corepack).
+Prereqs: Node 24 (`nvm use`), pnpm 11 (corepack), bun 1.3 (devknobs builds and tests with it).
 
 ```sh
 pnpm install
@@ -45,11 +51,11 @@ Local URLs come from [portless](https://portless.sh): stable named HTTPS domains
 | Command             | What it does                                                       |
 | ------------------- | ------------------------------------------------------------------ |
 | `pnpm dev`          | Web + storybook, in mprocs panes                                   |
-| `pnpm test`         | Storybook story tests in real Chromium                             |
+| `pnpm test`         | Story tests in real Chromium + devknobs' `bun test`                |
 | `pnpm lint`         | oxlint, type-aware                                                 |
 | `pnpm format:check` | oxfmt, the CI check                                                |
 | `pnpm typecheck`    | `tsc --noEmit` per package                                         |
-| `pnpm build`        | turbo build (the Workers bundle for `apps/web`)                    |
+| `pnpm build`        | turbo build (devknobs' `dist`, then the Workers bundle)            |
 | `pnpm storybook`    | Component workshop (standalone, :6006)                             |
 | `pnpm bad-day`      | Nuke node_modules + all caches, reinstall (`DRY_RUN=1` to preview) |
 | `pnpm skills:check` | Warn when dep majors drift from verified agent skills              |
@@ -60,6 +66,19 @@ Local URLs come from [portless](https://portless.sh): stable named HTTPS domains
 
 **Deploy.** `pnpm --filter @knobs/web deploy` builds and ships to Cloudflare Workers; a push to
 main does the same from CI.
+
+## devknobs
+
+`pnpm dev` runs the site against devknobs' source, so an edit in `packages/devknobs/src` reloads
+the page. To release a new version: bump `version` in `packages/devknobs/package.json`, add the
+`CHANGELOG.md` entry, then:
+
+```sh
+pnpm --filter devknobs build
+cd packages/devknobs
+npm pack --dry-run   # check the file list
+npm publish
+```
 
 ## Going to production: accounts checklist
 
