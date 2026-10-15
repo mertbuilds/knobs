@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
@@ -283,7 +284,10 @@ export function tuneEndpoint(dir: string): Plugin {
             return;
           }
           await mkdir(dir, { recursive: true });
-          await writeFile(file, `${JSON.stringify(save, null, 2)}\n`);
+          // Written whole, then moved over the file, so two saves at once never mix.
+          const temp = `${file}.${randomUUID()}.tmp`;
+          await writeFile(temp, `${JSON.stringify(save, null, 2)}\n`);
+          await rename(temp, file);
           answer(200, JSON.stringify({ file, ok: true }));
         };
         void handle().catch(next);

@@ -73,7 +73,7 @@ let exploreTimer: ReturnType<typeof setTimeout> | undefined;
 // The owner's first-impression mode: nothing is read or kept, so the tour always starts.
 let fresh = false;
 let offered = false;
-// The panel and grab as they stood at the last look, which is before the key now pressed.
+// The panel and grab as they stood at the last look, or as Escape went down, before the panel's own listeners.
 let seen = { grab: false, open: false };
 const listeners = new Set<() => void>();
 
@@ -160,13 +160,21 @@ export function hasBars(from: Knobs): boolean {
   return from.PRESETS.device.find(({ id }) => id === state.device)?.kind === 'phone';
 }
 
+/** The panel and grab as they stand now. */
+function see(): void {
+  const state = knobs?.getState();
+  if (state !== undefined) {
+    seen = { grab: grabbing(), open: state.panel.open };
+  }
+}
+
 /** The stops a knob shows, read off the knobs as they stand. */
 function look(): void {
   const state = knobs?.getState();
   if (state === undefined) {
     return;
   }
-  seen = { grab: grabbing(), open: state.panel.open };
+  see();
   matAtStart ??= state.mat;
   if (state.panel.open) {
     complete('open');
@@ -305,6 +313,16 @@ function ownerOf(): Owner {
 }
 
 /**
+ * Escape reads the panel and grab as the key goes down, before their own listeners act on it,
+ * so a change since the last look counts too.
+ */
+function onKeyFirst(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    see();
+  }
+}
+
+/**
  * Grab ends a pick with a `copy` from a field of its own, the one signal of a
  * pick a page can observe. The field's value is the text that was copied.
  * Where the browser refuses that copy, grab writes through the async clipboard
@@ -330,6 +348,8 @@ export function openTour(): () => void {
   if (top) {
     fresh = isFresh();
     window.knobsTour = local;
+    // Before the panel mounts, so it runs ahead of the panel's and grab's own listeners.
+    window.addEventListener('keydown', onKeyFirst, true);
   }
   document.addEventListener('copy', onCopy, true);
   let from = window.scrollY;
@@ -353,6 +373,7 @@ export function openTour(): () => void {
     document.removeEventListener('copy', onCopy, true);
     window.removeEventListener('scroll', onScroll);
     if (top) {
+      window.removeEventListener('keydown', onKeyFirst, true);
       stopLooking();
       knobs = undefined;
       delete window.knobsTour;

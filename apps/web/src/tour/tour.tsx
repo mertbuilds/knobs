@@ -23,6 +23,7 @@ const LINES: Record<Say, () => string> = {
   addDevice: m.tour_add_device,
   addMat: m.tour_add_mat,
   bars: m.tour_bars,
+  browser: m.tour_browser,
   duo: m.tour_duo,
   entryDevice: m.tour_entry_device,
   entryMat: m.tour_entry_mat,

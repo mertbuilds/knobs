@@ -83,6 +83,7 @@ export type Say =
   | 'addDevice'
   | 'addMat'
   | 'bars'
+  | 'browser'
   | 'duo'
   | 'entryDevice'
   | 'entryMat'
@@ -253,6 +254,16 @@ function atFold(root: ShadowRoot): Aim {
   return { clip: way.row.parentElement, el, say: 'unfold' };
 }
 
+/** The device row's browser knob: with the browser off there are no bars for a scroll to move. */
+function atBrowser(root: ShadowRoot): Aim {
+  const way = wayTo(root, 'device', WORDS.device);
+  if (!('row' in way)) {
+    return hopTo(way, 'device', 'browser');
+  }
+  const line = way.row.querySelector(HOOKS.knob('browser'));
+  return { clip: way.row.parentElement, el: shown(line) ? line : way.row, say: 'browser' };
+}
+
 function atMat(root: ShadowRoot): Aim {
   const way = wayTo(root, 'viewport', WORDS.mat);
   if (!('row' in way)) {
@@ -372,8 +383,8 @@ function find(stop: StopId, knobs: Knobs, watching: boolean): Aim {
       ? { ...around(screen), bare: true, clip: null, el: screen, say: 'pick' }
       : { bare: true, clip: null, el: null, say: 'pick' };
   }
+  const phone = knobs.PRESETS.device.find(({ id }) => id === state.device)?.kind === 'phone';
   if (stop === 'scroll') {
-    const phone = knobs.PRESETS.device.find(({ id }) => id === state.device)?.kind === 'phone';
     const screen = phone && state.browser !== 'off' ? atScreen() : null;
     if (shown(screen)) {
       const bars = watching ? atBars(screen) : null;
@@ -401,6 +412,9 @@ function find(stop: StopId, knobs: Knobs, watching: boolean): Aim {
   }
   if (stop === 'mat' && document.querySelector(HOOKS.viewport) !== null) {
     return atMat(root);
+  }
+  if (stop === 'scroll' && phone && state.browser === 'off') {
+    return atBrowser(root);
   }
   return atDevice(root, knobs, DUO, 'duo');
 }

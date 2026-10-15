@@ -3,7 +3,7 @@
 The marketing site for the `devknobs` npm package. <https://knobs.dev>
 
 A copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) stripped to the
-layers a landing page needs: no api, no database, no auth, no billing. Keep it that way:
+layers a landing page needs: no database, no auth, no billing, and only a stateless demo api. Keep it that way:
 nothing gets added until the site needs it.
 
 ## Architecture
@@ -64,7 +64,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - i18n: Paraglide v2, `messages/en.json` only. Generated `src/paraglide/` and `src/routeTree.gen.ts` are gitignored build output: never edit them, they regenerate on `vite dev`/`build`. All user-facing strings go through `m.*()`.
 - Env: `apps/web/.env` (copy `apps/web/.env.example`). Vite reads it, and the Cloudflare vite plugin also hands it to the Worker as local dev vars. `VITE_*` vars are validated in `packages/env`, all of them optional, so the site runs with no env at all.
 - StyleX in routes: import `../app.css` (build injection target); there is no importable `virtual:stylex.css` module; in dev the plugin middleware serves the CSS itself.
-- No tests live here: `packages/ui` stories cover the components, and the routes are a static page. Add a vitest project back if that changes.
+- No tests live here: `packages/ui` stories cover the components, the routes are one landing page, and the two server routes hold no state. Add a vitest project back if that changes.
 
 ### Local devknobs in dev
 
@@ -100,8 +100,8 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### Demo requests
 
-- `src/demo/requests.tsx` is the stage's requests card: chips in five groups, one request each, so the devknobs requests view has every kind to show: fetch and XHR in each method and outcome, streams, and an image, stylesheet, script and font. The chips send no analytics events (the delegated listener reports anchors and the panel only), and nothing of theirs goes through `/api/op`. Three leave the site on purpose: `network error` and `xhr error` ask `https://demo.invalid/`, which never resolves, and `cors blocked` and `no-cors` ask `https://example.com/`.
-- `src/routes/api.demo.$.ts` serves them under `/api/demo/*`: `json`, `echo` (GET, POST 201, PUT, PATCH, DELETE 204), `status/:code` (a fixed set of error codes), `redirect` (302 to `json`), `slow?ms=`, `big?kb=`, `text`, `html`, `bin`, `stream`, `events`, `asset.css`, `asset.js`, `asset.png`, `asset.woff2`. Every path but `echo` is GET only; another method gets a 405. It holds no state and makes no outbound request. Caps: `slow` 3000 ms, `big` 512 KB (one row repeated), `echo` reads 16 KB of the body, `stream` is 10 lines over 3 seconds, `events` is 4 events over 3 seconds. Every answer is `cache-control: no-store` and `x-robots-tag: noindex`. The echo names a fixed list of request headers and sends back a value only for `content-type`, `accept`, the demo's own fake token (`src/demo/fake.ts`) and `x-devknobs-now` when it is an ISO instant (the clock's "send to server" knob, which the time card asks about), and `content-length` as a plain number; any other value comes back as `sent`. The `html` answer has no `<head>`, so `server.ts` adds no early script to it.
+- `src/demo/requests.tsx` is the stage's requests card: chips in five groups, one request each, so the devknobs requests view has every kind to show: fetch and XHR in each method and outcome, streams, and an image, stylesheet, script and font. The chips send no analytics events (the delegated listener reports anchors and the panel only), and nothing of theirs goes through `/api/op`. Four leave the site on purpose: `network error` and `xhr error` ask `https://demo.invalid/`, which never resolves, and `cors blocked` and `no-cors` ask `https://example.com/`.
+- `src/routes/api.demo.$.ts` serves them under `/api/demo/*`: `json`, `echo` (GET, POST 201, PUT, PATCH, DELETE 204), `status/:code` (a fixed set of error codes), `redirect` (302 to `json`), `slow?ms=`, `big?kb=`, `text`, `html`, `bin`, `stream`, `events`, `asset.css`, `asset.js`, `asset.png`, `asset.woff2`. Every path but `echo` is GET only (a HEAD goes to the GET handler, so it is answered too); another method gets a 405 with an `allow` header. It holds no state and makes no outbound request. Caps: `slow` 3000 ms, `big` 512 KB (one row repeated), `echo` reads 16 KB of the body, `stream` is 10 lines over 3 seconds, `events` is 4 events over 3 seconds. Every answer is `cache-control: no-store` and `x-robots-tag: noindex`. The echo names a fixed list of request headers and sends back a value only for `content-type`, `accept`, the demo's own fake token (`src/demo/fake.ts`) and `x-devknobs-now` when it is an ISO instant (the clock's "send to server" knob, which the time card asks about), and `content-length` as a plain number; any other value comes back as `sent`. The `html` answer has no `<head>`, so `server.ts` adds no early script to it.
 
 ### Deploy
 

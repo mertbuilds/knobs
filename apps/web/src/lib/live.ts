@@ -16,7 +16,8 @@ export function live<T>(read: () => T, watch: Watch): Live<T> {
   return {
     read: () => {
       const value = read();
-      const key = JSON.stringify(value);
+      // `undefined` has no JSON, so it gets a key of its own.
+      const key = JSON.stringify(value) ?? 'undefined';
       if (last?.key !== key) {
         last = { key, value };
       }
