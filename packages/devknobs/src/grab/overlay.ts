@@ -1,0 +1,951 @@
+import { getState, subscribe } from "../engine";
+import { isCustomColor } from "../engine/color";
+import { baseMatchMedia } from "../engine/matchmedia";
+import { middle } from "../ui/stylesformat";
+import { type BoxRing, RINGS, ringPaths, ringQuads } from "./boxmodel";
+import { sizeText } from "./boxtext";
+import { type CardFacts, type CardRow, cardRows } from "./card";
+import { type BoxRead, readBox, readFacts } from "./cardread";
+import { createCardView } from "./cardview";
+import { boxTint, GRAB_COLOR_NAMES, GRAB_COLORS, grabColor } from "./colors";
+import { DWELL } from "./dwell";
+import { createColorReader } from "./paint";
+import { createThemeReader, type GrabTone, invertTheme, type Theme } from "./theme";
+
+/** Over everything, the panel too. It never takes a pointer. */
+const Z_INDEX = 2147483647;
+
+/** Space between a box and its label or toast, in px. */
+const GAP = 6;
+
+/** Space the label keeps from the window's edge, in px. */
+const MARGIN = 8;
+
+/** The least a box's corners round, in px. */
+const MIN_RADIUS = 2;
+
+// adapted from react-grab (MIT, Copyright (c) 2025 Aiden Bai)
+/** How much of the way to its target the box goes in one frame at 60 a second. */
+export const LERP = 0.3;
+/** One frame at 60 a second, in ms. */
+const FRAME = 1000 / 60;
+/** Nearer its target than this, in px, the box is there. */
+const SNAP = 0.5;
+/** How long the box and the label take to fade, in ms. */
+const FADE = 125;
+/** How long the box waits on its element once nothing is under the pointer, in ms. */
+export const HIDE_WAIT = 100;
+/** How often the bounds are read again, to catch the page's layout moving, in ms. */
+const SYNC_EVERY = 100;
+/** How long the toast stays, and the box with it, in ms. */
+export const TOAST_TIME = 1500;
+/** How long the toast takes to come in, in ms. */
+const TOAST_FADE = 100;
+/** The most the label is wide, in px. Longer text is cut short. */
+const MAX_WIDTH = 280;
+/** How wide inspect's card is, whatever it says, so it keeps its shape from one element to the next. */
+const CARD_WIDTH = 264;
+/** The most the card is tall, in px. */
+const CARD_HEIGHT = 180;
+/** The most characters of an element's name on the card. A longer one is cut in its middle. */
+const NAME_MAX = 26;
+
+/** How solid two layers of one color are, the first over the second, each in percent. */
+function over(top: number, under: number): number {
+  return 100 - ((100 - top) * (100 - under)) / 100;
+}
+
+function colorRules(gamut: "srgb" | "p3"): string {
+  return GRAB_COLOR_NAMES.map(
+    (name) => `.layer[data-grab="${name}"] { --grab: ${GRAB_COLORS[name][gamut]}; }`,
+  ).join("\n");
+}
+
+/**
+ * One color for the boxes and the glow, wider where the screen shows P3: the
+ * one picked, one of the user's own too, or a blue, and a green where the page
+ * is blue. The label goes
+ * by the page: light on a dark one, dark on a light one.
+ */
+const CSS = `
+.layer {
+  all: initial;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  direction: ltr;
+  --grab: ${GRAB_COLORS.blue.srgb};
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+${colorRules("srgb")}
+@media (color-gamut: p3) {
+${colorRules("p3")}
+}
+.glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  box-shadow: inset 0 0 50px color-mix(in srgb, var(--grab) 15%, transparent);
+  transition: opacity ${FADE}ms ease-out, box-shadow ${FADE}ms ease-out;
+}
+.glow.on { opacity: 1; }
+.glide, .part {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.fills > .part, .lines > .part {
+  width: var(--unit);
+  height: var(--unit);
+  background-color: currentColor;
+}
+.box {
+  opacity: 0;
+  will-change: opacity;
+  --line: color-mix(in srgb, var(--grab) 50%, transparent);
+  --fill: color-mix(in srgb, var(--grab) 8%, transparent);
+  --edge: color-mix(in srgb, var(--grab) ${over(50, 8)}%, transparent);
+  transition: opacity ${FADE}ms ease-out;
+}
+.box.on { opacity: 1; }
+.box.copied {
+  --line: color-mix(in srgb, var(--grab) 60%, transparent);
+  --fill: color-mix(in srgb, var(--grab) 20%, transparent);
+  --edge: color-mix(in srgb, var(--grab) ${over(60, 20)}%, transparent);
+}
+.fills, .lines, .corners { transition: color ${FADE}ms ease-out; }
+.fills { color: var(--fill); }
+.lines { color: var(--edge); }
+.corners { color: var(--line); }
+.corner {
+  box-sizing: border-box;
+  width: var(--corner-width);
+  height: var(--corner-height);
+  border: 0 solid;
+  background-color: var(--fill);
+  transition: background-color ${FADE}ms ease-out;
+}
+.top > .corner { border-top-width: 1px; }
+.bottom > .corner { border-bottom-width: 1px; }
+.left > .corner { border-left-width: 1px; }
+.right > .corner { border-right-width: 1px; }
+.top.left > .corner { border-top-left-radius: var(--corner-radius); }
+.top.right > .corner { border-top-right-radius: var(--corner-radius); }
+.bottom.left > .corner { border-bottom-left-radius: var(--corner-radius); }
+.bottom.right > .corner { border-bottom-right-radius: var(--corner-radius); }
+.pick {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  will-change: transform;
+  border: 1px solid color-mix(in srgb, var(--grab) 30%, transparent);
+  border-radius: ${MIN_RADIUS}px;
+  background: color-mix(in srgb, var(--grab) 5%, transparent);
+  transition: border-color ${FADE}ms ease-out, background-color ${FADE}ms ease-out;
+}
+.tint {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity ${FADE}ms ease-out;
+}
+.tint.on { opacity: 1; }
+${RINGS.map((ring) => `.tint.${ring} { background: ${boxTint(ring)}; }`).join("\n")}
+.tip {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(${MAX_WIDTH}px, calc(100% - ${2 * MARGIN}px));
+  box-sizing: border-box;
+  padding: 6px 8px;
+  white-space: nowrap;
+  opacity: 0;
+  --bar: #161616;
+  --quiet: #a7a7a7;
+  color: #ffffff;
+  background: var(--bar);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 12%), 0 2px 8px rgb(0 0 0 / 24%);
+  transition: opacity ${FADE}ms ease-out;
+}
+.pill.on { opacity: 1; }
+.pill.toast.on { transition: opacity ${TOAST_FADE}ms ease-out; }
+.pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.check {
+  flex: none;
+  margin-right: -2px;
+  opacity: 0.85;
+}
+.check circle { fill: currentColor; }
+.check path {
+  fill: none;
+  stroke: var(--bar);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pill .tag { flex: none; color: #a7a7a7; }
+.pill[data-bar="light"] {
+  --bar: #ffffff;
+  --quiet: #737373;
+  color: #171717;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 10%), 0 2px 8px rgb(0 0 0 / 32%);
+}
+.pill[data-bar="light"] .tag { color: #737373; }
+/* Inspect's card: the label grown to a few rows, one width whatever it says. */
+.pill.card {
+  display: block;
+  width: ${CARD_WIDTH}px;
+  max-height: ${CARD_HEIGHT}px;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 8px;
+}
+.card .head { display: flex; align-items: center; gap: 6px; }
+.card .size, .card .val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.card .size { flex: none; margin-left: auto; color: var(--quiet); }
+.card .rows { display: grid; gap: 2px; margin-top: 6px; }
+.card .info { display: flex; align-items: center; gap: 12px; }
+.card .key { flex: none; font-size: 11px; color: var(--quiet); }
+.card .val { display: flex; align-items: center; gap: 5px; min-width: 0; margin-left: auto; }
+.card .quiet { color: var(--quiet); }
+.card .dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgb(128 128 128 / 45%);
+}
+.card .mark { flex: none; display: grid; overflow: visible; }
+.card .mark.fail { color: var(--quiet); }
+.layer [hidden] { display: none; }
+.layer[data-still] * { transition: none; }
+`;
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), Math.max(low, high));
+}
+
+// adapted from react-grab (MIT, Copyright (c) 2025 Aiden Bai)
+/**
+ * One frame of some numbers on their way to their targets, `elapsed` ms after
+ * the last. The same share of what is left goes each 60th of a second,
+ * whatever the frame rate. With reduced motion they are there at once.
+ */
+export function tweenStep(
+  from: readonly number[],
+  to: readonly number[],
+  elapsed: number,
+  reduce: boolean,
+): { values: number[]; done: boolean } {
+  const share = reduce ? 1 : 1 - (1 - LERP) ** (Math.max(elapsed, 1) / FRAME);
+  const values = to.map((end, index) => {
+    const start = from[index] ?? end;
+    return start + (end - start) * share;
+  });
+  const done = values.every((value, index) => Math.abs((to[index] ?? value) - value) < SNAP);
+  return done ? { values: [...to], done } : { values, done };
+}
+
+/**
+ * Where the label goes by a box: under it, over it where there is no room,
+ * kept in the window. Sideways it is centered on the pointer, as far as the
+ * pointer is over the box, or on the box when the keys moved it.
+ */
+export function labelPlace(
+  box: { top: number; bottom: number; left: number; right: number },
+  pill: { width: number; height: number },
+  view: { width: number; height: number },
+  pointerX: number | null,
+): { x: number; y: number } {
+  const anchor =
+    pointerX === null ? (box.left + box.right) / 2 : clamp(pointerX, box.left, box.right);
+  const x = clamp(anchor - pill.width / 2, MARGIN, view.width - pill.width - MARGIN);
+  let y = box.bottom + GAP;
+  if (y + pill.height > view.height - MARGIN) y = box.top - pill.height - GAP;
+  y = clamp(y, MARGIN, view.height - pill.height - MARGIN);
+  return { x, y };
+}
+
+/**
+ * Where inspect's card goes by a box: under it or over it as the label does,
+ * and sideways from the box's own left, kept in the window. It does not
+ * follow the pointer, so it stays put while the pointer moves over one element.
+ */
+export function cardPlace(
+  box: { top: number; bottom: number; left: number; right: number },
+  card: { width: number; height: number },
+  view: { width: number; height: number },
+): { x: number; y: number } {
+  const { y } = labelPlace(box, card, view, null);
+  return { x: clamp(box.left, MARGIN, view.width - card.width - MARGIN), y };
+}
+
+/** The first px length of a computed `border-radius`, or 0 where it has none. */
+export function parseRadius(value: string): number {
+  const match = /(\d*\.?\d+)px/.exec(value);
+  return match ? Number(match[1]) : 0;
+}
+
+/** The radius a box takes from its element: at most half its short side, at least the least. */
+export function boxRadius(radius: number, width: number, height: number): number {
+  return Math.max(MIN_RADIUS, Math.min(radius, Math.min(width, height) / 2));
+}
+
+/** The corners of the box that move. The top left one stays where the box is. */
+const CORNERS = ["top right", "bottom left", "bottom right"] as const;
+/** The lines along the sides of the box. */
+const LINES = ["top", "bottom", "left", "right"] as const;
+/** The fill of the box: between the corners from top to bottom, and at each side of that. */
+const FILLS = ["middle", "west", "east"] as const;
+
+/** A piece of the box that is moved, and stretched where it is not a corner. */
+export type Piece = (typeof CORNERS | typeof LINES | typeof FILLS)[number];
+
+/**
+ * What the box is drawn with: where it is, the px in a device pixel, the size
+ * of its corners, and each piece's transform.
+ */
+export interface BoxParts {
+  at: string;
+  unit: number;
+  corner: { width: number; height: number; radius: number };
+  pieces: Record<Piece, string>;
+}
+
+/** A length on whole device pixels, `ratio` of them to a px. */
+export function snap(value: number, ratio: number): number {
+  return Math.round(value * ratio) / ratio;
+}
+
+/** A shape with its sides on whole device pixels: x, y, width and height. */
+function onPixels(shape: readonly number[], ratio: number): [number, number, number, number] {
+  const [x = 0, y = 0, width = 0, height = 0] = shape;
+  const left = snap(x, ratio);
+  const top = snap(y, ratio);
+  return [left, top, snap(x + width, ratio) - left, snap(y + height, ratio) - top];
+}
+
+/**
+ * The box in pieces that only ever take a transform, so a glide is laid out
+ * and painted by nobody: a corner in each corner, a line along each side, and
+ * the fill between them in three. The corners keep their size and only move.
+ * The lines and the fills are one device pixel of one color, stretched by
+ * whole ones: the browser puts a box on device pixels before it scales it, so
+ * one px stretched leaves gaps where a px is not a whole number of them. No
+ * two pieces overlap, and every side is on a whole device pixel, so they meet
+ * with no seam. The radius is not the shape's own, which is on its way: each
+ * new one paints the corners again, so the box takes its element's at once.
+ */
+export function boxParts(shape: readonly number[], radius: number, ratio: number): BoxParts {
+  const [x, y, wide, tall] = onPixels(shape, ratio);
+  // A border is whole device pixels wide, and at least one.
+  const line = Math.max(1, Math.floor(ratio)) / ratio;
+  const width = Math.max(wide, 2 * line);
+  const height = Math.max(tall, 2 * line);
+  const round = Math.min(radius, width / 2, height / 2);
+  const reach = Math.max(Math.ceil(round * ratio - 1e-6) / ratio, line);
+  const cornerWidth = Math.min(reach, Math.floor((width / 2) * ratio + 1e-6) / ratio);
+  const cornerHeight = Math.min(reach, Math.floor((height / 2) * ratio + 1e-6) / ratio);
+  const right = width - cornerWidth;
+  const bottom = height - cornerHeight;
+  const acrossBy = width - 2 * cornerWidth;
+  const downBy = height - 2 * cornerHeight;
+  const sideBy = cornerWidth - line;
+  const whole = (length: number) => Math.round(length * ratio);
+  const part = (left: number, top: number, across: number, down: number) =>
+    `translate(${left}px, ${top}px) scale(${whole(across)}, ${whole(down)})`;
+  return {
+    at: `translate(${x}px, ${y}px)`,
+    unit: 1 / ratio,
+    corner: { width: cornerWidth, height: cornerHeight, radius: round },
+    pieces: {
+      "top right": `translate(${right}px, 0px)`,
+      "bottom left": `translate(0px, ${bottom}px)`,
+      "bottom right": `translate(${right}px, ${bottom}px)`,
+      top: part(cornerWidth, 0, acrossBy, line),
+      bottom: part(cornerWidth, height - line, acrossBy, line),
+      left: part(0, cornerHeight, line, downBy),
+      right: part(width - line, cornerHeight, line, downBy),
+      middle: part(cornerWidth, line, acrossBy, height - 2 * line),
+      west: part(line, cornerHeight, sideBy, downBy),
+      east: part(right, cornerHeight, sideBy, downBy),
+    },
+  };
+}
+
+export interface Overlay {
+  /**
+   * Box the current element, with its label, and every gathered one lighter.
+   * The box goes over to a new element on the frames after, and waits a
+   * moment on the last one when there is none.
+   */
+  draw(
+    current: Element | null,
+    label: { tag: string; name: string | null },
+    picked: Element[],
+  ): void;
+  /** Where the pointer is sideways, for the label. Null once the keys move the box. */
+  point(x: number | null): void;
+  /**
+   * Say something by an element for a moment, where its label was, after a
+   * check mark where it went well. The box stays on the element, fuller
+   * with the check, and goes with the toast.
+   */
+  toast(text: string, near: Element | null, check: boolean): void;
+  /** Fade out and go, once a toast is over where there is one. */
+  destroy(): void;
+}
+
+/** A layer that also draws the box of its element: its margin, border, padding and content. */
+export interface BoxOverlay extends Overlay {
+  /** Draw one area alone, or with null all four again. */
+  area(ring: BoxRing | null): void;
+}
+
+/** A box as the tween takes it: x, y, width, height and radius. */
+type Shape = [number, number, number, number, number];
+
+const SVG = "http://www.w3.org/2000/svg";
+
+/** A check mark in a disc the color of the text by it. */
+function checkIcon(): SVGSVGElement {
+  const icon = document.createElementNS(SVG, "svg");
+  icon.setAttribute("class", "check");
+  icon.setAttribute("width", "14");
+  icon.setAttribute("height", "14");
+  icon.setAttribute("viewBox", "0 0 14 14");
+  icon.setAttribute("aria-hidden", "true");
+  const disc = document.createElementNS(SVG, "circle");
+  disc.setAttribute("cx", "7");
+  disc.setAttribute("cy", "7");
+  disc.setAttribute("r", "6");
+  const mark = document.createElementNS(SVG, "path");
+  mark.setAttribute("d", "M4.4 7.2 6.2 9l3.4-3.8");
+  icon.append(disc, mark);
+  return icon;
+}
+
+const written = new WeakMap<HTMLElement, Map<string, string>>();
+
+/** Set a style only where it changed, so a frame that moves nothing costs nothing. */
+function write(node: HTMLElement, name: string, value: string): void {
+  let styles = written.get(node);
+  if (!styles) {
+    styles = new Map();
+    written.set(node, styles);
+  }
+  if (styles.get(name) === value) return;
+  styles.set(name, value);
+  node.style.setProperty(name, value);
+}
+
+/** Put a gathered box on its element. One that only moved takes a transform and no more. */
+function place(node: HTMLElement, shape: readonly number[], ratio: number): void {
+  const [x, y, width, height] = onPixels(shape, ratio);
+  write(node, "transform", `translate(${x}px, ${y}px)`);
+  write(node, "width", `${width}px`);
+  write(node, "height", `${height}px`);
+  write(node, "border-radius", `${shape[4] ?? 0}px`);
+}
+
+/**
+ * The layer grab draws on, in a shadow root of its own on this document. A
+ * `quiet` one has no glow around the window, for a box that stays with no mode on.
+ * With `model`, as inspect asks, it tints the four areas of its element's box,
+ * the element under the pointer or else the first gathered one, and the label
+ * of the element under the pointer grows to a card. An element in one piece
+ * that no transform turns is tinted from its bounding box, and so is an inline
+ * one in several pieces. One a transform turns or scales is tinted by its own
+ * corners where the browser has `getBoxQuads`, and from its bounding box
+ * where it has not, which is then only near.
+ */
+export function createOverlay(quiet = false, model = false): BoxOverlay {
+  const host = document.createElement("div");
+  host.setAttribute("data-devknobs", "grab");
+  host.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z_INDEX}`;
+  const root = host.attachShadow({ mode: "open" });
+  const style = document.createElement("style");
+  style.textContent = CSS;
+  const layer = document.createElement("div");
+  layer.className = "layer";
+  const glow = document.createElement("div");
+  glow.className = "glow";
+  const glide = document.createElement("div");
+  glide.className = "glide";
+  const box = document.createElement("div");
+  box.className = "box";
+  glide.append(box);
+  /**
+   * The pieces, each kind in a group that gives it its color. A piece is
+   * written on every frame of a glide, so it has no color and no transition
+   * of its own to work out again. A corner's are on a node inside it.
+   */
+  const pieces: { piece: Piece; node: HTMLElement }[] = [];
+  function group(name: string, names: readonly (Piece | "top left")[]): void {
+    const parent = document.createElement("div");
+    parent.className = name;
+    for (const piece of names) {
+      const node = document.createElement("div");
+      node.className = `part ${piece}`;
+      if (name === "corners") {
+        const corner = document.createElement("div");
+        corner.className = "corner";
+        node.append(corner);
+      }
+      parent.append(node);
+      if (piece !== "top left") pieces.push({ piece, node });
+    }
+    box.append(parent);
+  }
+  group("fills", FILLS);
+  group("lines", LINES);
+  group("corners", ["top left", ...CORNERS]);
+  /** The label is moved by a node around it, which has no style to work out again as it moves. */
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  const label = document.createElement("div");
+  label.className = "pill";
+  tip.append(label);
+  const check = checkIcon();
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  const name = document.createElement("span");
+  /** The card is the label's, with the mode on. The box that stays has none. */
+  const card = model && !quiet ? createCardView() : null;
+  if (card) {
+    const head = document.createElement("div");
+    head.className = "head";
+    head.append(check, tag, name, card.size);
+    label.classList.add("card");
+    label.append(head, card.rows);
+  } else label.append(check, tag, name);
+  const picks: HTMLElement[] = [];
+  /** The areas of the box, under the box's own line. */
+  const tints = (model ? RINGS : []).map((ring) => {
+    const node = document.createElement("div");
+    node.className = `tint ${ring}`;
+    layer.append(node);
+    return { ring, node };
+  });
+  layer.append(glow, glide, tip);
+  root.append(style, layer);
+  (document.body ?? document.documentElement).append(host);
+
+  /** The real setting, under the motion knob: the layer is devknobs' own. */
+  const reduce = baseMatchMedia("(prefers-reduced-motion: reduce)");
+  /** Kept from the last change, as a frame asks twice. */
+  let reduced = reduce.matches;
+  const radii = new WeakMap<Element, number>();
+  const read = createThemeReader();
+  /** The label's size for each text it had, so one seen before is not laid out to be read again. */
+  const sizes = new Map<string, { width: number; height: number }>();
+  /** The color picked in the panel, and the tone the page asks for where it is `auto`. */
+  let color = getState().grabColor;
+  let tone: GrabTone = "blue";
+  /** The theme the label takes, once the page was read. */
+  let bar: Theme | null = null;
+  /** The element the box is on, or on its way to. */
+  let element: Element | null = null;
+  /** The element the target was last read from. */
+  let measured: Element | null = null;
+  let picked: Element[] = [];
+  /** Where each gathered element was last read, or null for one that is gone. */
+  let shapes: (Shape | null)[] = [];
+  let at: readonly number[] | null = null;
+  let target: Shape | null = null;
+  let labelAt: readonly number[] | null = null;
+  let shown = false;
+  /** The bounds are to be read again on the next frame. */
+  let stale = false;
+  let pointerX: number | null = null;
+  let text: { tag: string; name: string | null } = { tag: "", name: null };
+  /** The label starts with the check mark. */
+  let checked = false;
+  /** The text the label's size was read for. */
+  let sized: string | null = null;
+  let size = { width: 0, height: 0 };
+  /** The computed style of each element looked at, read once and live from then on. */
+  const styles = new WeakMap<Element, CSSStyleDeclaration>();
+  const colorOf = createColorReader();
+  /** The box that is tinted, and where its element was last read, for one that is not glided to. */
+  let rings: BoxRead | null = null;
+  let ringsAt: Shape | null = null;
+  /** The one area drawn, or null for all four. */
+  let only: BoxRing | null = null;
+  /** What was read for the card, and of which element. */
+  let facts: { of: Element; read: Omit<CardFacts, "margin" | "padding"> } | null = null;
+  let factsTimer = 0;
+  let rows: CardRow[] = [];
+  let toasting = false;
+  let closing = false;
+  let removed = false;
+  let frame = 0;
+  let last = 0;
+  let hideTimer = 0;
+  let toastTimer = 0;
+  let fadeTimer = 0;
+
+  function fade(): number {
+    return reduced ? 0 : FADE;
+  }
+
+  function still(): void {
+    reduced = reduce.matches;
+    layer.toggleAttribute("data-still", reduced);
+  }
+
+  function paint(): void {
+    const name = grabColor(color, tone);
+    if (layer.dataset.grab !== name) {
+      layer.dataset.grab = name;
+      // One of grab's own has a rule. One of the user's goes on the layer itself.
+      if (isCustomColor(name)) layer.style.setProperty("--grab", name);
+      else layer.style.removeProperty("--grab");
+    }
+    if (bar && label.dataset.bar !== bar) label.dataset.bar = bar;
+  }
+
+  function schedule(): void {
+    if (!frame && !removed) frame = window.requestAnimationFrame(draw);
+  }
+
+  function sync(): void {
+    if (!element && picked.length === 0) return;
+    stale = true;
+    schedule();
+  }
+
+  function radiusOf(of: Element): number {
+    let radius = radii.get(of);
+    if (radius === undefined) {
+      radius = parseRadius(getComputedStyle(of).borderRadius);
+      radii.set(of, radius);
+    }
+    return radius;
+  }
+
+  function shapeOf(of: Element): Shape {
+    const rect = of.getBoundingClientRect();
+    const radius = boxRadius(radiusOf(of), rect.width, rect.height);
+    return [rect.left, rect.top, rect.width, rect.height, radius];
+  }
+
+  function drawPicks(ratio: number): void {
+    while (picks.length < shapes.length) {
+      const node = document.createElement("div");
+      node.className = "pick";
+      layer.insertBefore(node, glide);
+      picks.push(node);
+    }
+    picks.forEach((node, index) => {
+      const shape = shapes[index] ?? null;
+      if (node.hidden !== (shape === null)) node.hidden = shape === null;
+      if (shape) place(node, shape, ratio);
+    });
+  }
+
+  function drawBox(parts: BoxParts): void {
+    write(glide, "transform", parts.at);
+    write(box, "--unit", `${parts.unit}px`);
+    write(box, "--corner-width", `${parts.corner.width}px`);
+    write(box, "--corner-height", `${parts.corner.height}px`);
+    write(box, "--corner-radius", `${parts.corner.radius}px`);
+    for (const { piece, node } of pieces) write(node, "transform", parts.pieces[piece]);
+  }
+
+  function styleOf(of: Element): CSSStyleDeclaration {
+    let style = styles.get(of);
+    if (!style) {
+      style = getComputedStyle(of);
+      styles.set(of, style);
+    }
+    return style;
+  }
+
+  /** Read the box to tint, and with it what the card says of the spacing. */
+  function measureBox(): void {
+    const first = element ? -1 : picked.findIndex((pick) => pick.isConnected);
+    const subject = element ?? picked[first] ?? null;
+    rings = subject ? readBox(subject, styleOf(subject)) : null;
+    ringsAt = shapes[first] ?? null;
+    // Until the new element was rested on, the card keeps the rows it has.
+    if (!card || !element || facts?.of !== element) return;
+    rows = rings
+      ? cardRows({ ...facts.read, margin: rings.model.margin, padding: rings.model.padding })
+      : [];
+  }
+
+  /** The pointer rested on an element: read what its card says, and draw it on the next frame. */
+  function readCard(of: Element): void {
+    if (removed || of !== element || !of.isConnected) return;
+    facts = { of, read: readFacts(of, styleOf(of), colorOf) };
+    stale = true;
+    schedule();
+  }
+
+  /** Write each area's shape, from a box on its way or the one last read. */
+  function drawTints(glide: readonly number[] | null): void {
+    const [x, y, width, height] = glide ?? ringsAt ?? [];
+    const on = rings !== null && x !== undefined && y !== undefined;
+    if (rings && on) {
+      const paths = ringPaths(
+        rings.quads ?? ringQuads({ x, y, width: width ?? 0, height: height ?? 0 }, rings.model),
+      );
+      for (const { ring, node } of tints) write(node, "clip-path", paths[ring]);
+    }
+    for (const { ring, node } of tints) {
+      node.classList.toggle("on", on && (only === null || only === ring));
+    }
+  }
+
+  /**
+   * Read the bounds, and write nothing: the frame writes after all of its
+   * reads. A new element is glided to, and one that moved takes the box and
+   * the label with it.
+   */
+  function measure(): void {
+    if (element && !element.isConnected) element = null;
+    shapes = picked.map((pick) => (pick.isConnected ? shapeOf(pick) : null));
+    if (model) measureBox();
+    if (element || toasting) {
+      const { theme, grab } = read(element);
+      bar = invertTheme(theme);
+      tone = grab;
+    }
+    if (!element) {
+      measured = null;
+      target = null;
+      return;
+    }
+    const next = shapeOf(element);
+    if (!shown || !at || !target) {
+      at = next;
+      labelAt = null;
+    } else if (measured === element) {
+      const from = target;
+      at = at.map((value, index) => value + (next[index] ?? 0) - (from[index] ?? 0));
+      if (labelAt) {
+        labelAt = [(labelAt[0] ?? 0) + next[0] - from[0], (labelAt[1] ?? 0) + next[1] - from[1]];
+      }
+    }
+    target = next;
+    measured = element;
+  }
+
+  function writeLabel(): void {
+    const said = card && target ? sizeText(target[2], target[3]) : "";
+    const told = card ? `\n${said}\n${JSON.stringify(rows)}` : "";
+    const key = `${checked}\n${text.tag}\n${text.name ?? ""}${told}`;
+    if (key === sized) return;
+    check.toggleAttribute("hidden", !checked);
+    tag.textContent = text.tag;
+    tag.hidden = !text.tag;
+    name.textContent = card ? middle(text.name ?? "", NAME_MAX) : (text.name ?? "");
+    name.hidden = !text.name;
+    // The card is one width, so it is as tall as the rows that show, whatever they say.
+    const shape = card ? `card\n${card.write(said, rows)}` : key;
+    let known = sizes.get(shape);
+    if (!known) {
+      known = { width: label.offsetWidth, height: label.offsetHeight };
+      sizes.set(shape, known);
+    }
+    size = known;
+    sized = key;
+  }
+
+  /** The label can be no wider than the window lets it, so its sizes are read again. */
+  function resize(): void {
+    sizes.clear();
+    sync();
+  }
+
+  function draw(now: number): void {
+    frame = 0;
+    if (removed) return;
+    // The reads come first and the writes after, so the page is laid out once at most.
+    const fresh = stale;
+    if (stale) {
+      stale = false;
+      measure();
+    }
+    const view = {
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    };
+    const ratio = window.devicePixelRatio || 1;
+    shown = at !== null && target !== null;
+    if (shown || toasting) writeLabel();
+    if (fresh) {
+      paint();
+      drawPicks(ratio);
+    }
+    box.classList.toggle("on", shown);
+    label.classList.toggle("toast", toasting);
+    label.classList.toggle("on", shown || toasting);
+    if (!at || !target) {
+      last = 0;
+      labelAt = null;
+      if (model) drawTints(null);
+      if (!toasting) return;
+      const x = Math.round((view.width - size.width) / 2);
+      write(tip, "transform", `translate(${x}px, ${MARGIN * 2}px)`);
+      return;
+    }
+    const elapsed = last ? now - last : FRAME;
+    const step = tweenStep(at, target, elapsed, reduced);
+    at = step.values;
+    drawBox(boxParts(at, target[4], ratio));
+    if (model) drawTints(at);
+    const edges = {
+      top: target[1],
+      bottom: target[1] + target[3],
+      left: target[0],
+      right: target[0] + target[2],
+    };
+    const spot = card ? cardPlace(edges, size, view) : labelPlace(edges, size, view, pointerX);
+    const goal = [Math.round(spot.x), Math.round(spot.y)];
+    const move = tweenStep(labelAt ?? goal, goal, elapsed, reduced);
+    labelAt = move.values;
+    const [x = 0, y = 0] = labelAt;
+    write(tip, "transform", `translate(${snap(x, ratio)}px, ${snap(y, ratio)}px)`);
+    const done = step.done && move.done;
+    last = done ? 0 : now;
+    if (!done) schedule();
+  }
+
+  /** Take the box and the label out of sight. The layer stays for the next element. */
+  function hide(): void {
+    hideTimer = 0;
+    element = null;
+    // The next card starts from its first line, with nothing of this element on it.
+    clearTimeout(factsTimer);
+    facts = null;
+    rows = [];
+    box.classList.remove("on");
+    label.classList.remove("on");
+    stale = true;
+    schedule();
+  }
+
+  function remove(): void {
+    if (removed) return;
+    removed = true;
+    clearTimeout(hideTimer);
+    clearTimeout(toastTimer);
+    clearTimeout(fadeTimer);
+    clearTimeout(factsTimer);
+    clearInterval(ticker);
+    if (frame) window.cancelAnimationFrame(frame);
+    window.removeEventListener("scroll", sync, true);
+    window.removeEventListener("resize", resize);
+    reduce.removeEventListener("change", still);
+    stopColor();
+    host.remove();
+  }
+
+  still();
+  paint();
+  const stopColor = subscribe((state) => {
+    color = state.grabColor;
+    paint();
+  });
+  reduce.addEventListener("change", still);
+  window.addEventListener("scroll", sync, { capture: true, passive: true });
+  window.addEventListener("resize", resize);
+  const ticker = window.setInterval(sync, SYNC_EVERY);
+  // The styles are worked out once with the glow off, so that it fades in.
+  void getComputedStyle(glow).opacity;
+  if (!quiet) glow.classList.add("on");
+
+  return {
+    draw(current, next, gathered) {
+      if (closing) return;
+      picked = gathered;
+      if (current) {
+        clearTimeout(hideTimer);
+        hideTimer = 0;
+        if (card && current !== element) {
+          // The first line is said at once, and the rest once the pointer has rested there.
+          clearTimeout(factsTimer);
+          factsTimer = window.setTimeout(() => readCard(current), DWELL);
+        }
+        element = current;
+        text = next;
+        checked = false;
+      } else if (element && !hideTimer) {
+        hideTimer = window.setTimeout(hide, HIDE_WAIT);
+      }
+      stale = true;
+      schedule();
+    },
+    point(x) {
+      if (closing || x === pointerX) return;
+      pointerX = x;
+      if (element) schedule();
+    },
+    toast(message, near, mark) {
+      if (removed) return;
+      clearTimeout(hideTimer);
+      clearTimeout(toastTimer);
+      clearTimeout(fadeTimer);
+      hideTimer = 0;
+      toasting = true;
+      box.classList.toggle("copied", mark);
+      element = near?.isConnected ? near : null;
+      text = { tag: "", name: message };
+      checked = mark;
+      stale = true;
+      schedule();
+      toastTimer = window.setTimeout(() => {
+        toasting = false;
+        hide();
+        // On the way out the box fades as it is, and goes with the layer.
+        if (!closing) box.classList.remove("copied");
+        if (closing) fadeTimer = window.setTimeout(remove, fade());
+      }, TOAST_TIME);
+    },
+    area(ring) {
+      if (closing || ring === only) return;
+      only = ring;
+      schedule();
+    },
+    destroy() {
+      if (closing) return;
+      closing = true;
+      clearTimeout(hideTimer);
+      glow.classList.remove("on");
+      picked = [];
+      shapes = [];
+      drawPicks(1);
+      if (toasting) return;
+      hide();
+      fadeTimer = window.setTimeout(remove, fade());
+    },
+  };
+}

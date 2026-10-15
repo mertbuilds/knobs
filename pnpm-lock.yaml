@@ -109,8 +109,8 @@ importers:
         specifier: ^6.1.1
         version: 6.1.1(babel-plugin-react-compiler@1.0.0)(oxc-transform-react@0.148.0)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       devknobs:
-        specifier: 0.2.0
-        version: 0.2.0(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/devknobs
       oxc-transform-react:
         specifier: ^0.148.0
         version: 0.148.0
@@ -125,6 +125,24 @@ importers:
         version: 4.128.0
 
   packages/config: {}
+
+  packages/devknobs:
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.3.1
+        version: 1.4.3
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.18
+      bippy:
+        specifier: ^0.7.3
+        version: 0.7.3(@types/react@19.2.18)(react@19.2.8)
+      react:
+        specifier: ^19.2.4
+        version: 19.2.8
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
   packages/env:
     dependencies:
@@ -2349,6 +2367,9 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/bun@1.4.3':
+    resolution: {integrity: sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw==}
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -2377,6 +2398,11 @@ packages:
     resolution: {integrity: sha512-fMPwH9v7r/pp43yUd2/Mbiex5KouJwwR3dzHkhLREUC6764VyDsqxhAxv6OFEYR1RhjOyD1naqba8ECDBe7ZQg==}
     peerDependencies:
       '@types/react': ^19.2.0
+
+  '@types/react-reconciler@0.33.1':
+    resolution: {integrity: sha512-0kF59ji2mKuHUd5wytHSpmORybMYVerJvq0K10pz9ZFoOlJ3e+w1LBjLshWpCrokeyQOioRodNbO4PH4ddvRfg==}
+    peerDependencies:
+      '@types/react': '*'
 
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
@@ -2709,6 +2735,11 @@ packages:
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
 
+  bippy@0.7.3:
+    resolution: {integrity: sha512-C3yYBkcthd9kMXJwwwR69+ICGruw+R/Mcoq1LqsoscEoPe1OshyhYjMtYmtpoDSiJX40a867qhG4TT7g4mMIdQ==}
+    peerDependencies:
+      react: '>=16.0.0'
+
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
@@ -2720,6 +2751,9 @@ packages:
     resolution: {integrity: sha512-V2NpofLblG64mfOtSgDhOJESZEGogzDMBv/q+W6oc4LXWP/q75eOXoOaaOu1EOadB9U4Bwx/e0yzbvwKH8zalA==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
+
+  bun-types@1.4.3:
+    resolution: {integrity: sha512-tinRJNGOmUN+tEAsn2y2e942n9JHRHR42iUYzDH75NmhJqVBokGSQkkfSFdNWwsANIdrK6ACH9t01M452YyTwg==}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -2863,14 +2897,6 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
-
-  devknobs@0.2.0:
-    resolution: {integrity: sha512-vFsvuROmXKDQq+7tZ08TZ0jUy4uqq9enupRI/RDI5A1NR4PSHXi4NcTLcQQ1S8a4W4QL/Z3dTzjqKKA2t5pYsg==}
-    peerDependencies:
-      react: '>=18'
-    peerDependenciesMeta:
-      react:
-        optional: true
 
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
@@ -4064,6 +4090,11 @@ packages:
   type-fest@5.9.0:
     resolution: {integrity: sha512-yANm3Jr3GiJ1qgJlxGAVxTOIcEOk1rhQHamlXtnrCK7EHP4HeM9OGxtMg/W7HFdrVzw/ZWJKGVIJusVH85sLtw==}
     engines: {node: '>=20'}
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
 
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
@@ -6189,6 +6220,10 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.8
 
+  '@types/bun@1.4.3':
+    dependencies:
+      bun-types: 1.4.3
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -6213,6 +6248,10 @@ snapshots:
       undici-types: 8.3.0
 
   '@types/react-dom@19.2.5(@types/react@19.2.18)':
+    dependencies:
+      '@types/react': 19.2.18
+
+  '@types/react-reconciler@0.33.1(@types/react@19.2.18)':
     dependencies:
       '@types/react': 19.2.18
 
@@ -6524,6 +6563,13 @@ snapshots:
       require-from-string: 2.0.2
     optional: true
 
+  bippy@0.7.3(@types/react@19.2.18)(react@19.2.8):
+    dependencies:
+      '@types/react-reconciler': 0.33.1(@types/react@19.2.18)
+      react: 19.2.8
+    transitivePeerDependencies:
+      - '@types/react'
+
   blake3-wasm@2.1.5: {}
 
   brace-expansion@5.0.9:
@@ -6537,6 +6583,11 @@ snapshots:
       electron-to-chromium: 1.5.418
       node-releases: 2.0.54
       update-browserslist-db: 1.3.2(browserslist@4.28.8)
+
+  bun-types@1.4.3:
+    dependencies:
+      '@types/node': 24.13.3
+      undici-types: 8.3.0
 
   bundle-name@4.1.0:
     dependencies:
@@ -6663,10 +6714,6 @@ snapshots:
   dequal@2.0.3: {}
 
   detect-libc@2.1.2: {}
-
-  devknobs@0.2.0(react@19.2.8):
-    optionalDependencies:
-      react: 19.2.8
 
   diff@8.0.4: {}
 
@@ -7900,6 +7947,8 @@ snapshots:
     dependencies:
       tagged-tag: 1.0.0
     optional: true
+
+  typescript@5.9.3: {}
 
   typescript@7.0.2:
     optionalDependencies:

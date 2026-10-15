@@ -89,7 +89,8 @@ const PANEL = '[data-devknobs="panel"]';
 
 const DUO_CREDIT = 'https://github.com/jadon7/iphone-duo';
 
-const NOTICES = 'https://github.com/mertbuilds/devknobs/blob/main/THIRD_PARTY_NOTICES.md';
+const NOTICES =
+  'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
 const styles = create({
   // The feature grid's own gap, so the line below it reads as a new block.
@@ -664,7 +665,7 @@ function Landing() {
         <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
         <Hints />
         <a
-          href="https://github.com/mertbuilds/devknobs#knobs"
+          href="https://github.com/mertbuilds/knobs/tree/main/packages/devknobs#knobs"
           {...props(styles.link, styles.self, styles.withIcon)}
         >
           {m.features_readme()}
@@ -729,7 +730,7 @@ function Landing() {
       </section>
 
       <footer {...props(styles.footer)}>
-        <a href="https://github.com/mertbuilds/devknobs" {...props(styles.link, styles.withIcon)}>
+        <a href="https://github.com/mertbuilds/knobs" {...props(styles.link, styles.withIcon)}>
           <GitHubMark />
           {m.link_github()}
         </a>

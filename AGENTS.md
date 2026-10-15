@@ -1,8 +1,8 @@
 # knobs
 
-The marketing site for the `devknobs` npm package. <https://knobs.dev>
+The `devknobs` npm package and its site, <https://knobs.dev>, in one pnpm + turbo monorepo.
 
-A copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) stripped to the
+The site is a copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) stripped to the
 layers a landing page needs: no database, no auth, no billing, and only a stateless demo api. Keep it that way:
 nothing gets added until the site needs it.
 
@@ -15,6 +15,8 @@ apps/
           Two server routes: `/api/op/$`, the OpenPanel analytics proxy, and
           `/api/demo/$`, what the demo request buttons ask for.
 packages/
+  devknobs/ The `devknobs` npm package: the panel itself. Vanilla TS, zero runtime
+          dependencies, built and tested with bun. Its own README and CHANGELOG.
   ui/     StyleX tokens + Base UI wrappers + Storybook. The devknobs panel's tokens.
   env/    Zod-validated client env schema. All env access goes through here.
   config/ Shared tsconfig base.
@@ -28,8 +30,8 @@ packages/
 | `pnpm lint`         | oxlint, type-aware + TS compiler errors (tsgolint)                 |
 | `pnpm format`       | oxfmt (write mode); `pnpm format:check` in CI                      |
 | `pnpm typecheck`    | `tsc --noEmit` per package via turbo                               |
-| `pnpm test`         | Storybook story tests in Chromium via turbo                        |
-| `pnpm build`        | turbo build                                                        |
+| `pnpm test`         | Story tests (Chromium) + devknobs' `bun test`, via turbo           |
+| `pnpm build`        | turbo build (devknobs first, then the site)                        |
 | `pnpm bad-day`      | Nuke node_modules + all caches, reinstall (`DRY_RUN=1` to preview) |
 | `pnpm skills:check` | Verify installed agent skills match dep majors                     |
 
@@ -51,7 +53,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 - Components come from the [shadcn-cssinjs](https://www.shadcn-cssinjs.com) registry (StyleX on Base UI, copy-paste-own) into `src/ui/`, then adapted to this repo. The shadcn CLI currently fails on this registry's cross-registry deps; fetch item JSON from `https://www.shadcn-cssinjs.com/r/<name>.json` and write the files (see the `shadcn-cssinjs` skill for the exact adaptation checklist: relative imports, named stylex imports, `| undefined` on optional props for exactOptionalPropertyTypes).
 - Two token layers, both ours: `src/lib/tokens.stylex.ts` (component tokens: shadcn CSS variables from `src/theme.css`, dark via `prefers-color-scheme`) and `src/tokens.stylex.ts` (app-level: `colors`, `shadow`, `radius`, `spacing`, `font`, raw `palette`). Components use the lib tokens; app layout uses the app tokens. Never raw color values.
-- The site wears the devknobs panel's tokens, so page and panel look like one thing. Source of truth: the panel's stylesheet (`src/ui/styles.ts` in mertbuilds/devknobs). Its warm neutrals (ground, ink, hairline, card, track, raised, faint as `muted`, a step darker in light for 4.5:1 on a card) follow the visitor's scheme as the panel does; grab's blue is `colors.accent`. Radii are the panel's concentric scale: 13 panel, 8 rows and fields, 4 controls, 6 grab's label bar. Font is the panel's system stack (`font.family`), with `font.mono` for code and readouts; the site ships no font files of its own. The one font file the page loads is the demo's one-glyph `knobs specimen` font (`/api/demo/asset.woff2`, from `src/app.css`), for the inspect specimen only. Components inherit the font from the app body; they set none themselves.
+- The site wears the devknobs panel's tokens, so page and panel look like one thing. Source of truth: the panel's stylesheet (`packages/devknobs/src/ui/styles.ts`). Its warm neutrals (ground, ink, hairline, card, track, raised, faint as `muted`, a step darker in light for 4.5:1 on a card) follow the visitor's scheme as the panel does; grab's blue is `colors.accent`. Radii are the panel's concentric scale: 13 panel, 8 rows and fields, 4 controls, 6 grab's label bar. Font is the panel's system stack (`font.family`), with `font.mono` for code and readouts; the site ships no font files of its own. The one font file the page loads is the demo's one-glyph `knobs specimen` font (`/api/demo/asset.woff2`, from `src/app.css`), for the inspect specimen only. Components inherit the font from the app body; they set none themselves.
 - Icons: `lucide-react` (named `*Icon` imports, so it tree-shakes) at 16px, stroke 1.5, `currentColor`, `aria-hidden`, 8px from their label, only where they help scanning (group titles, buttons, outbound links). Brand marks (GitHub, npm) are inline Simple Icons paths (CC0) in `apps/web/src/lib/brand-marks.tsx`, not a package.
 - Logo: the master is `apps/web/src/assets/logo.svg` (200 viewBox; its colors are its own, the same on both grounds). `public/favicon.svg` is a copy of it and `KnobsMark` in `brand-marks.tsx` is the same drawing inline, 20px beside the hero's wordmark; change all three together. The PNGs in `apps/web/public` come from the master through headless Chrome, then `sips` (Chrome will not open a window as small as an icon): `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars --default-background-color=00000000 --window-size=512,512 --screenshot=logo-512.png file://$PWD/apps/web/src/assets/logo.svg`, then `sips -z 32 32 logo-512.png --out apps/web/public/favicon-32.png` (and `-z 16 16` for `favicon-16.png`). `apple-touch-icon.png` is the same at `--window-size=720,720` from a copy with the panel's corners square (`sed 's/ rx="44"//'`), then `sips -z 180 180`: iOS rounds the corners itself. The logo study and the other candidates are in the owner's wiki, not in this repo.
 - Current set: Button, Input, Field (label/error composition), Dialog, Select, Table, Label, Separator, Skeleton, Toaster (sonner, next-themes dropped). Grow on demand from the registry.
@@ -66,13 +68,12 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - StyleX in routes: import `../app.css` (build injection target); there is no importable `virtual:stylex.css` module; in dev the plugin middleware serves the CSS itself.
 - No tests live here: `packages/ui` stories cover the components, the routes are one landing page, and the two server routes hold no state. Add a vitest project back if that changes.
 
-### Local devknobs in dev
+### devknobs in dev
 
-- The dev server runs devknobs from a local checkout, so the site is its test bed: `vite.config.ts` aliases `devknobs` to that checkout's `src/index.ts` (only under `vite dev`), and edits there reload the page. `node_modules` is never touched, so `pnpm install` cannot undo it.
-- The checkout is `DEVKNOBS_PATH` (shell env; absolute, or relative to the repo root), else `../devknobs` beside the repo, which also fits the `knobs.dev.<branch>` worktrees. To test a devknobs worktree: `DEVKNOBS_PATH=../devknobs.<branch> pnpm dev`.
-- Dev start prints which one is in use: `devknobs: local <path>`, or `devknobs: npm <version>` when no checkout is there.
-- Types, `vite build`, CI and prod use the pinned npm `devknobs` only. Device images come from the checkout's `assets/bezels` (a dev middleware maps the source's `src/engine/bezels/` URLs there).
-- The early script (`devknobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, in place of the `script[data-devknobs-early]` slot `__root.tsx` renders, so each head script hydrates onto its own). The slot needs both `dangerouslySetInnerHTML={{ __html: '' }}` and `suppressHydrationWarning`: without the first, React finds the server's script text in an element it expects empty, fails hydration and renders the whole document again on the client; the second silences the dev warning that the text differs. Builds inline the npm package's `dist/early.global.js`; under `vite dev` the plugin bundles the checkout's `src/early.ts` instead and rebuilds it when its sources change.
+- `apps/web` depends on `devknobs` as `workspace:*`. The dev server runs it from source, so the site is its test bed: `vite.config.ts` aliases `devknobs` to `packages/devknobs/src/index.ts` (only under `vite dev`), and edits there reload the page with no build.
+- Types, `vite build`, CI and prod use the package's `dist`, which turbo builds first (`^build`). A fresh clone needs `pnpm --filter devknobs build` (or `pnpm build`) once before `tsc` or a lone `pnpm --filter @knobs/web build` sees its types and files.
+- Device images come from `packages/devknobs/assets/bezels` (a dev middleware maps the source's `src/engine/bezels/` URLs there).
+- The early script (`devknobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, in place of the `script[data-devknobs-early]` slot `__root.tsx` renders, so each head script hydrates onto its own). The slot needs both `dangerouslySetInnerHTML={{ __html: '' }}` and `suppressHydrationWarning`: without the first, React finds the server's script text in an element it expects empty, fails hydration and renders the whole document again on the client; the second silences the dev warning that the text differs. Builds inline the package's `dist/early.global.js`; under `vite dev` the plugin bundles its `src/early.ts` instead and rebuilds it when its sources change.
 
 ### Tuning the fold (dev)
 
@@ -93,7 +94,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 ### The stage
 
 - `src/demo/stage.tsx` is the "See it react" section of the landing page: one card per knob row and per view of the panel, in a two column grid (`Cards` and `Card` in `src/lib/card.tsx`, which the feature cards lower on the page use too). A card never sets a knob. It shows what the page reads (`matchMedia`, `Intl`, `Date`, `navigator`, the viewport, storage), so a knob moved in the real panel shows there. The only buttons are for what a page has to start itself: a request, a write to storage, a dialog or popover, a question to geolocation, a box pushed past the edge for the overflow knob.
-- The cards import nothing from devknobs, so the pinned npm package and a local checkout draw the same stage. A new knob in devknobs' catalog (`src/ui/catalog.ts` there) gets a card or a row here.
+- The cards import nothing from devknobs, so devknobs' source and its built package draw the same stage. A new knob in devknobs' catalog (`packages/devknobs/src/ui/catalog.ts`) gets a card or a row here.
 - Readouts go through `src/lib/live.ts`: `live(read, watch)` with `useLive` (a `useSyncExternalStore` whose server value is null, so the server and the first client render draw the same empty rows), and `held` for answers that come later. They listen where the browser has an event (media query `change`, `online`, `languagechange`, `resize`, a `ResizeObserver` for text size and safe areas) and look again on a timer only where it has none: the clock, the user agent, and storage while its card is in view.
 - Every font size on the page is in rem, so the text size knob moves it. Spacing and radii stay in px.
 - The motion card holds the stage's one animation, which starts when its card scrolls into view.
@@ -105,12 +106,21 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### Deploy
 
-- `pnpm --filter @knobs/web deploy` = `pnpm build`, then `wrangler deploy`. The Cloudflare vite plugin writes the deploy-time config to `dist/server/wrangler.json` and points `.wrangler/deploy/config.json` at it, so wrangler ships the built config rather than `wrangler.jsonc` itself. Push to main does the same from CI (`deploy.yml`); the command is for a one-off.
+- `pnpm --filter @knobs/web deploy` = `pnpm build`, which needs devknobs' `dist` (`pnpm --filter devknobs build` first), then `wrangler deploy`. The Cloudflare vite plugin writes the deploy-time config to `dist/server/wrangler.json` and points `.wrangler/deploy/config.json` at it, so wrangler ships the built config rather than `wrangler.jsonc` itself. Push to main does the same from CI (`deploy.yml`); the command is for a one-off.
 - `wrangler.jsonc` carries `account_id` and two custom domains: `knobs.dev` (canonical) and `www.knobs.dev`. `canonicalRedirect` (`src/lib/canonical.ts`, called from `src/server.ts`) answers `www` with a 301 to the apex, path and query kept.
 
 ### i18n lint
 
 - All user-facing strings go through Paraglide (`m.*()`). `react/jsx-no-literals` (oxlint, error) forbids hardcoded JSX text and text-bearing attributes (label/placeholder/title/alt/aria-\*); stories and scripts are exempt via overrides. `packages/ui` components take all text as props. Inline `oxlint-disable` only with a justification comment.
+
+## devknobs (`packages/devknobs`)
+
+- The `devknobs` npm package, moved here from mertbuilds/devknobs with its git history. Vanilla TS, zero runtime dependencies, React optional (`devknobs/react`). Its user docs are `packages/devknobs/README.md`; its release notes are `packages/devknobs/CHANGELOG.md`.
+- It keeps bun as its build and test runner, so bun must be installed (CI pins the version in `oven-sh/setup-bun`). Its dev dependencies install through pnpm with the rest of the workspace; there is no `bun.lock`.
+- `pnpm --filter devknobs build` writes `dist/` (`scripts/bezelurls.ts` regenerates `src/engine/bezelurls.ts` first; `scripts/tunefree.ts` fails a build that holds the fold tuning tools). `pnpm --filter devknobs test` runs `bun test`, `pnpm --filter devknobs typecheck` runs its own `tsc` (TypeScript 5, not the root's 7). turbo runs all three with the rest.
+- Root oxlint and oxfmt, and the lefthook pre-commit jobs, skip `packages/devknobs`: it has its own style (double quotes, long lines) and its own checks. Do not reformat it to the root's rules.
+- Release: bump `version` in `packages/devknobs/package.json` and add the `CHANGELOG.md` entry, `pnpm --filter devknobs build`, then `npm publish` from `packages/devknobs`. Check the file list with `npm pack --dry-run` first.
+- `bun run link <app-dir>` / `bun run unlink <app-dir>` (from `packages/devknobs`) copy a local build into another app's `node_modules` to try it there. The site does not need it: it uses the workspace package.
 
 ## Dev workflow
 
@@ -122,9 +132,9 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`, PRs + main): `checks` job = turbo lint/typecheck/build + `format:check` + `skills:check` + react-doctor; `test` job = Chromium story tests. Turbo remote cache activates when `TURBO_TOKEN`/`TURBO_TEAM` are configured.
-- **Deploy** (`deploy.yml`, push to main): wrangler-action builds and deploys `apps/web` to Cloudflare Workers.
-- **Previews** (`preview.yml`): every PR uploads a Workers preview version and comments the URL. Previews build without the analytics client id, so preview traffic stays out of the numbers.
+- **CI** (`.github/workflows/ci.yml`, PRs + main): `checks` job = turbo lint/typecheck/build + `format:check` + `skills:check` + react-doctor; `test` job = Chromium story tests + devknobs' `bun test`. Both jobs set up bun for devknobs. Turbo remote cache activates when `TURBO_TOKEN`/`TURBO_TEAM` are configured.
+- **Deploy** (`deploy.yml`, push to main): builds devknobs, then wrangler-action builds and deploys `apps/web` to Cloudflare Workers.
+- **Previews** (`preview.yml`): every PR builds devknobs and the site, uploads a Workers preview version and comments the URL. Previews build without the analytics client id, so preview traffic stays out of the numbers.
 - Required repo config lives in README's "Going to production" checklist. CI must be green before merge.
 
 ## Rules

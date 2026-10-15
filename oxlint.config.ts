@@ -16,6 +16,8 @@ export default defineConfig({
     'apps/web/src/routeTree.gen.ts',
     'apps/web/worker-configuration.d.ts',
     '.claude/skills',
+    // devknobs keeps its own style and checks (bun test, tsc).
+    'packages/devknobs',
   ],
   overrides: [
     {

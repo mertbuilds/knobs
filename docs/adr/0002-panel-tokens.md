@@ -13,5 +13,5 @@ ADR-0001 chose black/white plus 3 grays, a 4px radius and Suisse Intl (fetched, 
 ## Consequences
 
 - Suisse Intl and the Inter fallback are dropped, with the font pipeline that served them: `fonts.css`, `@fontsource-variable/inter`, `scripts/fetch-fonts.sh`, `pnpm fonts` and the deploy step that fetched the files.
-- The tokens in `packages/ui/src/tokens.stylex.ts` mirror the values in the panel's stylesheet (`src/ui/styles.ts` in mertbuilds/devknobs). When the panel's values change, update the tokens to match.
+- The tokens in `packages/ui/src/tokens.stylex.ts` mirror the values in the panel's stylesheet (`packages/devknobs/src/ui/styles.ts`). When the panel's values change, update the tokens to match.
 - The 4px spacing scale from ADR-0001 stays.

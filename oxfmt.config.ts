@@ -14,6 +14,8 @@ export default defineConfig({
     '.wrangler',
     'pnpm-lock.yaml',
     '.claude/skills',
+    // devknobs keeps its own style and checks (bun test, tsc).
+    'packages/devknobs',
   ],
   singleQuote: true,
 });
