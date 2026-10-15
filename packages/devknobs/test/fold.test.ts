@@ -1,0 +1,1417 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  BLUR_LAYERS,
+  type BlurFade,
+  blurArea,
+  blurLight,
+  blurReach,
+  blurShare,
+  blurWidths,
+  brightness,
+  darkAt,
+  edgeLight,
+  flatMatrix,
+  FOLD_WAIT,
+  foldFrame,
+  foldLayout,
+  type FoldSide,
+  FOLD_TIME,
+  foldWarm,
+  freeBand,
+  freeDark,
+  freeDepth,
+  freeShades,
+  HAND_OVER,
+  handOver,
+  type Hinge,
+  HINGE,
+  HINGE_CATCH_UP,
+  HINGE_STEP,
+  hingeAfter,
+  hingeDue,
+  hingeLinear,
+  hingeStep,
+  hingeStill,
+  nearestReady,
+  openOf,
+  paneLook,
+  paneShades,
+  type Pane,
+  type Quad,
+  quadArea,
+  quadFacing,
+  quadMap,
+  RIM,
+  roundedPath,
+  screenDim,
+  seenAt,
+  type Shades,
+  shadeOf,
+  shadeStops,
+  shown,
+  sharpest,
+  SMOOTH,
+  SHOTS_AHEAD,
+  SHOTS_AROUND,
+  shotAt,
+  shotOpen,
+  shotPane,
+  shotPicture,
+  shotQuad,
+  shotsDrift,
+  shotsTransform,
+  shotsWindow,
+  towardFrom,
+  shotWindow,
+  shownAt,
+  turnBlur,
+  uvOf,
+  wipeAmount,
+  wipeLight,
+} from "../src/engine/fold";
+import { bezelMock } from "../src/engine/bezels";
+import { blurAt, freeOf, screenLook } from "../src/engine/foldgl";
+import { resetTune, setTune, TUNE_DEFAULTS } from "../src/engine/foldtune";
+import { DUO_FOLD } from "../src/engine/bezelurls";
+import { mockOf, type Rect } from "../src/engine/mock";
+import { corners } from "../src/engine/mockdraw";
+
+/** The Duo's two sides as fitted at 87% and 58%, each body where the frame draws it. */
+function sides(across: boolean): { closed: FoldSide; open: FoldSide } {
+  const shutBody = mockOf("iphone-duo-closed", across ? "portrait" : "landscape");
+  const openBody = mockOf("iphone-duo-open", across ? "landscape" : "portrait");
+  if (!shutBody || !openBody) throw new Error("no Duo");
+  const shutSize = across ? { width: 466, height: 678 } : { width: 678, height: 466 };
+  const openSize = across ? { width: 951, height: 669 } : { width: 669, height: 951 };
+  return {
+    closed: {
+      body: shutBody,
+      size: shutSize,
+      screen: { x: 450, y: 72, width: shutSize.width * 0.87, height: shutSize.height * 0.87 },
+    },
+    open: {
+      body: openBody,
+      size: openSize,
+      screen: { x: 300, y: 60, width: openSize.width * 0.58, height: openSize.height * 0.58 },
+    },
+  };
+}
+
+describe("foldLayout", () => {
+  test("lays the folded body right of the hinge, in the middle of the open screen, held across", () => {
+    const { closed, open } = sides(true);
+    const layout = foldLayout(closed, open, true);
+    const body = open.body;
+    if (!body || !closed.body) throw new Error("no body");
+    const hinge = body.inset.left + 951 / 2;
+    expect(layout.shut.x).toBeCloseTo(hinge);
+    // The screens' middles line up along the hinge.
+    expect(layout.shut.y + closed.body.inset.top + 678 / 2).toBeCloseTo(body.inset.top + 669 / 2);
+    expect(layout.hinge).toBeCloseTo(hinge);
+    expect(layout.clip).toBe(`inset(0 ${Math.round((body.width - hinge - 1) * 100) / 100}px 0 0)`);
+    expect(layout.open).toEqual({ width: body.width, height: body.height });
+    // Seen from about three widths of the open screen away, as Apple's camera sees it.
+    expect(layout.depth).toBeCloseTo(2.75 * 951);
+  });
+
+  test("lays it above the hinge held upright open, as the folded phone turned a quarter", () => {
+    const { closed, open } = sides(false);
+    const layout = foldLayout(closed, open, false);
+    const body = open.body;
+    if (!body || !closed.body) throw new Error("no body");
+    const hinge = body.inset.top + 951 / 2;
+    expect(layout.shut.y + layout.shut.height).toBeCloseTo(hinge);
+    expect(layout.shut.x + closed.body.inset.left + 678 / 2).toBeCloseTo(body.inset.left + 669 / 2);
+    expect(layout.clip).toBe(`inset(${Math.round((hinge - 1) * 100) / 100}px 0 0 0)`);
+  });
+
+  test("places the fold shut where the folded body is drawn, and open where the open one is", () => {
+    for (const across of [true, false]) {
+      const { closed, open } = sides(across);
+      const layout = foldLayout(closed, open, across);
+      const at = (place: { x: number; y: number; scale: number }, x: number, y: number) => ({
+        x: place.x + x * place.scale,
+        y: place.y + y * place.scale,
+      });
+      const shutInset = closed.body?.inset ?? { left: 0, top: 0 };
+      const shutScreen = at(
+        layout.folded,
+        layout.shut.x + shutInset.left,
+        layout.shut.y + shutInset.top,
+      );
+      expect(shutScreen.x).toBeCloseTo(closed.screen.x);
+      expect(shutScreen.y).toBeCloseTo(closed.screen.y);
+      expect(layout.folded.scale).toBeCloseTo(0.87);
+      const openInset = open.body?.inset ?? { left: 0, top: 0 };
+      const openScreen = at(layout.unfolded, openInset.left, openInset.top);
+      expect(openScreen.x).toBeCloseTo(open.screen.x);
+      expect(openScreen.y).toBeCloseTo(open.screen.y);
+      expect(layout.unfolded.scale).toBeCloseTo(0.58);
+    }
+  });
+
+  test("takes a bare screen as its own body", () => {
+    const { closed, open } = sides(true);
+    const layout = foldLayout({ ...closed, body: null }, { ...open, body: null }, true);
+    expect(layout.open).toEqual({ width: 951, height: 669 });
+    expect(layout.shut).toEqual({ x: 475.5, y: (669 - 678) / 2, width: 466, height: 678 });
+  });
+});
+
+describe("the hinge", () => {
+  /** Where the hinge a hand holds is `ms` after the hand went from `from` to `to`, as the frame steps it. */
+  const at = (from: number, to: number, ms: number) =>
+    hingeAfter({ position: from, velocity: 0 }, to, Math.round(ms / HINGE_STEP)).position;
+
+  test("under a hand, is Apple's spring, of 0.75 s and a bounce of 0.15, stepped 60 times a second", () => {
+    expect(HINGE.stiffness).toBeCloseTo(70.18, 1);
+    expect(HINGE.damping).toBeCloseTo(14.24, 1);
+    expect(HINGE_STEP).toBeCloseTo(16.67, 1);
+  });
+
+  test("under a hand, opens as fast as Apple's, measured, and moves from its first step", () => {
+    expect(at(0, 1, HINGE_STEP)).toBeGreaterThan(0.01);
+    expect(at(0, 1, 67)).toBeCloseTo(0.15, 1);
+    expect(at(0, 1, 167)).toBeCloseTo(0.49, 1);
+    expect(at(0, 1, 267)).toBeCloseTo(0.75, 1);
+    expect(at(0, 1, 417)).toBeCloseTo(0.93, 1);
+    expect(Math.abs(at(0, 1, 167) - 0.49)).toBeLessThan(0.03);
+    expect(Math.abs(at(0, 1, 267) - 0.75)).toBeLessThan(0.03);
+    expect(Math.abs(at(0, 1, 417) - 0.93)).toBeLessThan(0.03);
+  });
+
+  test("shuts the same way back", () => {
+    expect(at(1, 0, 167)).toBeCloseTo(1 - 0.49, 1);
+    expect(at(1, 0, 417)).toBeCloseTo(1 - 0.93, 1);
+  });
+
+  test("under a hand, lands in under half a second, exactly, and never goes past", () => {
+    for (const [from, to] of [
+      [0, 1],
+      [1, 0],
+    ] as const) {
+      let hinge: Hinge = { position: from, velocity: 0 };
+      let steps = 0;
+      while (!hingeStill(hinge, to) && steps < 120) {
+        hinge = hingeStep(hinge, to);
+        steps++;
+        expect(hinge.position).toBeGreaterThanOrEqual(0);
+        expect(hinge.position).toBeLessThanOrEqual(1);
+      }
+      expect(hinge).toEqual({ position: to, velocity: 0 });
+      expect(steps * HINGE_STEP).toBeGreaterThan(420);
+      expect(steps * HINGE_STEP).toBeLessThan(520);
+    }
+  });
+
+  test("under a hand, is snapped home by a magnet within 0.08, keeping its speed toward it", () => {
+    const near = hingeStep({ position: 0.95, velocity: 0.3 }, 1);
+    expect(near.position).toBeGreaterThan(0.95);
+    expect(near.velocity).toBeGreaterThan(0.3);
+    // Moving away inside the reach, it is turned back toward it at the same speed.
+    expect(hingeStep({ position: 0.95, velocity: -0.3 }, 1).velocity).toBeGreaterThan(0.3);
+    expect(hingeStep({ position: 0.999, velocity: 2 }, 1)).toEqual({ position: 1, velocity: 0 });
+    // Out of reach, the spring alone.
+    expect(hingeStep({ position: 0.5, velocity: 0 }, 1).velocity).toBeCloseTo(HINGE.stiffness * 0.5 * HINGE.step);
+  });
+
+  test("turned back by a hand on its way, goes back from there as fast as it was going", () => {
+    const going = hingeAfter({ position: 0, velocity: 0 }, 1, 10);
+    expect(going.velocity).toBeGreaterThan(1);
+    const back = hingeStep(going, 0);
+    expect(back.position).toBeGreaterThan(going.position);
+    expect(back.velocity).toBeLessThan(going.velocity);
+    const home = hingeAfter(going, 0, 60);
+    expect(home).toEqual({ position: 0, velocity: 0 });
+  });
+
+  test("follows a hand anywhere between the ends through the spring alone, lagging it", () => {
+    // No magnet pulls it at a landing a hand sets, however near.
+    const step = hingeStep({ position: 0.3, velocity: 0 }, 0.333);
+    expect(step.velocity).toBeCloseTo(HINGE.stiffness * 0.033 * HINGE.step);
+    // A hand that moves on retargets it from where it is, as fast as it was going.
+    const going = hingeAfter({ position: 0, velocity: 0 }, 0.6, 6);
+    expect(going.position).toBeGreaterThan(0);
+    expect(going.position).toBeLessThan(0.6);
+    expect(hingeStep(going, 0.2).position).toBeGreaterThan(going.position);
+  });
+
+  test("held between the ends, rests there exactly, all but without going past", () => {
+    let hinge: Hinge = { position: 1, velocity: 0 };
+    let steps = 0;
+    while (!hingeStill(hinge, 0.333) && steps < 240) {
+      hinge = hingeStep(hinge, 0.333);
+      steps++;
+      expect(hinge.position).toBeGreaterThan(0.333 - 0.01);
+    }
+    expect(hinge).toEqual({ position: 0.333, velocity: 0 });
+    expect(steps * HINGE_STEP).toBeLessThan(2000);
+  });
+
+  /** How far a hinge no hand holds goes in a step, and how many steps a whole fold is. */
+  const stride = HINGE_STEP / FOLD_TIME;
+  const whole = Math.round(FOLD_TIME / HINGE_STEP);
+
+  test("held by no hand, goes as far each step, so a whole fold takes its time exactly, and lands stopped", () => {
+    expect(FOLD_TIME).toBe(500);
+    for (const [from, to] of [
+      [0, 1],
+      [1, 0],
+    ] as const) {
+      let hinge: Hinge = { position: from, velocity: 0 };
+      for (let step = 1; step < whole; step++) {
+        const next = hingeLinear(hinge, to);
+        expect(Math.abs(next.position - hinge.position)).toBeCloseTo(stride, 12);
+        expect(next.position).toBeCloseTo(from + (to - from) * step * stride, 12);
+        expect(next.velocity).toBeCloseTo(((to - from) * 1000) / FOLD_TIME, 12);
+        expect(hingeStill(next, to)).toBe(false);
+        hinge = next;
+      }
+      // The last step is as far, and it is there exactly, stopped.
+      expect(Math.abs(to - hinge.position)).toBeCloseTo(stride, 12);
+      expect(hingeLinear(hinge, to)).toEqual({ position: to, velocity: 0 });
+      expect(hingeAfter({ position: from, velocity: 0 }, to, whole, hingeLinear)).toEqual({ position: to, velocity: 0 });
+      expect(hingeAfter({ position: from, velocity: 0 }, to, whole * 3, hingeLinear)).toEqual({ position: to, velocity: 0 });
+    }
+  });
+
+  test("held by no hand, takes a part of the way in its share of the time", () => {
+    const after = (from: number, to: number, steps: number) => hingeAfter({ position: from, velocity: 0 }, to, steps, hingeLinear);
+    expect(hingeStill(after(0, 0.5, whole / 2 - 1), 0.5)).toBe(false);
+    expect(after(0, 0.5, whole / 2)).toEqual({ position: 0.5, velocity: 0 });
+    expect(hingeStill(after(0.75, 0.25, whole / 2 - 1), 0.25)).toBe(false);
+    expect(after(0.75, 0.25, whole / 2)).toEqual({ position: 0.25, velocity: 0 });
+    // A way that is no whole number of steps ends in a shorter one, never past where it goes.
+    const steps = Math.ceil((1 - 0.333) / stride);
+    expect(after(1, 0.333, steps - 1).position).toBeGreaterThan(0.333);
+    expect(after(1, 0.333, steps)).toEqual({ position: 0.333, velocity: 0 });
+    expect(hingeLinear({ position: 0.4, velocity: 0 }, 0.4)).toEqual({ position: 0.4, velocity: 0 });
+  });
+
+  test("held by no hand, between two steps, is the share of a step on that the time since the last is", () => {
+    const at = { position: 0.4, velocity: 0 };
+    expect(hingeLinear(at, 1, 0).position).toBe(0.4);
+    expect(hingeLinear(at, 1, 0.25).position).toBeCloseTo(0.4 + stride / 4, 12);
+    expect(hingeLinear(at, 0, 0.5).position).toBeCloseTo(0.4 - stride / 2, 12);
+    // There, stopped, once that share reaches, never past.
+    expect(hingeLinear({ position: 1 - stride / 2, velocity: 2 }, 1, 0.25).position).toBeCloseTo(1 - stride / 4, 12);
+    expect(hingeLinear({ position: 1 - stride / 2, velocity: 2 }, 1, 0.5)).toEqual({ position: 1, velocity: 0 });
+    expect(hingeLinear({ position: 1 - stride / 2, velocity: 2 }, 1, 0.75)).toEqual({ position: 1, velocity: 0 });
+  });
+
+  test("held by no hand, turned back on its way, turns round at once and goes back as fast", () => {
+    const going = hingeAfter({ position: 0, velocity: 0 }, 1, 10, hingeLinear);
+    expect(going.position).toBeCloseTo(10 * stride, 12);
+    const back = hingeLinear(going, 0);
+    expect(back.position).toBeCloseTo(9 * stride, 12);
+    expect(back.velocity).toBeCloseTo(-going.velocity, 12);
+    expect(hingeStill(hingeAfter(going, 0, 9, hingeLinear), 0)).toBe(false);
+    expect(hingeAfter(going, 0, 10, hingeLinear)).toEqual({ position: 0, velocity: 0 });
+  });
+
+  test("let go by a hand, goes on from where it is at a fold's one speed, whatever the spring's was", () => {
+    for (const velocity of [-3, 0, 0.2, 5]) {
+      const next = hingeLinear({ position: 0.4, velocity }, 1);
+      expect(next.position).toBeCloseTo(0.4 + stride, 12);
+      expect(next.velocity).toBeCloseTo(1000 / FOLD_TIME, 12);
+    }
+    // Where it is let go at, it stops, though the spring had it moving.
+    expect(hingeLinear({ position: 0.333, velocity: 2 }, 0.333)).toEqual({ position: 0.333, velocity: 0 });
+  });
+
+  test("taken by a hand on its way, the spring goes on as fast as the fold went, with no stop", () => {
+    const going = hingeAfter({ position: 0, velocity: 0 }, 1, 10, hingeLinear);
+    const held = hingeStep(going, 1);
+    expect(held.position - going.position).toBeGreaterThan(stride);
+    expect(held.position - going.position).toBeLessThan(2 * stride);
+    // From a stop it would lag a step behind.
+    expect(hingeStep({ ...going, velocity: 0 }, 1).position - going.position).toBeLessThan(stride);
+  });
+
+  test("takes its first step in the first draw", () => {
+    expect(hingeDue(0, 0)).toEqual({ steps: 1, dropped: 0 });
+  });
+
+  test("held by no hand, takes no step in the first draw, and each as its time comes, a few at most in a late one", () => {
+    expect(hingeDue(0, 0, 0)).toEqual({ steps: 0, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * 0.5, 0, 0)).toEqual({ steps: 0, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * 1.5, 0, 0)).toEqual({ steps: 1, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * 6.5, 6, 0)).toEqual({ steps: 0, dropped: 0 });
+    const { steps, dropped } = hingeDue(HINGE_STEP * 30.5, 1, 0);
+    expect(steps).toBe(HINGE_CATCH_UP);
+    expect(dropped).toBeCloseTo((29 - HINGE_CATCH_UP) * HINGE_STEP);
+  });
+
+  test("takes the steps due in a draw on time, and drops none of the fold's time", () => {
+    // At 60 Hz a step a draw, at 120 Hz one every other draw.
+    expect(hingeDue(HINGE_STEP * 5.5, 5)).toEqual({ steps: 1, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * 5.5, 6)).toEqual({ steps: 0, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * 6.5, 6)).toEqual({ steps: 1, dropped: 0 });
+    expect(hingeDue(HINGE_STEP * (HINGE_CATCH_UP + 0.5), 1)).toEqual({ steps: HINGE_CATCH_UP, dropped: 0 });
+  });
+
+  test("takes a few steps only in a draw that comes late, and drops the time of the rest", () => {
+    const late = HINGE_STEP * 30.5;
+    const { steps, dropped } = hingeDue(late, 1);
+    expect(steps).toBe(HINGE_CATCH_UP);
+    expect(dropped).toBeCloseTo((30 - HINGE_CATCH_UP) * HINGE_STEP);
+    // Begun that much later, the fold has those steps due and no more, as far between two as it was.
+    expect(hingeDue(late - dropped, 1)).toEqual({ steps: HINGE_CATCH_UP, dropped: 0 });
+    expect((late - dropped) / HINGE_STEP).toBeCloseTo(HINGE_CATCH_UP + 0.5);
+  });
+
+  test("a fold the knobs start goes once the pictures and the frames are in, and no sooner", () => {
+    expect(foldWarm(true, true, 0)).toBe(true);
+    expect(foldWarm(false, true, 0)).toBe(false);
+    expect(foldWarm(true, false, 0)).toBe(false);
+    expect(foldWarm(false, false, FOLD_WAIT - 1)).toBe(false);
+  });
+
+  test("a fold the knobs start goes with what it has once it has waited long enough", () => {
+    expect(foldWarm(false, false, FOLD_WAIT)).toBe(true);
+    expect(foldWarm(false, true, FOLD_WAIT)).toBe(true);
+    expect(foldWarm(true, false, FOLD_WAIT + 16)).toBe(true);
+  });
+
+  test("a posture's opening", () => {
+    expect(openOf("open")).toBe(1);
+    expect(openOf("closed")).toBe(0);
+  });
+});
+
+describe("foldFrame", () => {
+  const { closed, open } = sides(true);
+  const layout = foldLayout(closed, open, true);
+
+  test("is the folded body alone when shut, and the open body flat when open", () => {
+    const shut = foldFrame(layout, 0);
+    expect(shut.inner).toBeNull();
+    expect(shut.outer).toBe(`perspective(${Math.round(layout.depth * 100) / 100}px) rotateY(0deg)`);
+    expect(shut.place).toEqual(layout.folded);
+    expect(shut.lift).toBe(0);
+    const flat = foldFrame(layout, 1);
+    expect(flat.outer).toBeNull();
+    expect(flat.inner).toEndWith("rotateY(0deg)");
+    expect(flat.place).toEqual(layout.unfolded);
+  });
+
+  test("turns the half toward the viewer about the hinge, its inside up to a right angle, its outside past", () => {
+    const rising = foldFrame(layout, 2 / 3);
+    expect(rising.inner).toEndWith("rotateY(60deg)");
+    expect(rising.outer).toBeNull();
+    expect(rising.lift).toBeCloseTo(Math.sin(Math.PI / 3), 2);
+    const past = foldFrame(layout, 1 / 3);
+    expect(past.inner).toBeNull();
+    expect(past.outer).toEndWith("rotateY(-60deg)");
+    expect(foldFrame(foldLayout(sides(false).closed, sides(false).open, false), 2 / 3).inner).toEndWith(
+      "rotateX(60deg)",
+    );
+  });
+
+  test("moves from where it is drawn shut to where open as it opens", () => {
+    const half = foldFrame(layout, 0.5).place;
+    expect(half.x).toBeCloseTo((layout.folded.x + layout.unfolded.x) / 2);
+    expect(half.scale).toBeCloseTo((layout.folded.scale + layout.unfolded.scale) / 2);
+  });
+});
+
+describe("seenAt", () => {
+  const pivot = { x: 100, y: 50 };
+
+  test("leaves the half where it is, flat", () => {
+    expect(seenAt({ x: 0, y: 0 }, pivot, 0, true, 1000)).toEqual({ x: 0, y: 0 });
+  });
+
+  test("brings the free edge nearer, so bigger, as the half stands, and edge on at a right angle", () => {
+    const standing = seenAt({ x: 0, y: 0 }, pivot, 60, true, 1000);
+    // A hundred px out, turned 60 degrees: half as far across, and seen 87 px nearer.
+    const grow = 1 / (1 - (100 * Math.sin(Math.PI / 3)) / 1000);
+    expect(standing.x).toBeCloseTo(100 - 50 * grow);
+    expect(standing.y).toBeCloseTo(50 - 50 * grow);
+    expect(seenAt({ x: 0, y: 80 }, pivot, 90, true, 1000).x).toBeCloseTo(100);
+    // The folded body turns the other way, its free edge to the right of the hinge.
+    expect(seenAt({ x: 200, y: 0 }, pivot, -60, true, 1000).y).toBeCloseTo(50 - 50 * grow);
+    // Along, it turns about the hinge running across.
+    const along = seenAt({ x: 0, y: 150 }, pivot, 60, false, 1000);
+    expect(along.x).toBeCloseTo(100 - 100 * grow);
+    expect(along.y).toBeCloseTo(50 + 100 * 0.5 * grow);
+  });
+});
+
+describe("roundedPath", () => {
+  const flat = (point: { x: number; y: number }) => point;
+
+  test("goes round the rect clockwise from its top left, each rounded corner a quarter circle's cubic", () => {
+    const path = roundedPath({ x: 0, y: 0, width: 100, height: 50 }, [10, 0, 0, 10], flat);
+    expect(path).toBe("M10 0L100 0L100 50L10 50C4.48 50 0 45.52 0 40L0 10C0 4.48 4.48 0 10 0Z");
+  });
+
+  test("shrinks corners that would overlap, as css draws them", () => {
+    const path = roundedPath({ x: 0, y: 0, width: 40, height: 100 }, [30, 30, 0, 0], flat);
+    expect(path.startsWith("M20 0L20 0C")).toBe(true);
+  });
+
+  test("puts every point and handle where the turn sees it", () => {
+    const rect = { x: 20, y: 10, width: 200, height: 300 };
+    const pivot = { x: 220, y: 160 };
+    const seen = (point: { x: number; y: number }) => seenAt(point, pivot, 40, true, 2000);
+    const path = roundedPath(rect, [55, 0, 0, 55], seen);
+    const numbers = (path.match(/-?[\d.]+/g) ?? []).map(Number);
+    const start = seen({ x: 75, y: 10 });
+    expect(numbers[0]).toBeCloseTo(start.x, 1);
+    expect(numbers[1]).toBeCloseTo(start.y, 1);
+    // The top left corner ends on the seen top edge, where the path started.
+    expect(path.endsWith(`${numbers[0]} ${numbers[1]}Z`)).toBe(true);
+    // Its last handle lies on the seen top edge, so the curve meets it without a kink.
+    const handle = seen({ x: 20 + 55 * (1 - 0.5523), y: 10 });
+    expect(path).toContain(`${Math.round(handle.x * 100) / 100} ${Math.round(handle.y * 100) / 100} ${numbers[0]}`);
+  });
+
+  test("keeps a corner's curve on the circle it rounds, flat", () => {
+    const path = roundedPath({ x: 0, y: 0, width: 200, height: 200 }, [0, 50, 0, 0], flat);
+    const curve = /C([\d. ]+)/.exec(path)?.[1]?.split(" ").map(Number) ?? [];
+    const [x1 = 0, y1 = 0, x2 = 0, y2 = 0, x3 = 0, y3 = 0] = curve;
+    // The cubic's middle, from (150, 0), is within a hair of the circle about (150, 50).
+    const mid = { x: (150 + 3 * x1 + 3 * x2 + x3) / 8, y: (0 + 3 * y1 + 3 * y2 + y3) / 8 };
+    expect(Math.hypot(mid.x - 150, mid.y - 50)).toBeCloseTo(50, 1);
+  });
+});
+
+/** Apple's uniforms as recorded, the hinge's position the frame before with each, while dragged slowly. */
+const RECORDED = {
+  inner: [
+    [0.146, 1],
+    [0.333, 0.8],
+    [0.488, 0.615],
+    [0.69, 0.372],
+    [0.913, 0.105],
+    [1, 0],
+  ],
+  cover: [
+    [0, 0],
+    [0.333, 0.333],
+    [0.488, 0.488],
+    [0.662, 0.337],
+    [0.913, 0.087],
+  ],
+  light: [
+    [0.021, 0.156],
+    [0.109, 0.18],
+    [0.333, 0.25],
+    [0.414, 0.33],
+    [0.509, 0.433],
+    [0.608, 0.54],
+    [0.717, 0.662],
+    [0.814, 0.783],
+    [0.913, 0.897],
+    [1, 1],
+  ],
+} as const;
+
+/** The three shades as Apple's fold has them: they ship at 0, and a hand brings them back. */
+function asApple(): void {
+  setTune("wipeShade", 1.5);
+  setTune("darkMost", 0.7);
+  setTune("farShade", 1);
+}
+
+describe("Apple's wipe", () => {
+  beforeEach(asApple);
+  afterEach(resetTune);
+
+  test("is as strong on each screen as recorded", () => {
+    for (const [open, amount] of RECORDED.inner) expect(Math.abs(wipeAmount("inner", open) - amount)).toBeLessThan(0.005);
+    for (const [open, amount] of RECORDED.cover) expect(Math.abs(wipeAmount("cover", open) - amount)).toBeLessThan(0.005);
+  });
+
+  test("brightens the open screen as recorded, and keeps the folded one bright", () => {
+    for (const [open, light] of RECORDED.light) expect(Math.abs(brightness("inner", open) - light)).toBeLessThan(0.025);
+    expect(brightness("cover", 0.5)).toBe(1);
+  });
+
+  test("darkens the half that turns from the hinge out, and the open screen's other half not at all", () => {
+    expect(uvOf("inner", 0)).toBe(0.5);
+    expect(uvOf("inner", 1)).toBe(0);
+    expect(uvOf("cover", 1)).toBe(1);
+    // Half open, the open screen's wipe is 0.6 strong: dark to 0.9 of its light at its free edge.
+    expect(wipeLight("inner", 0.5, 0.6)).toBe(1);
+    expect(wipeLight("inner", 0.75, 0.6)).toBe(1);
+    expect(wipeLight("inner", 0, 0.6)).toBeCloseTo(0.1);
+    expect(wipeLight("inner", 0.25, 0.6)).toBeCloseTo(1 - 0.5 * 0.9);
+    // The folded screen's from its hinge, at most to a quarter.
+    expect(wipeLight("cover", 0, 0.5)).toBe(1);
+    expect(wipeLight("cover", 1, 0.5)).toBeCloseTo(0.25);
+  });
+
+  test("blurs past its bounds, to a mip level 8 times the area, and darkens what it blurs most", () => {
+    expect(blurArea("inner", 0.55, 1)).toBe(0);
+    expect(blurArea("inner", 0, 0.3)).toBeCloseTo(((0.55 / 0.55) * 0.3 * 2.5) / 0.75);
+    expect(blurArea("inner", 0, 1)).toBeCloseTo(4 / 3);
+    expect(blurArea("cover", 0.45, 0.4)).toBeCloseTo((0.5 * 0.4 * 2.5) / 0.75);
+    expect(blurLight(0.9)).toBe(1);
+    expect(blurLight(1.1)).toBeCloseTo(0.25);
+    expect(blurLight(1.3)).toBe(0);
+  });
+
+  test("shades the open screen's far side the more the wipe is on", () => {
+    expect(edgeLight("inner", 0.5, 1)).toBe(1);
+    expect(edgeLight("inner", 0.05, 1)).toBe(0);
+    expect(edgeLight("inner", 0.05, 0)).toBe(1);
+    expect(edgeLight("cover", 0, 1)).toBe(1);
+  });
+
+  test("softens the dark past the picture's ends over as much as the texture goes past the screen", () => {
+    expect(RIM).toBeCloseTo(0.06);
+  });
+});
+
+/**
+ * Apple's frames of the Duo's fold, over its picture of the same screen
+ * lying flat, laid on it, and over what the wipe as written above shows of it
+ * seen from the front: what is left is the free edge's dark. By how far open
+ * the hinge is, at points across the turned screen from the hinge to its
+ * free edge, measured over 210 rows of each frame.
+ */
+const FREE_MEASURED: [open: number, [t: number, light: number][]][] = [
+  [0.9, [[0, 1], [0.5, 1], [0.9, 1.01], [1, 1.02]]],
+  [0.8, [[0, 1], [0.5, 0.99], [0.9, 1.03], [0.98, 0.95], [1, 0.9]]],
+  [0.7, [[0, 1], [0.5, 0.95], [0.75, 0.92], [0.9, 0.93], [1, 0.87]]],
+  [0.6, [[0, 0.99], [0.5, 0.93], [0.75, 0.86], [0.95, 0.83], [0.98, 0.62], [1, 0.6]]],
+  [0.2, [[0, 0.99], [0.5, 0.98], [0.9, 0.99], [1, 0.98]]],
+  [0.1, [[0, 1], [0.5, 0.99], [1, 0.98]]],
+];
+
+describe("the free edge's dark", () => {
+  beforeEach(asApple);
+  afterEach(resetTune);
+
+  test("is Apple's, within a tenth: the frames themselves differ by as much", () => {
+    for (const [open, points] of FREE_MEASURED) {
+      for (const [t, light] of points) expect(Math.abs(1 - freeDark(t, open) - light)).toBeLessThan(0.1);
+    }
+  });
+
+  test("is none open and shut, and deepest with the half square to the screen", () => {
+    for (const t of [0, 0.5, 0.97, 1]) {
+      expect(freeDark(t, 0)).toBe(0);
+      expect(freeDark(t, 1)).toBe(0);
+    }
+    expect(freeDepth(0.5)).toBe(0.7);
+    expect(freeDepth(0.6)).toBeCloseTo(freeDepth(0.4));
+    expect(freeShades(0, 0.8)).toEqual([]);
+    expect(freeShades(1, 1)).toEqual([]);
+  });
+
+  test("is none at the hinge, and deepens all the way out to the free edge", () => {
+    expect(freeBand(0)).toBe(0);
+    expect(freeBand(TUNE_DEFAULTS.darkFrom)).toBe(0);
+    expect(freeBand(1)).toBe(1);
+    let last = 0;
+    for (let t = 0; t <= 1; t += 0.01) {
+      expect(freeBand(t)).toBeGreaterThanOrEqual(last);
+      last = freeBand(t);
+    }
+  });
+
+  test("lies on the picture where the turned screen is seen to end", () => {
+    const stops = freeShades(0.6, 0.5);
+    expect(stops[0]).toEqual([0, 0]);
+    const [at, dark] = stops.at(-1) ?? [0, 0];
+    expect(at).toBe(0.5);
+    expect(dark).toBeCloseTo(freeDepth(0.6), 3);
+  });
+});
+
+describe("the turned screen's blur", () => {
+  test("is none lying flat, open or shut, and rises all the way to a right angle, where it is its widest", () => {
+    expect(turnBlur(0)).toBe(0);
+    expect(turnBlur(1)).toBe(0);
+    expect(turnBlur(0.5)).toBe(TUNE_DEFAULTS.blurMost);
+    let last = 0;
+    for (let open = 0.01; open <= 0.5; open += 0.01) {
+      expect(turnBlur(open)).toBeGreaterThan(last);
+      expect(turnBlur(1 - open)).toBeCloseTo(turnBlur(open), 9);
+      last = turnBlur(open);
+    }
+    // Next to none as the page itself takes over from its picture, so nothing steps there.
+    expect(turnBlur(0.99)).toBeLessThan(0.2);
+    expect(turnBlur(0.01)).toBeLessThan(0.2);
+  });
+
+  test("is at most 48 css px: three eighths of the 128 it was", () => {
+    expect(TUNE_DEFAULTS.blurMost).toBe(48);
+  });
+
+  test("is least at the hinge, under 2 css px at any angle, and never falls on the way to the free edge", () => {
+    expect(blurShare(0)).toBe(TUNE_DEFAULTS.blurHinge);
+    expect(blurShare(1)).toBe(1);
+    expect(TUNE_DEFAULTS.blurMost * blurShare(0)).toBeLessThan(2);
+    let last = blurShare(0);
+    for (let across = 0.01; across <= 1; across += 0.01) {
+      expect(blurShare(across)).toBeGreaterThan(last);
+      last = blurShare(across);
+    }
+    // Low for long near the hinge: a quarter of the way out, under a tenth of the free edge's.
+    expect(blurShare(0.25)).toBeLessThanOrEqual(0.1);
+    expect(blurShare(-1)).toBe(blurShare(0));
+    expect(blurShare(2)).toBe(1);
+  });
+
+  test("is found again from how wide it is", () => {
+    for (const across of [0, 0.2, 0.5, 0.9, 1]) expect(blurReach(blurShare(across))).toBeCloseTo(across, 9);
+    expect(blurReach(0)).toBe(0);
+  });
+});
+
+/** How much of a blurrier picture shows `at` of the way from the hinge to the free edge, as a gradient through its stops has it. */
+function shareAt(fade: BlurFade | null, at: number): number {
+  if (!fade) return 0;
+  const { stops } = fade;
+  const [first, last] = [stops[0], stops.at(-1)];
+  if (!first || !last) return 0;
+  if (at <= first[0]) return first[1];
+  for (let index = 1; index < stops.length; index++) {
+    const [from, low] = stops[index - 1] ?? first;
+    const [to, high] = stops[index] ?? last;
+    if (at <= to) return to > from ? low + ((high - low) * (at - from)) / (to - from) : high;
+  }
+  return last[1];
+}
+
+/** How much of each picture is seen, the sharp one first, with `shares` of the blurrier ones laid over it in turn. */
+function seenOf(shares: number[]): number[] {
+  let seen = [1];
+  for (const share of shares) seen = [...seen.map((one) => one * (1 - share)), share];
+  return seen;
+}
+
+/** Screens, angles and how far out they are seen, the blur at its widest and well under it. */
+const LOOKS: ["inner" | "cover", number, number][] = [
+  ["inner", 0.5, 1],
+  ["cover", 0.5, 1],
+  ["inner", 0.3, 1],
+  ["cover", 0.8, 0.5],
+  ["inner", 0.62, 0.37],
+];
+
+describe("blurWidths", () => {
+  test("doubles from the sharp picture's 2 css px, and ends at the widest blur itself", () => {
+    expect(blurWidths(48)).toEqual([2, 4, 8, 16, 32, 48]);
+    expect(blurWidths(16)).toEqual([2, 4, 8, 16]);
+    expect(blurWidths(128)).toEqual([2, 4, 8, 16, 32, 64, 128]);
+    expect(blurWidths(33)).toEqual([2, 4, 8, 16, 32, 33]);
+    // As the table has it, where none is given.
+    expect(blurWidths()).toEqual(blurWidths(TUNE_DEFAULTS.blurMost));
+    // Too little to see: the sharp picture alone.
+    expect(blurWidths(2)).toEqual([2]);
+    expect(blurWidths(0)).toEqual([2]);
+    expect(blurWidths(3)).toEqual([2, 3]);
+  });
+
+  test("is never more than 8 pictures: past that they are spread evenly further apart", () => {
+    expect(BLUR_LAYERS).toBe(8);
+    // The widest a hand can set is just 8, still doubling.
+    expect(blurWidths(256)).toEqual([2, 4, 8, 16, 32, 64, 128, 256]);
+    for (const [most, limit] of [[256, 6], [1024, 8], [48, 4], [4096, 8]] as const) {
+      const widths = blurWidths(most, limit);
+      expect(widths).toHaveLength(limit);
+      expect(widths[0]).toBe(2);
+      expect(widths.at(-1)).toBe(most);
+      const between = (most / 2) ** (1 / (limit - 1));
+      expect(between).toBeGreaterThan(2);
+      for (let index = 1; index < widths.length; index++) {
+        expect((widths[index] ?? 0) / (widths[index - 1] ?? 1)).toBeCloseTo(between, 9);
+      }
+    }
+    // No pictures to spare under the limit: each step doubles, but the last, which is no more.
+    for (const most of [5, 48, 100, 256]) {
+      const widths = blurWidths(most);
+      expect(widths.length).toBeLessThanOrEqual(BLUR_LAYERS);
+      for (let index = 1; index < widths.length - 1; index++) expect((widths[index] ?? 0) / (widths[index - 1] ?? 1)).toBe(2);
+      expect((widths.at(-1) ?? 0) / (widths.at(-2) ?? 1)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  test("follows the widest blur a hand sets", () => {
+    try {
+      setTune("blurMost", 16);
+      expect(blurWidths()).toEqual([2, 4, 8, 16]);
+      expect(paneLook("inner", 0.5).blurs).toHaveLength(3);
+      setTune("blurMost", 256);
+      expect(paneLook("inner", 0.5).blurs).toHaveLength(7);
+    } finally {
+      resetTune();
+    }
+  });
+});
+
+describe("paneLook", () => {
+  afterEach(resetTune);
+
+  /** Is a shade none at all: no dark at any of its stops. */
+  const none = (shade: Shades) => shade.every(([, dark]) => dark === 0);
+
+  test("is bright and sharp on a screen lying flat", () => {
+    const flat = paneLook("inner", 1);
+    expect(none(flat.turned)).toBe(true);
+    expect(none(flat.flat)).toBe(true);
+    expect(flat.blurs).toEqual([null, null, null, null, null]);
+    expect(paneLook("cover", 0).blurs).toEqual([null, null, null, null, null]);
+  });
+
+  /** Each frame of the Duo's fold whose turned screen is seen at least `least` of the way out: its screen, how far open, and how far it is seen. */
+  function seenFrames(least: number): [Pane, number, number][] {
+    const shots = DUO_FOLD;
+    if (!shots) return [];
+    return shots.frames.flatMap((shot): [Pane, number, number][] => {
+      const pane = shotPane(shots, shot);
+      if (!pane) return [];
+      const quad = shotQuad(shot, pane);
+      const picture = shotPicture(shots, pane, quad);
+      const free = freeOf(shotWindow(quad, pane, picture), pane, picture);
+      return free >= least ? [[pane, shotOpen(shot), free]] : [];
+    });
+  }
+
+  test("as it ships, dims the half that turns as the half that stays is, all over, and shades it nowhere", () => {
+    expect([TUNE_DEFAULTS.wipeShade, TUNE_DEFAULTS.darkMost, TUNE_DEFAULTS.farShade]).toEqual([0, 0, 0]);
+    for (const [pane, open, free] of seenFrames(0)) {
+      // One stop each: the screen's own light, the same at the hinge as the other half's, so they meet with no step.
+      expect(paneShades(pane, open, free)).toEqual({ turned: [[0, screenDim(pane, open)]], flat: [[0, 0]] });
+      expect(freeShades(open, free)).toEqual([]);
+      // Nothing of a shade is worked out, by the gradients or by WebGL2: Apple's blurs darken only past where the screen is seen.
+      expect(shadeOf(pane, open, free).slice(1)).toEqual([0, 0, 0]);
+    }
+  });
+
+  test("darkens the half that turns toward its free edge, from the dark of the half that stays, where a hand turns the wipe on", () => {
+    asApple();
+    const look = paneLook("inner", 0.6);
+    expect(look.turned.length).toBeGreaterThanOrEqual(17);
+    expect(look.turned[0]?.[1]).toBeCloseTo(screenDim("inner", 0.6), 2);
+    for (let step = 1; step < look.turned.length; step++) {
+      expect(look.turned[step]?.[1] ?? 0).toBeGreaterThanOrEqual(look.turned[step - 1]?.[1] ?? 0);
+      expect(look.turned[step]?.[0] ?? 0).toBeGreaterThan(look.turned[step - 1]?.[0] ?? 0);
+    }
+    expect(look.turned.at(-1)).toEqual([1, expect.any(Number)]);
+    expect(look.turned.at(-1)?.[1] ?? 0).toBeGreaterThan(0.5);
+    expect(look.flat.at(-1)?.[1] ?? 0).toBeGreaterThan(look.flat[0]?.[1] ?? 0);
+  });
+
+  test("is as dark where its shades were worked out before, at 9 points from the hinge out", () => {
+    asApple();
+    const smooth = (from: number, to: number, value: number) => {
+      const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
+      return t * t * (3 - 2 * t);
+    };
+    for (const pane of ["inner", "cover"] as const) {
+      for (const open of [0.1, 0.3, 0.45, 0.6, 0.8, 0.95]) {
+        const { turned, flat } = paneShades(pane, open);
+        const amount = wipeAmount(pane, open);
+        const light = smooth(0.1, 1, brightness(pane, open));
+        for (let step = 0; step <= 8; step++) {
+          const uv = uvOf(pane, step / 8);
+          const at = (shade: Shades) => shade.find(([t]) => t === step / 8)?.[1];
+          expect(at(turned)).toBeCloseTo(1 - shown(light * wipeLight(pane, uv, amount)), 3);
+          const dark = 1 - shown(blurLight(blurArea(pane, uv, amount)) * edgeLight(pane, uv, amount));
+          if (flat.length > 1) expect(at(flat)).toBeCloseTo(dark, 3);
+          else expect(dark).toBe(0);
+        }
+      }
+    }
+  });
+
+  test("bends no more sharply at any stop than the eye lets it, at every angle and at numbers a hand sets", () => {
+    const tunes: [string, number][][] = [
+      [["wipeShade", 1.5], ["darkMost", 0.7], ["farShade", 1]],
+      [["wipeShade", 1.6], ["darkMost", 1], ["farShade", 0.5], ["darkFrom", 0.5], ["darkBroad", 0.8]],
+      [["wipeShade", 0.6], ["darkMost", 0.3], ["farShade", 1], ["darkFrom", 0], ["darkPower", 1]],
+    ];
+    tunes.forEach((set, index) => {
+      resetTune();
+      for (const [key, value] of set) setTune(key, value);
+      // At Apple's own numbers wherever a tenth of the screen is seen. At a hand's, which may take a shade to black,
+      // where half of it is: seen less, its stops would have to be closer than they can be told apart.
+      const frames = seenFrames(index === 0 ? 0.1 : 0.5);
+      expect(frames.length).toBeGreaterThan(index === 0 ? 150 : 100);
+      for (const [pane, open, free] of frames) {
+        const { turned, flat } = paneShades(pane, open, free);
+        expect(sharpest(turned)).toBeLessThanOrEqual(SMOOTH);
+        expect(sharpest(flat)).toBeLessThanOrEqual(SMOOTH);
+        // The free edge's dark up to its darkest strip, which is a line by design, over as much of the way as is seen.
+        const edge = freeShades(open, free).filter(([at]) => at / free < 0.9);
+        expect(sharpest(edge) * free).toBeLessThanOrEqual(SMOOTH);
+        for (const shade of [turned, flat, freeShades(open, free)]) expect(shade.length).toBeLessThanOrEqual(64);
+      }
+    });
+  });
+
+  test("bent five times as sharply through the 9 evenly spaced stops it had", () => {
+    asApple();
+    const before = (pane: Pane, open: number) => {
+      const amount = wipeAmount(pane, open);
+      const light = 1 - screenDim(pane, open);
+      return Array.from({ length: 9 }, (_, step): [number, number] => [step / 8, 1 - light * shown(wipeLight(pane, uvOf(pane, step / 8), amount))]);
+    };
+    expect(sharpest(before("inner", 0.6))).toBeGreaterThan(5 * SMOOTH);
+    expect(sharpest(paneShades("inner", 0.6).turned)).toBeLessThanOrEqual(SMOOTH);
+  });
+
+  test("puts its stops closer together only where the shade bends, and one where it is as dark all the way", () => {
+    // A straight shade keeps its 17 even stops.
+    const straight = shadeStops((t) => t / 2);
+    expect(straight).toHaveLength(17);
+    expect(straight[4]).toEqual([0.25, 0.125]);
+    expect(sharpest(straight)).toBeLessThan(0.01);
+    // A bent one gets more, and only as many as take the bend under the bound.
+    const bent = shadeStops((t) => t ** 2 / 2);
+    expect(bent.length).toBeGreaterThan(17);
+    expect(bent.length).toBeLessThanOrEqual(64);
+    expect(sharpest(bent)).toBeLessThanOrEqual(SMOOTH);
+    const gaps = bent.slice(1).map(([at], index) => at - (bent[index]?.[0] ?? 0));
+    expect(gaps.at(-1) ?? 1).toBeLessThan(gaps[0] ?? 0);
+    // Out to as far as it is seen, and no further.
+    expect(shadeStops((t) => t, 0.4).at(-1)).toEqual([0.4, 0.4]);
+    expect(shadeStops((t) => t, 0)).toEqual([[0, 0]]);
+  });
+
+  test("leaves every shade out with the shades off, but the screen's own light, and the blur with the blur off", () => {
+    asApple();
+    setTune("shadeOn", 0);
+    expect(paneShades("inner", 0.6)).toEqual({ turned: [[0, screenDim("inner", 0.6)]], flat: [[0, 0]] });
+    expect(freeShades(0.6, 0.5)).toEqual([]);
+    expect(paneLook("inner", 0.6).blurs.some((blur) => blur !== null)).toBe(true);
+    setTune("blurOn", 0);
+    expect(paneLook("inner", 0.6).blurs.every((blur) => blur === null)).toBe(true);
+    setTune("shadeOn", 1);
+    expect(paneShades("inner", 0.6).turned.length).toBeGreaterThan(1);
+  });
+
+  test("fades each blurrier picture in over the one under it, all in where the blur is as wide as it, and no further than the widest", () => {
+    const widths = blurWidths();
+    for (const [pane, open, free] of LOOKS) {
+      const { blurs } = paneLook(pane, open, free);
+      expect(blurs).toHaveLength(widths.length - 1);
+      const peak = turnBlur(open);
+      widths.slice(1).forEach((width, index) => {
+        const fade = blurs[index];
+        const low = widths[index] ?? 0;
+        // One the blur never gets as wide as the picture under does not show.
+        expect(fade === null).toBe(peak <= low);
+        if (!fade) return;
+        const [first, last] = [fade.stops[0], fade.stops.at(-1)];
+        // None of it where the blur is the lower one's width, by `blurShare` the other way round.
+        expect(first).toEqual([Math.round(blurReach(low / peak) * free * 1000) / 1000, 0]);
+        expect(last?.[0]).toBe(Math.round(blurReach(Math.min(width, peak) / peak) * free * 1000) / 1000);
+        if (peak >= width) expect(last?.[1]).toBe(1);
+        else expect(last?.[1]).toBeCloseTo(Math.log2(peak / low) / Math.log2(width / low), 3);
+        // Where it ends, the next begins: no picture's fade ends in the open.
+        const next = blurs[index + 1];
+        if (next) expect(next.stops[0]?.[0]).toBe(last?.[0] ?? -1);
+      });
+    }
+  });
+
+  test("mixes just the two pictures whose blurs are either side of the blur wanted, at every point of the half", () => {
+    const widths = blurWidths();
+    for (const [pane, open, free] of LOOKS) {
+      const { blurs } = paneLook(pane, open, free);
+      let before: number[] | null = null;
+      for (let step = 0; step <= 2000; step++) {
+        const at = step / 2000;
+        const shares = blurs.map((fade) => shareAt(fade, at));
+        const seen = seenOf(shares);
+        expect(seen.reduce((sum, one) => sum + one, 0)).toBeCloseTo(1, 9);
+        const showing = seen.flatMap((one, index) => (one > 0 ? [index] : []));
+        expect(showing.length).toBeLessThanOrEqual(2);
+        if (showing.length === 2) expect((showing[1] ?? 0) - (showing[0] ?? 0)).toBe(1);
+        // No dip: a picture fades in only over one that is all in, so nothing under the two shows through.
+        shares.forEach((share, index) => {
+          if (index > 0 && share > 0) expect(shares[index - 1]).toBe(1);
+        });
+        // Handed over one way only, and with no step: a five-hundredth of the half further on, a little more.
+        if (before) {
+          shares.forEach((share, index) => {
+            expect(share).toBeGreaterThanOrEqual(before?.[index] ?? 0);
+            expect(share - (before?.[index] ?? 0)).toBeLessThan(0.05);
+          });
+        }
+        before = shares;
+      }
+      expect(widths[0]).toBe(2);
+    }
+  });
+
+  test("is as wide as WebGL2 draws it where the blur is a picture's own, and within the pictures either side between", () => {
+    const widths = blurWidths();
+    for (const [pane, open, free] of LOOKS) {
+      const { blurs } = paneLook(pane, open, free);
+      const look = screenLook(open, 0, free);
+      const peak = turnBlur(open);
+      /** How wide the layers' blur is `at` of the way out: the two pictures' widths, mixed as they double. */
+      const drawn = (at: number) =>
+        2 ** seenOf(blurs.map((fade) => shareAt(fade, at))).reduce((sum, one, index) => sum + one * Math.log2(widths[index] ?? 1), 0);
+      // At the hinge it is the sharp picture, as WebGL2 draws none under a px.
+      expect(drawn(0)).toBe(2);
+      expect(blurAt(look, 0, 1e4)).toBeLessThan(2);
+      for (const width of widths.slice(1)) {
+        if (width > peak) continue;
+        const at = blurReach(width / peak) * free;
+        expect(blurAt(look, at, 1e4)).toBeCloseTo(width, 6);
+        expect(Math.abs(Math.log2(drawn(at) / width))).toBeLessThan(0.02);
+      }
+      // In the middle and at the free edge, and all the way between: never off by more than a fiftieth of a doubling.
+      for (let step = 0; step <= 200; step++) {
+        const at = (step / 200) * free;
+        const wanted = Math.max(2, blurAt(look, at, 1e4));
+        expect(Math.abs(Math.log2(drawn(at) / wanted))).toBeLessThan(0.02);
+      }
+      expect(Math.abs(Math.log2(drawn(free) / Math.max(2, peak)))).toBeLessThan(0.005);
+    }
+  });
+
+  test("shows none of a blurrier picture at the hinge, at any angle, so it is no blurrier there than WebGL2 draws it", () => {
+    for (const pane of ["inner", "cover"] as const) {
+      for (let open = 0; open <= 1; open += 0.01) {
+        for (const blur of paneLook(pane, open).blurs) {
+          if (!blur) continue;
+          expect(blur.stops[0]?.[1]).toBe(0);
+          expect(blur.stops[0]?.[0]).toBeGreaterThan(0);
+          expect(blur.stops.at(-1)?.[1]).toBeGreaterThan(0);
+          expect(shareAt(blur, 0)).toBe(0);
+        }
+      }
+    }
+  });
+
+  test("dims the screens as Apple lights them, through the display's gamma", () => {
+    expect(screenDim("inner", 1)).toBe(0);
+    expect(screenDim("cover", 0)).toBe(0);
+    // A third of the way open the open screen is set a quarter bright: 0.074 of its light, shown as 0.31.
+    const set = (0.15 / 0.9) ** 2 * (3 - 2 * (0.15 / 0.9));
+    expect(screenDim("inner", 1 / 3)).toBeCloseTo(1 - set ** (1 / 2.2), 2);
+    expect(screenDim("inner", 0)).toBeGreaterThan(0.8);
+  });
+});
+
+describe("handOver", () => {
+  test("hands the screen to the page itself over the last 8% of the way, only where it is drawn", () => {
+    expect(HAND_OVER).toBe(0.08);
+    expect(handOver(0.9, "open")).toBe(0);
+    expect(handOver(0.92, "open")).toBe(0);
+    expect(handOver(0.96, "open")).toBeCloseTo(0.5);
+    expect(handOver(1, "open")).toBe(1);
+    expect(handOver(0.1, "closed")).toBe(0);
+    expect(handOver(0.04, "closed")).toBeCloseTo(0.5);
+    expect(handOver(0, "closed")).toBe(1);
+    // Drawn open, the picture keeps the screen all the way shut.
+    expect(handOver(0.02, "open")).toBe(0);
+  });
+});
+
+/** Where a css `matrix3d` or `matrix` with its origin at 0 0 puts a point. */
+function through(transform: string, x: number, y: number): { x: number; y: number } {
+  const m = (/\(([^)]*)\)/.exec(transform)?.[1] ?? "").split(",").map(Number);
+  if (m.length === 6) {
+    const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = m;
+    return { x: a * x + c * y + e, y: b * x + d * y + f };
+  }
+  const at = (row: number) => (m[row] ?? 0) * x + (m[row + 4] ?? 0) * y + (m[row + 12] ?? 0);
+  const w = at(3);
+  return { x: at(0) / w, y: at(1) / w };
+}
+
+describe("quadMap", () => {
+  const RECT = { x: 20, y: 10, width: 300, height: 200 };
+  const QUADS: Quad[] = [
+    [[0, 0], [300, 0], [300, 200], [0, 200]],
+    [[113.33, 358.02], [1559.84, 377.23], [1559.84, 2382.78], [113.33, 2401.99]],
+    [[40, 30], [500, 80], [420, 600], [10, 380]],
+  ];
+
+  test("lays each corner of the rect on its corner of the quad, exactly", () => {
+    for (const quad of QUADS) {
+      const seen = quadMap(RECT, quad);
+      if (!seen) throw new Error("no map");
+      const corners = [
+        [RECT.x, RECT.y],
+        [RECT.x + RECT.width, RECT.y],
+        [RECT.x + RECT.width, RECT.y + RECT.height],
+        [RECT.x, RECT.y + RECT.height],
+      ];
+      corners.forEach(([x = 0, y = 0], index) => {
+        const point = seen({ x, y });
+        expect(point.x).toBeCloseTo(quad[index]?.[0] ?? NaN, 4);
+        expect(point.y).toBeCloseTo(quad[index]?.[1] ?? NaN, 4);
+      });
+    }
+  });
+
+  test("keeps the middle where the quad's diagonals cross, as a flat screen in perspective", () => {
+    const quad = QUADS[2];
+    if (!quad) throw new Error("no quad");
+    const middle = quadMap(RECT, quad)?.({ x: RECT.x + RECT.width / 2, y: RECT.y + RECT.height / 2 });
+    if (!middle) throw new Error("no map");
+    const [[x0, y0], , [x2, y2]] = quad;
+    const [, [x1, y1], , [x3, y3]] = quad;
+    // Where the lines from corner 0 to 2 and from 1 to 3 cross.
+    const t = ((x1 - x0) * (y3 - y1) - (y1 - y0) * (x3 - x1)) / ((x2 - x0) * (y3 - y1) - (y2 - y0) * (x3 - x1));
+    expect(middle.x).toBeCloseTo(x0 + (x2 - x0) * t, 4);
+    expect(middle.y).toBeCloseTo(y0 + (y2 - y0) * t, 4);
+  });
+
+  test("is none for a screen seen edge on", () => {
+    expect(quadMap(RECT, [[10, 0], [10.01, 0], [10.01, 50], [10, 50]])).toBeNull();
+    expect(quadMap({ ...RECT, width: 0 }, QUADS[0] ?? [[0, 0], [0, 0], [0, 0], [0, 0]])).toBeNull();
+  });
+});
+
+describe("the Duo's fold frames", () => {
+  if (!DUO_FOLD) return;
+  const shots = DUO_FOLD;
+
+  test("run from open to shut every degree, 181 of them, both ends with them", () => {
+    expect(shots.frames).toHaveLength(181);
+    expect(shots.frames.map((shot) => shot.deg)).toEqual(Array.from({ length: 181 }, (_, index) => index));
+  });
+
+  test("show the one nearest the hinge's angle, either way it turns, the more open of two as near", () => {
+    const at = (deg: number) => shots.frames[shotAt(shots, 1 - deg / 180)]?.deg;
+    expect([at(0), at(0.4), at(0.6), at(1), at(1.4), at(1.6)]).toEqual([0, 0, 1, 1, 1, 2]);
+    expect([at(89), at(90), at(90.4), at(90.6), at(179.6), at(180)]).toEqual([89, 90, 90, 91, 180, 180]);
+    expect(at(1.5)).toBe(1);
+    // Opening or shutting, the same angle shows the same frame: no pair, no fade, no warp.
+    for (let deg = 0; deg <= 180; deg += 0.37) {
+      const shown = at(deg) ?? NaN;
+      expect(Math.abs(shown - deg)).toBeLessThanOrEqual(0.5 + 1e-9);
+    }
+  });
+
+  test("where the nearest is not decoded yet, show the nearest that is, never none while one is", () => {
+    const ready = [true, false, false, false, true, false];
+    expect(nearestReady(ready, 0)).toBe(0);
+    expect(nearestReady(ready, 1)).toBe(0);
+    expect(nearestReady(ready, 3)).toBe(4);
+    expect(nearestReady(ready, 2)).toBe(0);
+    expect(nearestReady(ready, 5)).toBe(4);
+    expect(nearestReady([null, null], 1)).toBeNull();
+  });
+
+  test("decode those round the hinge and more ahead of it as it goes, none past the ends", () => {
+    expect([SHOTS_AROUND, SHOTS_AHEAD]).toEqual([10, 10]);
+    expect(shotsWindow(181, 90, 0)).toEqual([80, 100]);
+    // Shutting, the angle and the frames grow: ahead is after it.
+    expect(shotsWindow(181, 90, 1)).toEqual([80, 110]);
+    expect(shotsWindow(181, 90, -1)).toEqual([70, 100]);
+    expect(shotsWindow(181, 0, 1)).toEqual([0, 20]);
+    expect(shotsWindow(181, 180, -1)).toEqual([160, 180]);
+    expect(shotsWindow(181, 175, 1)).toEqual([165, 180]);
+    // At rest, those a fold from that end starts with: from the end, ahead toward the other.
+    const resting = (rest: number) => shotsWindow(shots.frames.length, shotAt(shots, rest), towardFrom(rest));
+    expect([towardFrom(0), towardFrom(1)]).toEqual([-1, 1]);
+    expect(resting(1)).toEqual([0, SHOTS_AROUND + SHOTS_AHEAD]);
+    expect(resting(0)).toEqual([180 - SHOTS_AROUND - SHOTS_AHEAD, 180]);
+  });
+
+  test("face the viewer by the inside up to a right angle, the outside past it, one in each frame", () => {
+    for (const shot of shots.frames) {
+      const pane = shotPane(shots, shot);
+      expect(pane).toBe(shot.deg <= 90 ? "inner" : "cover");
+      if (pane) expect(Math.abs(quadArea(shotQuad(shot, pane)))).toBeGreaterThan(1000);
+    }
+  });
+
+  test("start each screen's corners from its top left as the layout shows it, held upright", () => {
+    const quad: Quad = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    expect(quadFacing(quad, true)).toBe(quad);
+    expect(quadFacing(quad, false)).toEqual([[1, 0], [1, 1], [0, 1], [0, 0]]);
+  });
+
+  /** The Duo laid out in its bezels, and where its open and folded screens lie in the layout. */
+  function bezelled(across: boolean): {
+    layout: ReturnType<typeof foldLayout>;
+    inside: Rect;
+    outside: Rect;
+    radii: { open: number[]; closed: number[] };
+  } {
+    const shutBody = bezelMock("iphone-duo-closed", across ? "portrait" : "landscape");
+    const openBody = bezelMock("iphone-duo-open", across ? "landscape" : "portrait");
+    const { closed, open } = sides(across);
+    if (!shutBody || !openBody) throw new Error("no bezels");
+    const layout = foldLayout({ ...closed, body: shutBody }, { ...open, body: openBody }, across);
+    return {
+      layout,
+      inside: { x: openBody.inset.left, y: openBody.inset.top, ...open.size },
+      outside: {
+        x: layout.shut.x + shutBody.inset.left,
+        y: layout.shut.y + shutBody.inset.top,
+        ...closed.size,
+      },
+      radii: { open: corners(openBody.screenRadius), closed: corners(shutBody.screenRadius) },
+    };
+  }
+
+  /** The bounds of points as a transform puts them. */
+  function boundsThrough(transform: string, points: readonly (readonly [number, number])[]): Rect {
+    const seen = points.map(([px, py]) => through(transform, px, py));
+    const xs = seen.map((point) => point.x);
+    const ys = seen.map((point) => point.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
+  }
+
+  /** That `seen` lies on `on`, each side within a quarter of a css px. */
+  function expectOn(seen: Rect, on: Rect): void {
+    for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(seen[key] - on[key])).toBeLessThan(0.25);
+  }
+
+  test("lie on the open screen open and on the folded one shut, exactly, either way it is held", () => {
+    const [x, y, width, height] = shots.open;
+    const last = shots.frames.at(-1);
+    if (!last) throw new Error("no frames");
+    const screen = [[x, y], [x + width, y], [x + width, y + height], [x, y + height]] as const;
+    for (const across of [true, false]) {
+      const { layout, inside, outside } = bezelled(across);
+      expectOn(boundsThrough(shotsTransform(shots, layout, inside, outside, 1), screen), inside);
+      const shut = shotsTransform(shots, layout, inside, outside, 0);
+      expectOn(boundsThrough(shut, last.cover), outside);
+      expect(shut).toStartWith(across ? "matrix(0.3" : "matrix(0, -0.3");
+    }
+  });
+
+  /**
+   * That the page glued onto a frame's screen of `pane`, `rect` in its own
+   * css px with corners `radii`, lies exactly where the device draws that
+   * screen, `rect` in the layout, with the hinge `open` of the way open:
+   * each corner, the middle of each side and each rounded corner's arc.
+   */
+  function expectGlued(across: boolean, open: number, pane: "inner" | "cover", rect: Rect, radii: number[]): void {
+    const { layout, inside, outside } = bezelled(across);
+    const frame = open === 1 ? shots.frames[0] : shots.frames.at(-1);
+    if (!frame) throw new Error("no frame");
+    const glued = quadMap({ x: 0, y: 0, width: rect.width, height: rect.height }, quadFacing(shotQuad(frame, pane), across));
+    if (!glued) throw new Error("no map");
+    const model = shotsTransform(shots, layout, inside, outside, open);
+    const { width, height } = rect;
+    const [a = 0, b = 0, c = 0, d = 0] = radii;
+    const arc = (radius: number) => radius * (1 - Math.SQRT1_2);
+    const points: [number, number][] = [
+      [0, 0], [width, 0], [width, height], [0, height],
+      [width / 2, 0], [width, height / 2], [width / 2, height], [0, height / 2],
+      [arc(a), arc(a)], [width - arc(b), arc(b)], [width - arc(c), height - arc(c)], [arc(d), height - arc(d)],
+    ];
+    for (const [x, y] of points) {
+      const onFrame = glued({ x, y });
+      const seen = through(model, onFrame.x, onFrame.y);
+      expect(Math.abs(seen.x - (rect.x + x))).toBeLessThan(0.25);
+      expect(Math.abs(seen.y - (rect.y + y))).toBeLessThan(0.25);
+    }
+  }
+
+  test("glue the page exactly where the device draws its screens, open and shut, either way it is held", () => {
+    for (const across of [true, false]) {
+      const { layout, inside, outside, radii } = bezelled(across);
+      const [topLeft = 0, topRight = 0, bottomRight = 0, bottomLeft = 0] = radii.open;
+      // Open, the half that turns lies on the open screen's half past the hinge, square at the hinge.
+      const half = across
+        ? { ...inside, width: layout.hinge - inside.x }
+        : { ...inside, y: layout.hinge, height: inside.y + inside.height - layout.hinge };
+      expectGlued(across, 1, "inner", half, across ? [topLeft, 0, 0, bottomLeft] : [0, 0, bottomRight, bottomLeft]);
+      // Shut, its outside lies on the folded screen, its corners as the folded body's.
+      expectGlued(across, 0, "cover", outside, radii.closed);
+    }
+  });
+
+  test("show the page flat and still behind the turned screen, the open one's where it lies open", () => {
+    const [x, y, width, height] = shots.open;
+    for (const shot of shots.frames.filter((frame) => shotPane(shots, frame) === "inner")) {
+      expect(shotPicture(shots, "inner", shotQuad(shot, "inner"))).toEqual({ x, y, width: width / 2, height });
+    }
+  });
+
+  test("slide the folded screen's page along with its hinge side, as big as it lies shut", () => {
+    const last = shots.frames.at(-1);
+    if (!last) throw new Error("no frames");
+    const [[left, top], , [right, bottom]] = shotQuad(last, "cover");
+    for (const shot of shots.frames.filter((frame) => shotPane(shots, frame) === "cover")) {
+      const quad = shotQuad(shot, "cover");
+      expect(shotPicture(shots, "cover", quad)).toEqual({ x: quad[0][0], y: top, width: right - left, height: bottom - top });
+    }
+  });
+
+  test("darken the turned screen past the page, above and below its free edge, the more the nearer it comes", () => {
+    const dark = (deg: number) => {
+      const shot = shots.frames.find((frame) => frame.deg === deg);
+      const pane = shot && shotPane(shots, shot);
+      if (!shot || !pane) throw new Error("no frame");
+      const quad = shotQuad(shot, pane);
+      return darkAt(shotWindow(quad, pane, shotPicture(shots, pane, quad)), pane, shotPicture(shots, pane, quad));
+    };
+    for (const flat of [dark(0), dark(180)]) {
+      expect(flat.top).toBeCloseTo(0, 6);
+      expect(flat.bottom).toBeCloseTo(0, 6);
+    }
+    // As much above as below, growing toward a right angle from either end.
+    for (const [nearer, further] of [[6, 30], [30, 60], [60, 84], [174, 150], [150, 120], [120, 96]] as const) {
+      const a = dark(nearer);
+      const b = dark(further);
+      expect(Math.abs(a.top - a.bottom)).toBeLessThan(0.1);
+      expect(a.top).toBeGreaterThan(0);
+      expect(b.top).toBeGreaterThan(a.top);
+    }
+    // Darkness only where the screen reaches past the page: none where it stays inside.
+    const picture = { x: 0, y: 0, width: 100, height: 100 };
+    expect(darkAt([[10, 10], [90, 10], [90, 90], [10, 90]], "inner", picture)).toEqual({ top: 0, bottom: 0 });
+    expect(darkAt([[0, -5], [100, 0], [100, 100], [0, 108]], "inner", picture)).toEqual({ top: 5, bottom: 8 });
+    expect(darkAt([[0, 0], [100, -5], [100, 108], [0, 100]], "cover", picture)).toEqual({ top: 5, bottom: 8 });
+  });
+
+  test("put the open screen's window on the page's hinge side, so no dark line runs down the hinge", () => {
+    const quad: Quad = [[100, 40], [1561.6, 60], [1561.6, 300], [100, 320]];
+    const picture = { x: 133.5, y: 50, width: 1426.5, height: 260 };
+    expect(shotWindow(quad, "inner", picture)).toEqual([[100, 40], [1560, 60], [1560, 300], [100, 320]]);
+    expect(shotWindow(quad, "cover", picture)).toBe(quad);
+  });
+
+  test("lay the page flat, never in perspective, turned a quarter held upright as the frames are", () => {
+    const size = { width: 300, height: 200 };
+    const picture = { x: 10, y: 20, width: 600, height: 800 };
+    for (const across of [true, false]) {
+      const matrix = flatMatrix(size, picture, across);
+      expect(matrix).toStartWith("matrix(");
+      const facing = quadFacing([[10, 20], [610, 20], [610, 820], [10, 820]], across);
+      const corners = [[0, 0], [300, 0], [300, 200], [0, 200]] as const;
+      corners.forEach(([x, y], index) => {
+        const seen = through(matrix, x, y);
+        expect(seen.x).toBeCloseTo(facing[index]?.[0] ?? NaN, 3);
+        expect(seen.y).toBeCloseTo(facing[index]?.[1] ?? NaN, 3);
+      });
+    }
+  });
+
+  test("lay the flat page and its window exactly where the device draws its screens, open and shut, either way it is held", () => {
+    const first = shots.frames[0];
+    const last = shots.frames.at(-1);
+    if (!first || !last) throw new Error("no frames");
+    for (const across of [true, false]) {
+      const { layout, inside, outside } = bezelled(across);
+      const half = across
+        ? { ...inside, width: layout.hinge - inside.x }
+        : { ...inside, y: layout.hinge, height: inside.y + inside.height - layout.hinge };
+      for (const [open, pane, shot, rect] of [[1, "inner", first, half], [0, "cover", last, outside]] as const) {
+        const model = shotsTransform(shots, layout, inside, outside, open);
+        const quad = shotQuad(shot, pane);
+        const picture = shotPicture(shots, pane, quad);
+        const size = { width: rect.width, height: rect.height };
+        const flat = flatMatrix(size, picture, across);
+        const seen = quadMap({ x: 0, y: 0, ...size }, quadFacing(shotWindow(quad, pane, picture), across));
+        if (!seen) throw new Error("no window");
+        for (const [x, y] of [[0, 0], [size.width, 0], [size.width, size.height], [0, size.height], [size.width / 2, size.height / 2]] as const) {
+          for (const onFrame of [through(flat, x, y), seen({ x, y })]) {
+            const shown = through(model, onFrame.x, onFrame.y);
+            expect(Math.abs(shown.x - (rect.x + x))).toBeLessThan(0.25);
+            expect(Math.abs(shown.y - (rect.y + y))).toBeLessThan(0.25);
+          }
+        }
+      }
+    }
+  });
+
+  test("keep the device under them on the render all the way, so the still half's live screen stays in its rendered hole", () => {
+    const [x, y, width, height] = shots.open;
+    const screen = [[x, y], [x + width, y], [x + width, y + height], [x, y + height]] as const;
+    for (const across of [true, false]) {
+      const { layout, inside, outside } = bezelled(across);
+      for (const posture of ["open", "closed"] as const) {
+        // At its own end the device does not move.
+        const end = shotsDrift(shots, layout, inside, outside, posture === "open" ? 1 : 0, posture);
+        expect(end.wide).toBeCloseTo(1, 9);
+        expect(end.tall).toBeCloseTo(1, 9);
+        expect(end.x).toBeCloseTo(0, 6);
+        expect(end.y).toBeCloseTo(0, 6);
+      }
+      for (const open of [0.2, 0.5, 0.9]) {
+        // The open screen, drawn open and moved on, lies where the render's does, within a hundredth of a px.
+        const drift = shotsDrift(shots, layout, inside, outside, open, "open");
+        const seen = boundsThrough(shotsTransform(shots, layout, inside, outside, open), screen);
+        const moved = {
+          x: inside.x * drift.wide + drift.x,
+          y: inside.y * drift.tall + drift.y,
+          width: inside.width * drift.wide,
+          height: inside.height * drift.tall,
+        };
+        for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(moved[key] - seen[key])).toBeLessThan(0.02);
+        // The render is a little smaller than the device between the ends: without moving it, they would part by px.
+        expect(Math.abs(seen.width - inside.width)).toBeGreaterThan((1 - open) * 8);
+      }
+    }
+  });
+
+  test("draw every layer at the angle of the frame shown, so between frames nothing moves, and at one all of it does", () => {
+    const all = shots.frames.map(() => true);
+    // Each frame shows its own angle, so the frame it shows is itself, and the ends are exact.
+    shots.frames.forEach((shot, index) => expect(shownAt(shots, all, shotOpen(shot))).toEqual({ at: index, open: shotOpen(shot) }));
+    expect([shownAt(shots, all, 1), shownAt(shots, all, 0)]).toEqual([{ at: 0, open: 1 }, { at: 180, open: 0 }]);
+    expect(shownAt(shots, all, 0.999).open).toBe(1);
+    expect(shownAt(shots, all, 0.001).open).toBe(0);
+    for (const across of [true, false]) {
+      const { layout, inside, outside } = bezelled(across);
+      /** Every value a layer is drawn by, with the hinge `open` of the way open. */
+      const drawn = (open: number) => {
+        const at = shownAt(shots, all, open).open;
+        return JSON.stringify([
+          foldFrame(layout, at),
+          shotsTransform(shots, layout, inside, outside, at),
+          shotsDrift(shots, layout, inside, outside, at, "open"),
+          shotsDrift(shots, layout, inside, outside, at, "closed"),
+          screenDim("inner", at),
+          screenDim("cover", at),
+          paneLook("inner", at),
+          paneLook("cover", at),
+          paneLook("inner", at, 0.4),
+          paneLook("cover", at, 0.4),
+          freeShades(at, 0.9),
+          screenLook(at, 12, 0.9),
+        ]);
+      };
+      let last = drawn(0);
+      let lastShot = shownAt(shots, all, 0).at;
+      let changes = 0;
+      // A slow hand, a fifth of a degree a frame.
+      for (let open = 0; open <= 1; open += 1 / 900) {
+        const now = drawn(open);
+        const shot = shownAt(shots, all, open).at;
+        if (shot === lastShot) expect(now).toBe(last);
+        else {
+          expect(now).not.toBe(last);
+          changes += 1;
+        }
+        last = now;
+        lastShot = shot;
+      }
+      expect(changes).toBe(180);
+    }
+  });
+
+  test("draw every layer at the angle of the nearest frame decoded, while the one the hinge is at is not, and at the hinge's own with none", () => {
+    const ready = shots.frames.map((shot) => shot.deg === 40 || shot.deg === 50);
+    // At 44 degrees the nearest decoded is 40, at 46 it is 50: nothing moves till then.
+    expect(shownAt(shots, ready, 1 - 44 / 180)).toEqual({ at: 40, open: 1 - 40 / 180 });
+    expect(shownAt(shots, ready, 1 - 42 / 180)).toEqual(shownAt(shots, ready, 1 - 30 / 180));
+    expect(shownAt(shots, ready, 1 - 46 / 180)).toEqual({ at: 50, open: 1 - 50 / 180 });
+    expect(shownAt(shots, [], 0.37)).toEqual({ at: null, open: 0.37 });
+  });
+
+  test("lie flat open and shut, their screens the rects their corners bound", () => {
+    const first = shots.frames[0];
+    const last = shots.frames.at(-1);
+    if (!first || !last) throw new Error("no frames");
+    const [[x0, y0], , [x2, y2]] = shotQuad(last, "cover");
+    expect(shotQuad(last, "cover")).toEqual([[x0, y0], [x2, y0], [x2, y2], [x0, y2]]);
+    expect(shotQuad(first, "inner")).toEqual(first.inner);
+    const turned = shots.frames[10];
+    if (!turned) throw new Error("no frame");
+    expect(shotQuad(turned, "cover")).toBe(turned.cover);
+  });
+});
