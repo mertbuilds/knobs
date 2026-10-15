@@ -23,5 +23,8 @@ apps/web/src/paraglide/
 apps/web/src/routeTree.gen.ts
 apps/web/worker-configuration.d.ts
 
+# dev: values saved by the fold tuning panel
+apps/web/.tune/
+
 # os
 .DS_Store

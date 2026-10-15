@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node ../../scripts/dev-tools-check.ts",
     "cf-typegen": "wrangler types",
     "deploy": "pnpm build && wrangler deploy",
     "dev": "vite dev",
@@ -30,7 +30,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
-    "devknobs": "0.1.2",
+    "devknobs": "0.2.0",
     "oxc-transform-react": "^0.148.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",

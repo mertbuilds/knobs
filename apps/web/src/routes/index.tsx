@@ -1,7 +1,6 @@
-import { colors, font, radius, shadow, spacing } from '@knobs/ui/tokens.stylex';
+import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
-import { createFileRoute } from '@tanstack/react-router';
-import type { DevknobsStatePatch } from 'devknobs';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import {
   ArrowUpRightIcon,
   BugIcon,
@@ -9,59 +8,58 @@ import {
   ClockIcon,
   CopyIcon,
   CrosshairIcon,
-  FoldHorizontalIcon,
   LanguagesIcon,
-  PaletteIcon,
   PointerIcon,
-  RotateCcwIcon,
   SmartphoneIcon,
   SunMoonIcon,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
-import { GitHubMark, NpmMark } from '../lib/brand-marks.tsx';
+import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
+import { Card, Cards, Line } from '../lib/card.tsx';
+import { ICON } from '../lib/icon.ts';
+import { Key, withKeys } from '../lib/keys.tsx';
 import { m } from '../paraglide/messages.js';
+import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
+import { openTour, watchKnobs } from '../tour/progress.ts';
+import { Tour } from '../tour/tour.tsx';
 
 export const Route = createFileRoute('/')({
-  component: Landing,
+  component: import.meta.env.DEV ? DevPage : Landing,
 });
+
+// Dev-only: a reference image in place of the page (`src/dev/reference.tsx`),
+// for `ref=<name>` in the address, on the top page and on the copy in a
+// device's frame, which loads the same address. The server reads the same
+// address, so both draw the same shell. A build drops all of this and the file
+// with it, and reads no `ref`.
+const Reference = import.meta.env.DEV ? lazy(() => import('../dev/reference.tsx')) : null;
+
+function DevPage() {
+  const name = useLocation({
+    select: (location) => new URLSearchParams(location.searchStr).get('ref'),
+  });
+  // On the page itself, however it was reached, the top page gives back the
+  // browser knob a reference page took.
+  useEffect(() => {
+    if (name === null && window.top === window) {
+      void import('../dev/refscreen.ts').then(({ leaveReference }) => leaveReference());
+    }
+  }, [name]);
+  return Reference !== null && name !== null && /^[a-z0-9-]+$/.test(name) ? (
+    <Suspense>
+      <Reference name={name} />
+    </Suspense>
+  ) : (
+    <Landing />
+  );
+}
 
 // The one breakpoint on the page. A device or a width puts the page in a frame
 // that size, so these columns collapse the way they do on a real phone.
 const WIDE = '@media (min-width: 640px)';
-
-type Knobs = typeof import('devknobs');
-
-let loading: Promise<Knobs> | undefined;
-let mounted = false;
-
-/**
- * devknobs is most of the page's JavaScript, so it loads after hydration
- * instead of in the entry chunk. One load for the whole page: whoever asks
- * first, the idle mount or a "try it" button pressed before it, starts it,
- * and the panel mounts once. Each call queues on the same promise, so mounts
- * and unmounts run in the order they were asked for.
- */
-function mountKnobs(): Promise<Knobs> {
-  loading ??= import('devknobs');
-  return loading.then((module) => {
-    if (!mounted) {
-      module.mount();
-      mounted = true;
-    }
-    return module;
-  });
-}
-
-function unmountKnobs(): void {
-  void loading?.then((module) => {
-    if (mounted) {
-      module.unmount();
-      mounted = false;
-    }
-  });
-}
 
 /** True once a visitor has turned a knob in this tab, so the stored state should apply at once. */
 function hasStoredKnobs(): boolean {
@@ -83,66 +81,6 @@ function whenIdle(task: () => void): () => void {
   }
   const id = setTimeout(task, 200);
   return () => clearTimeout(id);
-}
-
-// The mat colors in the order the button steps through them, blue first as
-// devknobs starts.
-const MATS = ['blue', 'green', 'magenta', 'purple', 'red', 'graphite'] as const;
-
-// devknobs 0.1.0 knobs. The pinned package's types predate them, so they are
-// spelled out here until it is bumped; the same fields there make this a no-op.
-type NewKnobs = { mat?: (typeof MATS)[number]; posture?: 'closed' | 'open' };
-type Patch = DevknobsStatePatch & NewKnobs;
-
-function readNew({ getState }: Knobs): NewKnobs {
-  return getState() as NewKnobs;
-}
-
-const DUO = 'iphone-duo';
-
-// Each "try it" button and the knobs it turns, built at click time so the
-// clock counts from the moment of the click.
-const DEMOS = {
-  arabic: () => ({ locale: { dir: 'system', lang: 'ar' } }),
-  duo: () => ({ device: DUO, posture: 'closed' }),
-  // Folds the Duo the other way, or picks it open from any other device.
-  fold: (knobs: Knobs) => {
-    const open = knobs.getState().device === DUO && readNew(knobs).posture === 'open';
-    return { device: DUO, posture: open ? 'closed' : 'open' };
-  },
-  iphone: () => ({ device: 'iphone-18-pro' }),
-  // The next mat color. The mat lies under a frame, so with none up an iPhone
-  // brings one, and the next press shows the splash.
-  mat: (knobs: Knobs) => {
-    const { device, width } = knobs.getState();
-    const next = MATS[(MATS.indexOf(readNew(knobs).mat ?? 'blue') + 1) % MATS.length];
-    return device === 'none' && width === 'full'
-      ? { device: 'iphone-18-pro', mat: next }
-      : { mat: next };
-  },
-  pixel: () => ({ device: 'pixel-10' }),
-  // The opposite of the scheme in use, so it shows on either system setting.
-  scheme: ({ getState }: Knobs) => {
-    const { scheme } = getState();
-    const dark =
-      scheme === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : scheme === 'dark';
-    return { scheme: dark ? 'light' : 'dark' };
-  },
-  // Real time, not `new Date()`: once a click has set the clock, the page's
-  // `Date` reads the emulated time, and a second click would add another day.
-  tomorrow: () => {
-    const now = new Date(performance.timeOrigin + performance.now());
-    const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9).getTime();
-    return { clock: { at, mode: 'offset', speed: 1 } };
-  },
-} satisfies Record<string, (knobs: Knobs) => Patch>;
-
-type Demo = keyof typeof DEMOS | 'reset';
-
-declare global {
-  interface Window {
-    knobsDemo?: (demo: Demo) => void;
-  }
 }
 
 // The devknobs host element. Its shadow root is open, so a click inside the
@@ -176,7 +114,7 @@ const styles = create({
   codeText: {
     flexGrow: 1,
     fontFamily: font.mono,
-    fontSize: 12.5,
+    fontSize: '0.78125rem',
     lineHeight: '1.375rem',
     margin: 0,
     minWidth: 0,
@@ -221,34 +159,6 @@ const styles = create({
     transitionTimingFunction: 'ease-out',
     width: 22,
   },
-  feature: {
-    backgroundColor: colors.card,
-    borderRadius: radius.row,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s1,
-    paddingBlock: '10px 12px',
-    paddingInline: spacing.s3,
-  },
-  featureDetail: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  featureName: {
-    fontSize: 13,
-    fontWeight: font.weightMedium,
-  },
-  features: {
-    display: 'grid',
-    gap: spacing.s2,
-    gridTemplateColumns: {
-      default: '1fr',
-      [WIDE]: '1fr 1fr',
-    },
-    margin: 0,
-  },
   footer: {
     borderTopColor: colors.border,
     borderTopStyle: 'solid',
@@ -256,7 +166,7 @@ const styles = create({
     columnGap: spacing.s6,
     display: 'flex',
     flexWrap: 'wrap',
-    fontSize: 13,
+    fontSize: '0.8125rem',
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
@@ -267,7 +177,7 @@ const styles = create({
     borderRadius: radius.base,
     borderStyle: 'solid',
     borderWidth: 1,
-    fontSize: 19,
+    fontSize: '1.1875rem',
     fontWeight: font.weightMedium,
     letterSpacing: '-0.01em',
     lineHeight: 1.4,
@@ -291,7 +201,7 @@ const styles = create({
     color: colors.grabBarText,
     columnGap: 6,
     display: 'inline-flex',
-    fontSize: 13,
+    fontSize: '0.8125rem',
     lineHeight: '1rem',
     paddingBlock: 6,
     paddingInline: spacing.s2,
@@ -301,7 +211,7 @@ const styles = create({
   },
   hint: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     margin: 0,
   },
   hintItem: {
@@ -327,21 +237,6 @@ const styles = create({
   installCode: {
     alignSelf: 'flex-start',
     maxWidth: '100%',
-  },
-  // The panel's key chip: a hairline box around the key, nothing else.
-  kbd: {
-    borderColor: colors.border,
-    borderRadius: radius.base,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    boxSizing: 'border-box',
-    display: 'inline-block',
-    fontFamily: 'inherit',
-    fontSize: '0.85em',
-    lineHeight: 1.4,
-    minWidth: '1.6em',
-    paddingInline: 3,
-    textAlign: 'center',
   },
   limits: {
     display: 'flex',
@@ -378,7 +273,7 @@ const styles = create({
   },
   note: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     margin: 0,
   },
   page: {
@@ -387,7 +282,7 @@ const styles = create({
     display: 'flex',
     flexDirection: 'column',
     fontFamily: font.family,
-    fontSize: 15,
+    fontSize: '0.9375rem',
     gap: spacing.s12,
     lineHeight: 1.6,
     marginInline: 'auto',
@@ -406,54 +301,9 @@ const styles = create({
   // Small and calm, like the panel's own labels.
   sectionHeading: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
     fontWeight: font.weightRegular,
     margin: 0,
-  },
-  // A small panel: hairline, 13 round, rows 4 inside it, so 8 round.
-  seen: {
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
-    borderRadius: radius.panel,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    display: 'grid',
-    fontSize: 13,
-    gap: 1,
-    margin: 0,
-    maxWidth: 400,
-    padding: spacing.s1,
-  },
-  seenLabel: {
-    color: colors.muted,
-    flexShrink: 0,
-  },
-  seenRow: {
-    alignItems: 'baseline',
-    backgroundColor: {
-      ':hover': colors.card,
-      default: 'transparent',
-    },
-    borderRadius: radius.row,
-    columnGap: spacing.s2,
-    display: 'flex',
-    paddingBlock: spacing.s1,
-    paddingInline: '10px 8px',
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color',
-  },
-  seenTitle: {
-    color: colors.muted,
-    fontSize: 13,
-    margin: 0,
-  },
-  seenValue: {
-    flexGrow: 1,
-    fontVariantNumeric: 'tabular-nums',
-    margin: 0,
-    minWidth: 0,
-    overflowWrap: 'anywhere',
-    textAlign: 'end',
   },
   self: {
     alignSelf: 'flex-start',
@@ -465,51 +315,10 @@ const styles = create({
   },
   snippetLabel: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: '0.8125rem',
   },
   text: {
     margin: 0,
-  },
-  // The panel's preset chip: the track ground, raised with its lift on hover.
-  tryButton: {
-    backgroundColor: {
-      ':hover': colors.raised,
-      default: colors.track,
-    },
-    borderRadius: radius.base,
-    borderStyle: 'none',
-    boxShadow: {
-      ':hover': shadow.lift,
-      default: 'none',
-    },
-    color: colors.fg,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    fontSize: 13,
-    height: 28,
-    outlineColor: colors.muted,
-    outlineOffset: 2,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    paddingBlock: 0,
-    paddingInline: '8px 10px',
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color, box-shadow',
-    transitionTimingFunction: 'ease-out',
-  },
-  tryButtons: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  // Devices on one line, the other knobs on the next.
-  tryGroups: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
   },
   // An icon beside its label, centered on the line, a fixed gap apart.
   withIcon: {
@@ -517,127 +326,30 @@ const styles = create({
     columnGap: spacing.s2,
     display: 'inline-flex',
   },
+  // The mark beside the name, centered on its line.
   wordmark: {
-    fontSize: 19,
+    alignItems: 'center',
+    columnGap: 6,
+    display: 'flex',
+    fontSize: '1.1875rem',
     fontWeight: font.weightMedium,
     letterSpacing: '-0.01em',
     margin: 0,
   },
 });
 
-// One icon size and stroke for the page, so they sit with its regular weight.
-const ICON = { 'aria-hidden': true, size: 16, strokeWidth: 1.5 } as const;
-
 function Feature({ detail, icon: Icon, name }: { detail: string; icon: LucideIcon; name: string }) {
   return (
-    <div {...props(styles.feature)}>
-      <dt {...props(styles.featureName, styles.withIcon)}>
-        <Icon {...ICON} />
-        {name}
-      </dt>
-      <dd {...props(styles.featureDetail)}>{detail}</dd>
-    </div>
-  );
-}
-
-/**
- * Turns the knobs for one button, through the public API only, and opens the
- * panel so the visitor sees the row it set and its `×`.
- */
-function runDemo(demo: Demo) {
-  track('try_click', { demo });
-  void mountKnobs().then((module) => {
-    if (demo === 'reset') {
-      module.reset();
-      return;
-    }
-    module.setState({ ...DEMOS[demo](module), panel: { open: true } });
-  });
-}
-
-/**
- * Inside a device's frame this page runs a second time, and the copy of
- * devknobs there only follows the page above. So a button pressed on the phone
- * screen hands the click up to the page that owns the panel.
- */
-function pressDemo(demo: Demo) {
-  let owner: Window['knobsDemo'];
-  try {
-    owner = window.parent === window ? undefined : window.parent.knobsDemo;
-  } catch {
-    // A parent on another origin, such as an embed, answers with an error.
-    owner = undefined;
-  }
-  (owner ?? runDemo)(demo);
-}
-
-function TryButton({ demo, icon: Icon, label }: { demo: Demo; icon: LucideIcon; label: string }) {
-  return (
-    <button
-      {...props(styles.tryButton, styles.withIcon)}
-      onClick={() => pressDemo(demo)}
-      type="button"
+    <Card
+      title={
+        <>
+          <Icon {...ICON} />
+          {name}
+        </>
+      }
     >
-      <Icon {...ICON} />
-      {label}
-    </button>
-  );
-}
-
-type Seen = {
-  language: string;
-  pointer: string;
-  scheme: string;
-  time: string;
-  width: string;
-  zone: string;
-};
-
-/** What the page's own code reads right now, so each knob shows up as a value. */
-function readSeen(): Seen {
-  const format = new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'short',
-    weekday: 'short',
-  });
-  return {
-    language: navigator.language,
-    pointer: matchMedia('(pointer: coarse)').matches
-      ? m.seen_pointer_touch()
-      : m.seen_pointer_mouse(),
-    scheme: matchMedia('(prefers-color-scheme: dark)').matches
-      ? m.seen_scheme_dark()
-      : m.seen_scheme_light(),
-    time: format.format(new Date()),
-    width: m.seen_width_value({ width: String(window.innerWidth) }),
-    zone: format.resolvedOptions().timeZone,
-  };
-}
-
-function SeenRow({ label, value }: { label: string; value: string | undefined }) {
-  return (
-    <div {...props(styles.seenRow)}>
-      <dt {...props(styles.seenLabel)}>{label}</dt>
-      <dd {...props(styles.seenValue)}>{value}</dd>
-    </div>
-  );
-}
-
-/**
- * Text with keys in it, each written `[[key]]` in the message, drawn as the
- * panel's key chips.
- */
-function withKeys(text: string) {
-  return text.split(/\[\[(.+?)\]\]/).map((part, index) =>
-    index % 2 === 1 ? (
-      <kbd {...props(styles.kbd)} key={index}>
-        {part}
-      </kbd>
-    ) : (
-      part
-    ),
+      <Line>{detail}</Line>
+    </Card>
   );
 }
 
@@ -654,7 +366,7 @@ function Hints() {
     <ul {...props(styles.hints)}>
       {hints.map(([key, word]) => (
         <li {...props(styles.hintItem)} key={word}>
-          <kbd {...props(styles.kbd)}>{key}</kbd>
+          <Key>{key}</Key>
           {word}
         </li>
       ))}
@@ -672,31 +384,6 @@ function GrabDemo() {
         {m.grab_demo_component()}
       </span>
     </div>
-  );
-}
-
-function SeenList() {
-  // Empty on the server and on the first client render, so hydration matches.
-  const [seen, setSeen] = useState<Seen | null>(null);
-  useEffect(() => {
-    const update = () => setSeen(readSeen());
-    update();
-    const timer = setInterval(update, 1000);
-    window.addEventListener('resize', update);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-  return (
-    <dl {...props(styles.seen)}>
-      <SeenRow label={m.seen_width()} value={seen?.width} />
-      <SeenRow label={m.seen_time()} value={seen?.time} />
-      <SeenRow label={m.seen_zone()} value={seen?.zone} />
-      <SeenRow label={m.seen_language()} value={seen?.language} />
-      <SeenRow label={m.seen_scheme()} value={seen?.scheme} />
-      <SeenRow label={m.seen_pointer()} value={seen?.pointer} />
-    </dl>
   );
 }
 
@@ -836,21 +523,23 @@ function Landing() {
   // the browser is idle; a reload with knobs already set loads it at once, so
   // the stored scheme or language does not wait.
   useEffect(() => {
+    // Before the panel, so the copy of this page in a device's frame finds the
+    // tour on the page above.
+    const closeTour = openTour();
+    const start = () => void mountKnobs().then(watchKnobs);
     let cancel: (() => void) | undefined;
     if (hasStoredKnobs()) {
-      void mountKnobs();
+      start();
     } else {
-      cancel = whenIdle(() => void mountKnobs());
+      cancel = whenIdle(start);
     }
-    // The copy of this page inside a device's frame hands its buttons up here.
-    window.knobsDemo = runDemo;
     // One delegated listener for the whole page, panel included. Passive: it
     // never cancels the click it is reading.
     document.addEventListener('click', trackClick, { passive: true });
     return () => {
       cancel?.();
       document.removeEventListener('click', trackClick);
-      delete window.knobsDemo;
+      closeTour();
       unmountKnobs();
     };
   }, []);
@@ -858,7 +547,10 @@ function Landing() {
   return (
     <main {...props(styles.page)}>
       <header {...props(styles.section)}>
-        <h1 {...props(styles.wordmark)}>{m.app_name()}</h1>
+        <h1 {...props(styles.wordmark)}>
+          <KnobsMark size={20} />
+          {m.app_name()}
+        </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>
         <CodeBox
           code={m.install_command()}
@@ -869,33 +561,16 @@ function Landing() {
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
-        <p {...props(styles.text)}>{m.how_frame()}</p>
-        <p {...props(styles.text)}>{m.how_patch()}</p>
-        <p {...props(styles.text)}>{m.how_setup()}</p>
-      </section>
+      <Tour
+        install={
+          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
+        }
+      />
 
       <section {...props(styles.section)}>
-        <h2 {...props(styles.sectionHeading)}>{m.try_title()}</h2>
-        <p {...props(styles.text)}>{m.try_intro()}</p>
-        <div {...props(styles.tryGroups)}>
-          <div {...props(styles.tryButtons)}>
-            <TryButton demo="iphone" icon={SmartphoneIcon} label={m.try_iphone()} />
-            <TryButton demo="pixel" icon={SmartphoneIcon} label={m.try_pixel()} />
-            <TryButton demo="duo" icon={SmartphoneIcon} label={m.try_duo()} />
-            <TryButton demo="fold" icon={FoldHorizontalIcon} label={m.try_fold()} />
-          </div>
-          <div {...props(styles.tryButtons)}>
-            <TryButton demo="tomorrow" icon={ClockIcon} label={m.try_tomorrow()} />
-            <TryButton demo="scheme" icon={SunMoonIcon} label={m.try_scheme()} />
-            <TryButton demo="arabic" icon={LanguagesIcon} label={m.try_arabic()} />
-            <TryButton demo="mat" icon={PaletteIcon} label={m.try_mat()} />
-            <TryButton demo="reset" icon={RotateCcwIcon} label={m.try_reset()} />
-          </div>
-        </div>
-        <p {...props(styles.seenTitle)}>{m.seen_title()}</p>
-        <SeenList />
+        <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
+        <p {...props(styles.text)}>{withKeys(m.stage_line())}</p>
+        <Stage />
       </section>
 
       <section {...props(styles.section)}>
@@ -970,7 +645,7 @@ function Landing() {
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.features_title()}</h2>
-        <dl {...props(styles.features)}>
+        <Cards>
           <Feature
             detail={m.feature_devices_detail()}
             icon={SmartphoneIcon}
@@ -985,7 +660,7 @@ function Landing() {
           />
           <Feature detail={m.feature_look_detail()} icon={SunMoonIcon} name={m.feature_look()} />
           <Feature detail={m.feature_debug_detail()} icon={BugIcon} name={m.feature_debug()} />
-        </dl>
+        </Cards>
         <p {...props(styles.text, styles.afterFeatures)}>{m.features_panel()}</p>
         <Hints />
         <a
@@ -995,6 +670,13 @@ function Landing() {
           {m.features_readme()}
           <ArrowUpRightIcon {...ICON} />
         </a>
+      </section>
+
+      <section {...props(styles.section)}>
+        <h2 {...props(styles.sectionHeading)}>{m.how_title()}</h2>
+        <p {...props(styles.text)}>{m.how_frame()}</p>
+        <p {...props(styles.text)}>{m.how_patch()}</p>
+        <p {...props(styles.text)}>{m.how_setup()}</p>
       </section>
 
       <section {...props(styles.section)}>

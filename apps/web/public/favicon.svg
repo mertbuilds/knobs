@@ -1,16 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <style>
-    text {
-      fill: #000000;
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      font-size: 26px;
-      font-weight: 500;
-    }
-    @media (prefers-color-scheme: dark) {
-      text {
-        fill: #ffffff;
-      }
-    }
-  </style>
-  <text x="16" y="25" text-anchor="middle">k</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <title>knobs</title>
+  <defs>
+    <filter id="knob-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" />
+    </filter>
+    <linearGradient id="knob-top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b3b3a" />
+      <stop offset="1" stop-color="#262625" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="44" fill="#d6d6d2" />
+  <g stroke="#1b1a17" stroke-width="2.2">
+    <line x1="47.67" y1="152.33" x2="42.02" y2="157.98" />
+    <line x1="29.62" y1="122.87" x2="22.01" y2="125.34" />
+    <line x1="26.91" y1="88.42" x2="19.01" y2="87.17" />
+    <line x1="40.13" y1="56.5" x2="33.66" y2="51.8" />
+    <line x1="66.4" y1="34.07" x2="62.77" y2="26.94" />
+    <line x1="100" y1="26" x2="100" y2="18" />
+    <line x1="133.6" y1="34.07" x2="137.23" y2="26.94" />
+    <line x1="159.87" y1="56.5" x2="166.34" y2="51.8" />
+    <line x1="173.09" y1="88.42" x2="180.99" y2="87.17" />
+    <line x1="170.38" y1="122.87" x2="177.99" y2="125.34" />
+    <line x1="152.33" y1="152.33" x2="157.98" y2="157.98" />
+  </g>
+  <circle cx="100" cy="106" r="60" fill="#000" opacity="0.28" filter="url(#knob-shadow)" />
+  <circle cx="100" cy="100" r="58" fill="#1f1f1e" />
+  <circle cx="100" cy="100" r="51" fill="url(#knob-top)" />
+  <line x1="112.86" y1="84.68" x2="130.21" y2="64" stroke="#f4f3ef" stroke-width="5.5" stroke-linecap="round" />
+  <circle cx="165.05" cy="165.05" r="4.5" fill="#f25c1b" />
 </svg>
