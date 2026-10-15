@@ -124,6 +124,10 @@ const styles = create({
     paddingInline: '8px',
     whiteSpace: 'pre',
   },
+  // Words in place of the code: the page's font, not the code's.
+  codeLabel: {
+    fontFamily: font.family,
+  },
   // A long single line, such as a grab line, breaks instead of scrolling.
   codeWrap: {
     overflowWrap: 'anywhere',
@@ -392,21 +396,28 @@ function GrabDemo() {
  * A code box with a copy button at its right edge. The code stays plain text,
  * selectable by hand. Where the clipboard refuses the write (an insecure
  * context, an old browser), the code is selected instead, ready to copy.
+ * With `label`, the box shows the label in place of code too long to show,
+ * and shows the code only where the clipboard refuses it.
  */
 function CodeBox({
   code,
   copyLabel,
+  label,
   name,
   style,
   wrap = false,
 }: {
   code: string;
   copyLabel: string;
+  label?: string;
   name: string;
   style?: StyleXStyles;
   wrap?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  // How many times the clipboard refused the code, each one selecting it once it shows.
+  const [refused, setRefused] = useState(0);
+  const showCode = label === undefined || refused > 0;
   const text = useRef<HTMLPreElement>(null);
   useEffect(() => {
     if (!copied) {
@@ -415,6 +426,11 @@ function CodeBox({
     const timer = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(timer);
   }, [copied]);
+  useEffect(() => {
+    if (refused > 0 && text.current !== null) {
+      getSelection()?.selectAllChildren(text.current);
+    }
+  }, [refused]);
   const copy = () => {
     track('copy_click', { snippet: name });
     // Inside a promise, so a missing `navigator.clipboard` rejects too.
@@ -422,17 +438,16 @@ function CodeBox({
       .then(() => navigator.clipboard.writeText(code))
       .then(
         () => setCopied(true),
-        () => {
-          if (text.current !== null) {
-            getSelection()?.selectAllChildren(text.current);
-          }
-        },
+        () => setRefused((count) => count + 1),
       );
   };
   return (
     <div {...props(styles.code, style)}>
-      <pre {...props(styles.codeText, wrap && styles.codeWrap)} ref={text}>
-        {code}
+      <pre
+        {...props(styles.codeText, wrap && styles.codeWrap, !showCode && styles.codeLabel)}
+        ref={text}
+      >
+        {showCode ? code : label}
       </pre>
       <button {...props(styles.copy)} aria-label={copyLabel} onClick={copy} type="button">
         {copied ? <CheckIcon {...ICON} /> : <CopyIcon {...ICON} />}
@@ -559,12 +574,30 @@ function Landing() {
           name="install"
           style={styles.installCode}
         />
+        {/* The same prompt is in packages/devknobs/README.md under install; change both together. */}
+        <CodeBox
+          code={m.install_prompt()}
+          copyLabel={m.copy_install_prompt()}
+          label={m.copy_install_prompt()}
+          name="install_prompt"
+          style={styles.installCode}
+          wrap
+        />
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
       <Tour
         install={
-          <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
+          <div {...props(styles.snippet)}>
+            <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
+            <CodeBox
+              code={m.install_prompt()}
+              copyLabel={m.copy_install_prompt()}
+              label={m.copy_install_prompt()}
+              name="install_prompt_tour"
+              wrap
+            />
+          </div>
         }
       />
 

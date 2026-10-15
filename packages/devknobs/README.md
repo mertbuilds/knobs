@@ -10,6 +10,25 @@ runtime dependencies.
 npm i -D devknobs
 ```
 
+with an ai agent: paste this prompt into claude code, codex or cursor, and it
+installs devknobs and mounts it in development only. it is the copy prompt
+button on https://knobs.dev too.
+
+<!-- the same text is the install_prompt message in apps/web/messages/en.json; change both together. -->
+
+```
+Install devknobs in this project. It is a dev-only panel that emulates browser preferences from inside the page. Docs: https://github.com/mertbuilds/knobs/tree/main/packages/devknobs
+
+1. Detect the package manager from the lockfile and add devknobs as a dev dependency (npm i -D devknobs, or the pnpm, yarn or bun equivalent).
+2. Mount it once, on the client, in development only:
+- Next.js: in the root layout, load DevKnobs from "devknobs/react" with next/dynamic and ssr: false, only when process.env.NODE_ENV === "development", as the usage section of the docs shows.
+- Everything else (Vite, TanStack Start, React Router, SvelteKit, a plain page): call if (import.meta.env.DEV) import("devknobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
+3. Keep devknobs out of production builds. A static import stays in the bundle even behind a dev check, so gate the import itself as above. If the project has a build script, run it and check that the output has no devknobs.
+4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/devknobs/dist/early.global.js"></script>
+5. Change nothing else in the project.
+6. Then tell me what you changed and how to open the panel: press Shift+K or click the handle on the right edge of the window. In the open panel, / searches the knobs. Shift+G grabs an element.
+```
+
 ## usage
 
 three ways in. all of them are meant for dev only, so gate them yourself.
