@@ -109,8 +109,8 @@ importers:
         specifier: ^6.1.1
         version: 6.1.1(babel-plugin-react-compiler@1.0.0)(oxc-transform-react@0.148.0)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       devknobs:
-        specifier: 0.1.2
-        version: 0.1.2(react@19.2.8)
+        specifier: 0.2.0
+        version: 0.2.0(react@19.2.8)
       oxc-transform-react:
         specifier: ^0.148.0
         version: 0.148.0
@@ -2864,8 +2864,8 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  devknobs@0.1.2:
-    resolution: {integrity: sha512-gqm3DkiwxybL1H9K+O07OwUFuYag8eqD+Xt/kXbhgLN+CgU85RgvIPqG7NGuYeqhz0w+vYe25hXn0TLkgCHefA==}
+  devknobs@0.2.0:
+    resolution: {integrity: sha512-vFsvuROmXKDQq+7tZ08TZ0jUy4uqq9enupRI/RDI5A1NR4PSHXi4NcTLcQQ1S8a4W4QL/Z3dTzjqKKA2t5pYsg==}
     peerDependencies:
       react: '>=18'
     peerDependenciesMeta:
@@ -6664,7 +6664,7 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  devknobs@0.1.2(react@19.2.8):
+  devknobs@0.2.0(react@19.2.8):
     optionalDependencies:
       react: 19.2.8
 
