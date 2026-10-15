@@ -118,7 +118,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - The `devknobs` npm package, moved here from mertbuilds/devknobs with its git history. Vanilla TS, zero runtime dependencies, React optional (`devknobs/react`). Its user docs are `packages/devknobs/README.md`; its release notes are `packages/devknobs/CHANGELOG.md`.
 - It keeps bun as its build and test runner, so bun must be installed (CI pins the version in `oven-sh/setup-bun`). Its dev dependencies install through pnpm with the rest of the workspace; there is no `bun.lock`.
 - `pnpm --filter devknobs build` writes `dist/` (`scripts/bezelurls.ts` regenerates `src/engine/bezelurls.ts` first; `scripts/tunefree.ts` fails a build that holds the fold tuning tools). `pnpm --filter devknobs test` runs `bun test`, `pnpm --filter devknobs typecheck` runs its own `tsc` (TypeScript 5, not the root's 7). turbo runs all three with the rest.
-- Root oxlint and oxfmt skip `packages/devknobs`: it has its own style (double quotes, long lines) and its own checks. Do not reformat it to the root's rules.
+- Root oxlint and oxfmt, and the lefthook pre-commit jobs, skip `packages/devknobs`: it has its own style (double quotes, long lines) and its own checks. Do not reformat it to the root's rules.
 - Release: bump `version` in `packages/devknobs/package.json` and add the `CHANGELOG.md` entry, `pnpm --filter devknobs build`, then `npm publish` from `packages/devknobs`. Check the file list with `npm pack --dry-run` first.
 - `bun run link <app-dir>` / `bun run unlink <app-dir>` (from `packages/devknobs`) copy a local build into another app's `node_modules` to try it there. The site does not need it: it uses the workspace package.
 
