@@ -5,6 +5,13 @@
   "license": "MIT",
   "author": "Mert Duzgun",
   "description": "drop-in dev panel for emulating browser preferences, locale, geolocation and layout knobs from inside the page",
+  "homepage": "https://knobs.dev",
+  "bugs": "https://github.com/mertbuilds/knobs/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mertbuilds/knobs.git",
+    "directory": "packages/devknobs"
+  },
   "type": "module",
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",

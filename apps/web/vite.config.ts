@@ -1,48 +1,27 @@
-import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { unplugin as stylex } from '@stylexjs/unplugin';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import react from '@vitejs/plugin-react';
-import { build, defineConfig, type Plugin, searchForWorkspaceRoot } from 'vite';
-import web from './package.json' with { type: 'json' };
+import { build, defineConfig, type Plugin } from 'vite';
 import { tuneEndpoint } from './vite.tune.ts';
 
-const repoRoot = resolve(import.meta.dirname, '../..');
-
-// The dev server runs devknobs from its local checkout, so the site tests the
-// version in the works: DEVKNOBS_PATH (absolute, or relative to the repo root),
-// else `devknobs` beside this checkout, which also holds for `knobs.dev.<branch>`
-// worktrees. Builds keep the pinned npm package. The early script
-// (`devknobs/early?raw`) is built from the checkout's current source too.
-function localDevknobs(): Plugin {
-  const wanted = resolve(repoRoot, process.env.DEVKNOBS_PATH ?? '../devknobs');
-  const root = existsSync(resolve(wanted, 'src/index.ts')) ? realpathSync(wanted) : null;
+// The dev server runs devknobs from its source in packages/devknobs, so an edit
+// there reloads the page with no build. Builds use the package's dist, which
+// turbo builds first. The early script (`devknobs/early?raw`) is built from the
+// current source too.
+function devknobsSource(): Plugin {
+  const root = resolve(import.meta.dirname, '../../packages/devknobs');
+  const early = '\0devknobs-early';
   return {
     apply: (_config, { command, isPreview }) => command === 'serve' && !isPreview,
-    config() {
-      if (!root) {
-        return;
-      }
-      return {
-        resolve: { alias: [{ find: /^devknobs$/, replacement: resolve(root, 'src/index.ts') }] },
-        server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), root] } },
-      };
-    },
-    configResolved({ logger }) {
-      if (root) {
-        logger.info(`devknobs: local ${root}`);
-        return;
-      }
-      logger.info(`devknobs: npm ${web.devDependencies.devknobs} (no local checkout at ${wanted})`);
-    },
+    config: () => ({
+      resolve: { alias: [{ find: /^devknobs$/, replacement: resolve(root, 'src/index.ts') }] },
+    }),
     configureServer(server) {
-      if (!root) {
-        return;
-      }
       // The source asks for its device images beside src/engine, where the
-      // build copies them; in the checkout they sit in assets/bezels.
+      // build copies them; in the package they sit in assets/bezels.
       const from = `/@fs${root}/src/engine/bezels/`;
       server.middlewares.use((req, _res, next) => {
         if (req.url?.startsWith(from)) {
@@ -51,10 +30,10 @@ function localDevknobs(): Plugin {
         next();
       });
     },
-    // Before Vite's own `?raw` loader, which would read the npm package's dist.
+    // Before Vite's own `?raw` loader, which would read the package's dist.
     enforce: 'pre',
     async load(id) {
-      if (!root || !/\/devknobs\/dist\/early\.global\.js\?raw$/.test(id)) {
+      if (id !== early) {
         return;
       }
       const result = await build({
@@ -80,14 +59,15 @@ function localDevknobs(): Plugin {
       }
       return `export default ${JSON.stringify(chunk.code)};`;
     },
-    name: 'local-devknobs',
+    name: 'devknobs-source',
+    resolveId: (id) => (id === 'devknobs/early?raw' ? early : undefined),
   };
 }
 
 export default defineConfig({
   plugins: [
     tuneEndpoint(resolve(import.meta.dirname, '.tune')),
-    localDevknobs(),
+    devknobsSource(),
     cloudflare({ viteEnvironment: { name: 'ssr' } }),
     tanstackStart(),
     react({ compiler: true }),
