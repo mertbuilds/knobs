@@ -147,6 +147,10 @@ const styles = create({
     transitionTimingFunction: 'ease-out',
     width: 22,
   },
+  // The maker, at the footer's right end, also on a line of its own where the links fill the width.
+  credit: {
+    marginInlineStart: 'auto',
+  },
   footer: {
     borderTopColor: colors.border,
     borderTopStyle: 'solid',
@@ -486,7 +490,7 @@ function Landing() {
         </a>
         <a
           href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
-          {...props(styles.link)}
+          {...props(styles.link, styles.credit)}
         >
           {m.link_mertbuilds()}
         </a>
