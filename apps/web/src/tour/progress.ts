@@ -18,7 +18,7 @@ export type Progress = {
    * at the panel's search for a moment, where its list of knobs did not open.
    */
   readonly phase: 'end' | 'explore' | 'off' | 'on';
-  /** The page in the frame was just scrolled, so the tour stays on the browser's bars a while. */
+  /** The page in the frame was just scrolled, so the tour stays on the browser's bars a moment. */
   readonly watching: boolean;
 };
 
@@ -44,12 +44,12 @@ declare global {
 // times a second, and only while the tour shows.
 const LOOK_EVERY = 120;
 
-// How far the page in the frame has to travel before it counts as a scroll.
-const SCROLL_FAR = 200;
+// How far the page in the frame has to travel before it counts as a scroll: one
+// wheel notch or one trackpad flick is enough, a pixel of layout jitter is not.
+const SCROLL_FAR = 8;
 
-// How long the tour stays on the bars after the last scroll it heard of, and at most, in ms.
-const WATCH_AFTER = 2000;
-const WATCH_MOST = 6000;
+// How long the tour stays on the browser's bars after the scroll, in ms, before it moves on.
+const WATCH_FOR = 1000;
 
 // How long the tour points at the panel's search when its list of knobs did not open, in ms.
 const EXPLORE_FOR = 4000;
@@ -67,8 +67,6 @@ let knobs: Knobs | undefined;
 let matAtStart: string | undefined;
 let looking: ReturnType<typeof setInterval> | undefined;
 let watchTimer: ReturnType<typeof setTimeout> | undefined;
-// When the watch of the bars ends at the latest, however long the page is scrolled.
-let watchEnd = 0;
 let exploreTimer: ReturnType<typeof setTimeout> | undefined;
 // The owner's first-impression mode: nothing is read or kept, so the tour always starts.
 let fresh = false;
@@ -139,16 +137,13 @@ function complete(stop: StopId): void {
   emit();
 }
 
-/** Stay on the bars until the page has been still for a while, and never past the watch's end. */
-function keepWatching(): void {
+/** Stay on the bars a moment, however the page is scrolled meanwhile, then move on. */
+function watchBars(): void {
   clearTimeout(watchTimer);
-  watchTimer = setTimeout(
-    () => {
-      progress = { ...progress, watching: false };
-      emit();
-    },
-    Math.max(0, Math.min(WATCH_AFTER, watchEnd - performance.now())),
-  );
+  watchTimer = setTimeout(() => {
+    progress = { ...progress, watching: false };
+    emit();
+  }, WATCH_FOR);
 }
 
 /** Is a phone up with its browser's bars around the page? */
@@ -247,19 +242,13 @@ const local: Owner = {
       if (knobs === undefined || !hasBars(knobs)) {
         return;
       }
-      // The page is still being scrolled: the bars are still worth the look.
-      if (progress.watching) {
-        keepWatching();
-        return;
-      }
       if (progress.done.includes('scroll')) {
         return;
       }
       complete('scroll');
       if (progress.phase === 'on' && progress.done.includes('scroll')) {
         progress = { ...progress, watching: true };
-        watchEnd = performance.now() + WATCH_MOST;
-        keepWatching();
+        watchBars();
         emit();
       }
       return;
@@ -355,10 +344,6 @@ export function openTour(): () => void {
   let from = window.scrollY;
   const onScroll = () => {
     const now = to.snapshot();
-    if (now.watching) {
-      // Each one keeps the tour on the bars a little longer.
-      to.report({ type: 'scroll' });
-    }
     // Not asked for yet, or done: the scroll measures from here.
     if (now.phase !== 'on' || now.done.includes('scroll')) {
       from = window.scrollY;

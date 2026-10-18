@@ -263,6 +263,9 @@ export function Tour({ install }: { install: ReactNode }) {
       <Layer
         aim={aim}
         boxed={!ended}
+        // Only at the first stop, until the panel opens: from there the panel and the page are the
+        // visitor's to use.
+        dim={progress.phase === 'on' && progress.done.length === 0}
         pulseKey={exploring ? 'explore' : progress.watching ? 'bars' : (stop ?? 'end')}
         said={ended ? m.tour_copied() : (line ?? '')}
         strong={say !== null && ON_SCREEN.has(say)}

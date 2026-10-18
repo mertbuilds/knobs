@@ -1,9 +1,12 @@
-import { colors, font } from '@knobs/ui/tokens.stylex';
+import { colors, font, palette } from '@knobs/ui/tokens.stylex';
 import { create, keyframes, props } from '@stylexjs/stylex';
 import { type ReactNode, useEffect, useEffectEvent, useRef } from 'react';
 import type { Aim } from './targets.ts';
 
 const CALM = '@media (prefers-reduced-motion: reduce)';
+const DARK = '@media (prefers-color-scheme: dark)';
+// A mouse or a trackpad: a desktop, where the window has room for a dimmed page around the target.
+const FINE = '@media (pointer: fine)';
 
 // How often the target is looked up again, in ms. Its place is read every frame.
 const AIM_EVERY = 150;
@@ -56,6 +59,31 @@ const styles = create({
   boxStrong: {
     borderColor: colors.accent,
     boxShadow: `0 0 0 1px ${colors.grabBarText}, 0 0 0 4px color-mix(in srgb, ${colors.accent} 35%, transparent)`,
+  },
+  // Everything but the frame, dimmed as the demo's dialogs dim the page behind them: a shadow
+  // spread over the whole window from the frame's edge, so it takes no pointer and hides no
+  // target. A desktop only.
+  dim: {
+    borderRadius: 'inherit',
+    boxShadow: {
+      default: 'none',
+      [FINE]: {
+        [DARK]: `0 0 0 200vmax color-mix(in srgb, ${colors.track} 70%, transparent)`,
+        default: `0 0 0 200vmax color-mix(in srgb, ${palette.ink} 40%, transparent)`,
+      },
+    },
+    inset: 0,
+    opacity: 0,
+    position: 'absolute',
+    transitionDuration: {
+      [CALM]: '0s',
+      default: '200ms',
+    },
+    transitionProperty: 'opacity',
+    transitionTimingFunction: 'ease-out',
+  },
+  dimOn: {
+    opacity: 1,
   },
   // Read by screen readers, never drawn.
   hidden: {
@@ -302,6 +330,7 @@ export function Layer({
   aim,
   boxed,
   children,
+  dim,
   pulseKey,
   said,
   strong,
@@ -310,6 +339,8 @@ export function Layer({
   /** Draw the frame around the target, or only stand beside it. */
   boxed: boolean;
   children: ReactNode;
+  /** Dim the window around the frame, while the visitor finds their bearings. */
+  dim: boolean;
   /** A new one sends the ring out once more. */
   pulseKey: string;
   /** What assistive tech is told, once per change. */
@@ -469,6 +500,7 @@ export function Layer({
   return (
     <div {...props(styles.layer)} data-devknobs="tour" ref={layer}>
       <div {...props(styles.box, strong && styles.boxStrong)} aria-hidden="true" ref={box}>
+        <span {...props(styles.dim, dim && styles.dimOn)} />
         <span {...props(styles.pulse)} key={pulseKey} />
       </div>
       <div {...props(styles.tip)} ref={tip}>
