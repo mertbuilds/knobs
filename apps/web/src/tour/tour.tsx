@@ -193,14 +193,14 @@ const styles = create({
     display: 'flex',
     flexShrink: 0,
   },
-  // The install command and what to do after it: side by side, or one under the other in a narrow bubble.
+  // The setup prompt and what to do after it: side by side, or one under the other in a narrow bubble.
   next: {
     alignItems: 'center',
     display: 'flex',
     flexWrap: 'wrap',
     gap: spacing.s1,
   },
-  // The install command, whose copy button takes the pointer.
+  // The setup prompt, whose copy button takes the pointer.
   takes: {
     flexBasis: 'auto',
     flexGrow: 1,
@@ -212,7 +212,7 @@ const styles = create({
 /**
  * The guided tour: a frame around the real control to use next, which moves on
  * by itself as the visitor uses it. Only the top page draws it.
- * `install` is the install command. Once every stop is done one bubble takes
+ * `install` is the setup prompt. Once every stop is done one bubble takes
  * the caption's place: what the last pick copied, and how to install.
  */
 export function Tour({ install }: { install: ReactNode }) {

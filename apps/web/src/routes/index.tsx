@@ -162,26 +162,31 @@ const styles = create({
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
-  grow: {
-    flexGrow: 1,
-  },
   hint: {
     color: colors.muted,
     fontSize: '0.8125rem',
     margin: 0,
   },
-  // Hugs the one short line instead of stretching an empty box across the hero.
-  installCode: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
+  // The setup prompt, then "or" and the npm command, on one row, centered on it. Each box hugs
+  // its line; on a narrow screen the npm command and its "or" go under the prompt.
+  install: {
+    alignItems: 'center',
+    columnGap: spacing.s2,
+    display: 'flex',
+    flexWrap: 'wrap',
+    rowGap: spacing.s2,
   },
-  // "or" and the npm command on one line, the box free to shrink to the width.
+  // A box that shrinks to the row, never past it.
+  installBox: {
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  // "or" and the npm command, kept together, the box free to shrink to the width.
   installOr: {
     alignItems: 'center',
     columnGap: spacing.s2,
     display: 'flex',
-  },
-  installOrCode: {
+    maxWidth: '100%',
     minWidth: 0,
   },
   link: {
@@ -238,11 +243,6 @@ const styles = create({
     fontSize: '0.8125rem',
     fontWeight: font.weightRegular,
     margin: 0,
-  },
-  snippet: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
   },
   text: {
     margin: 0,
@@ -340,35 +340,36 @@ function CodeBox({
   );
 }
 
-/**
- * How to install, agent first: the setup prompt, then the npm command after a
- * quiet "or". The hero's boxes hug their line; the tour's fill its bubble.
- */
-function installChoices(tour: boolean) {
-  const suffix = tour ? '_tour' : '';
-  const hug = tour ? undefined : styles.installCode;
+// The same prompt is in packages/devknobs/README.md under install; change both together.
+function promptBox(name: string, style?: StyleXStyles) {
   return (
-    <>
-      {/* The same prompt is in packages/devknobs/README.md under install; change both together. */}
-      <CodeBox
-        code={m.install_prompt()}
-        copyLabel={m.copy_install_prompt()}
-        label={m.copy_install_prompt()}
-        name={`install_prompt${suffix}`}
-        style={hug}
-        wrap
-      />
-      <div {...props(styles.installOr, hug)}>
+    <CodeBox
+      code={m.install_prompt()}
+      copyLabel={m.copy_install_prompt()}
+      label={m.copy_install_prompt()}
+      name={name}
+      style={style}
+      wrap
+    />
+  );
+}
+
+/** How to install, agent first: the setup prompt, then the npm command after a quiet "or". */
+function installChoices() {
+  return (
+    <div {...props(styles.install)}>
+      {promptBox('install_prompt', styles.installBox)}
+      <div {...props(styles.installOr)}>
         <span {...props(styles.hint)}>{m.install_or()}</span>
         <CodeBox
           code={m.install_command()}
           copyLabel={m.copy_install()}
-          name={`install${suffix}`}
+          name="install"
           quiet
-          style={[styles.installOrCode, tour && styles.grow]}
+          style={styles.installBox}
         />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -460,11 +461,11 @@ function Landing() {
           {m.app_name()}
         </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>
-        {installChoices(false)}
+        {installChoices()}
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <Tour install={<div {...props(styles.snippet)}>{installChoices(true)}</div>} />
+      <Tour install={promptBox('install_prompt_tour')} />
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
