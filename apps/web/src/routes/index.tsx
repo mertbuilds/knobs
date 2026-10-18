@@ -191,9 +191,9 @@ const styles = create({
     maxWidth: '100%',
     minWidth: 0,
   },
-  // The footer's links. Their underline is taken off in app.css, past the theme's global `a` rule.
+  // The footer's links' focus ring. Their color and underline are set in app.css, past the theme's
+  // global `a` rules.
   link: {
-    color: colors.fg,
     outlineColor: colors.muted,
     outlineOffset: 2,
     outlineStyle: {
