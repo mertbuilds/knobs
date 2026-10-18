@@ -148,7 +148,7 @@ const styles = create({
     width: 22,
   },
   // The maker, at the footer's right end, also on a line of its own where the links fill the width.
-  // Only the name is the link; the words around it are the links' muted color, plain.
+  // Only the name is the link; the words around it are muted, plain text.
   credit: {
     color: colors.muted,
     marginInlineStart: 'auto',
@@ -191,11 +191,9 @@ const styles = create({
     maxWidth: '100%',
     minWidth: 0,
   },
+  // The footer's links: the text color, no underline, against the muted words around them.
   link: {
-    color: {
-      ':hover': colors.fg,
-      default: colors.muted,
-    },
+    color: colors.fg,
     outlineColor: colors.muted,
     outlineOffset: 2,
     outlineStyle: {
@@ -203,10 +201,7 @@ const styles = create({
       default: 'none',
     },
     outlineWidth: 1,
-    textDecorationLine: 'underline',
-    textUnderlineOffset: '3px',
-    transitionDuration: '120ms',
-    transitionProperty: 'color',
+    textDecorationLine: 'none',
   },
   // Read by screen readers, never drawn.
   live: {
