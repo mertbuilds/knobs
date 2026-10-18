@@ -148,7 +148,9 @@ const styles = create({
     width: 22,
   },
   // The maker, at the footer's right end, also on a line of its own where the links fill the width.
+  // Only the name is the link; the words around it are the links' muted color, plain.
   credit: {
+    color: colors.muted,
     marginInlineStart: 'auto',
   },
   footer: {
@@ -489,12 +491,16 @@ function Landing() {
         <a href={NOTICES} {...props(styles.link)}>
           {m.link_notices()}
         </a>
-        <a
-          href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
-          {...props(styles.link, styles.credit)}
-        >
-          {m.link_mertbuilds()}
-        </a>
+        <span {...props(styles.credit)}>
+          {m.link_mertbuilds_before()}{' '}
+          <a
+            href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
+            {...props(styles.link)}
+          >
+            {m.link_mertbuilds()}
+          </a>{' '}
+          {m.link_mertbuilds_after()}
+        </span>
       </footer>
     </main>
   );
