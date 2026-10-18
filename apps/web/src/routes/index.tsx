@@ -191,7 +191,7 @@ const styles = create({
     maxWidth: '100%',
     minWidth: 0,
   },
-  // The footer's links: the text color, no underline, against the muted words around them.
+  // The footer's links. Their underline is taken off in app.css, past the theme's global `a` rule.
   link: {
     color: colors.fg,
     outlineColor: colors.muted,
@@ -201,7 +201,6 @@ const styles = create({
       default: 'none',
     },
     outlineWidth: 1,
-    textDecorationLine: 'none',
   },
   // Read by screen readers, never drawn.
   live: {
