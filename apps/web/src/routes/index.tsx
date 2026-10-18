@@ -102,9 +102,14 @@ const styles = create({
     paddingInline: '8px',
     whiteSpace: 'pre',
   },
-  // Words in place of the code: the page's font, not the code's.
+  // Words in place of the code: the page's font, not the code's, and a step larger.
   codeLabel: {
     fontFamily: font.family,
+    fontSize: font.sizeSm,
+  },
+  // A second choice beside a first: the faint text, like the copy button.
+  codeQuiet: {
+    color: colors.muted,
   },
   // A long text, such as the install prompt, breaks instead of scrolling.
   codeWrap: {
@@ -153,6 +158,9 @@ const styles = create({
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
+  grow: {
+    flexGrow: 1,
+  },
   hint: {
     color: colors.muted,
     fontSize: '0.8125rem',
@@ -162,6 +170,15 @@ const styles = create({
   installCode: {
     alignSelf: 'flex-start',
     maxWidth: '100%',
+  },
+  // "or" and the npm command on one line, the box free to shrink to the width.
+  installOr: {
+    alignItems: 'center',
+    columnGap: spacing.s2,
+    display: 'flex',
+  },
+  installOrCode: {
+    minWidth: 0,
   },
   link: {
     color: {
@@ -249,13 +266,15 @@ const styles = create({
  * selectable by hand. Where the clipboard refuses the write (an insecure
  * context, an old browser), the code is selected instead, ready to copy.
  * With `label`, the box shows the label in place of code too long to show,
- * and shows the code only where the clipboard refuses it.
+ * and shows the code only where the clipboard refuses it. `quiet` draws it as
+ * the second choice beside a first one: its text faint.
  */
 function CodeBox({
   code,
   copyLabel,
   label,
   name,
+  quiet = false,
   style,
   wrap = false,
 }: {
@@ -263,6 +282,7 @@ function CodeBox({
   copyLabel: string;
   label?: string;
   name: string;
+  quiet?: boolean;
   style?: StyleXStyles;
   wrap?: boolean;
 }) {
@@ -296,7 +316,12 @@ function CodeBox({
   return (
     <div {...props(styles.code, style)}>
       <pre
-        {...props(styles.codeText, wrap && styles.codeWrap, !showCode && styles.codeLabel)}
+        {...props(
+          styles.codeText,
+          wrap && styles.codeWrap,
+          !showCode && styles.codeLabel,
+          quiet && styles.codeQuiet,
+        )}
         ref={text}
       >
         {showCode ? code : label}
@@ -308,6 +333,38 @@ function CodeBox({
         {copied ? m.copy_done() : ''}
       </span>
     </div>
+  );
+}
+
+/**
+ * How to install, agent first: the setup prompt, then the npm command after a
+ * quiet "or". The hero's boxes hug their line; the tour's fill its bubble.
+ */
+function installChoices(tour: boolean) {
+  const suffix = tour ? '_tour' : '';
+  const hug = tour ? undefined : styles.installCode;
+  return (
+    <>
+      {/* The same prompt is in packages/devknobs/README.md under install; change both together. */}
+      <CodeBox
+        code={m.install_prompt()}
+        copyLabel={m.copy_install_prompt()}
+        label={m.copy_install_prompt()}
+        name={`install_prompt${suffix}`}
+        style={hug}
+        wrap
+      />
+      <div {...props(styles.installOr, hug)}>
+        <span {...props(styles.hint)}>{m.install_or()}</span>
+        <CodeBox
+          code={m.install_command()}
+          copyLabel={m.copy_install()}
+          name={`install${suffix}`}
+          quiet
+          style={[styles.installOrCode, tour && styles.grow]}
+        />
+      </div>
+    </>
   );
 }
 
@@ -399,38 +456,11 @@ function Landing() {
           {m.app_name()}
         </h1>
         <p {...props(styles.text)}>{m.tagline()}</p>
-        <CodeBox
-          code={m.install_command()}
-          copyLabel={m.copy_install()}
-          name="install"
-          style={styles.installCode}
-        />
-        {/* The same prompt is in packages/devknobs/README.md under install; change both together. */}
-        <CodeBox
-          code={m.install_prompt()}
-          copyLabel={m.copy_install_prompt()}
-          label={m.copy_install_prompt()}
-          name="install_prompt"
-          style={styles.installCode}
-          wrap
-        />
+        {installChoices(false)}
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <Tour
-        install={
-          <div {...props(styles.snippet)}>
-            <CodeBox code={m.install_command()} copyLabel={m.copy_install()} name="install_tour" />
-            <CodeBox
-              code={m.install_prompt()}
-              copyLabel={m.copy_install_prompt()}
-              label={m.copy_install_prompt()}
-              name="install_prompt_tour"
-              wrap
-            />
-          </div>
-        }
-      />
+      <Tour install={<div {...props(styles.snippet)}>{installChoices(true)}</div>} />
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>

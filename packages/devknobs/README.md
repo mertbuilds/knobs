@@ -6,13 +6,9 @@ runtime dependencies.
 
 ## install
 
-```
-npm i -D devknobs
-```
-
-with an ai agent: paste this prompt into claude code, codex or cursor, and it
-installs devknobs and mounts it in development only. it is the copy prompt
-button on https://knobs.dev too.
+with an ai agent: paste this setup prompt into claude code, codex or cursor, and
+it installs devknobs and mounts it in development only. it is the copy setup
+prompt button on https://knobs.dev too.
 
 <!-- the same text is the install_prompt message in apps/web/messages/en.json; change both together. -->
 
@@ -28,6 +24,12 @@ Install devknobs in this project. It is a dev-only panel that emulates browser p
 4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/devknobs/dist/early.global.js"></script>
 5. Change nothing else in the project.
 6. Then tell me what you changed and how to open the panel: press Shift+K or click the handle on the right edge of the window. In the open panel, / searches the knobs. Shift+G grabs an element.
+```
+
+or by hand:
+
+```
+npm i -D devknobs
 ```
 
 ## usage
