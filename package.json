@@ -1,6 +1,7 @@
 {
   "name": "knobs",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "bad-day": "bash scripts/bad-day.sh",
