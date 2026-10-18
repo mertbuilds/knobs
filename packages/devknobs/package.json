@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": false,
   "license": "MIT",
-  "author": "Mert Duzgun",
+  "author": "Mert Düzgün",
   "description": "drop-in dev panel for emulating browser preferences, locale, geolocation and layout knobs from inside the page",
   "homepage": "https://knobs.dev",
   "bugs": "https://github.com/mertbuilds/knobs/issues",
