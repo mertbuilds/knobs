@@ -1,5 +1,5 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
-import { create, props, type StyleXStyles } from '@stylexjs/stylex';
+import { create, defaultMarker, props, type StyleXStyles, when } from '@stylexjs/stylex';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
@@ -102,6 +102,20 @@ const styles = create({
     paddingInline: '8px',
     whiteSpace: 'pre',
   },
+  // A box that is all one copy button: no button chrome, and the copy button's focus ring.
+  codeButton: {
+    borderStyle: 'none',
+    color: 'inherit',
+    cursor: 'pointer',
+    outlineColor: colors.muted,
+    outlineOffset: -1,
+    outlineStyle: {
+      ':focus-visible': 'solid',
+      default: 'none',
+    },
+    outlineWidth: 1,
+    textAlign: 'start',
+  },
   // Words in place of the code: the page's font, not the code's, and a step larger.
   codeLabel: {
     fontFamily: font.family,
@@ -146,6 +160,17 @@ const styles = create({
     transitionProperty: 'background-color, color',
     transitionTimingFunction: 'ease-out',
     width: 22,
+  },
+  // The copy button's icon inside a box that is the button: its hover ground follows the box's.
+  copyIcon: {
+    backgroundColor: {
+      default: 'transparent',
+      [when.ancestor(':hover')]: colors.track,
+    },
+    color: {
+      default: colors.muted,
+      [when.ancestor(':hover')]: colors.fg,
+    },
   },
   // The maker, at the footer's right end, also on a line of its own where the links fill the width.
   // Only the name is the link; the words around it are muted, plain text.
@@ -266,8 +291,9 @@ const styles = create({
  * selectable by hand. Where the clipboard refuses the write (an insecure
  * context, an old browser), the code is selected instead, ready to copy.
  * With `label`, the box shows the label in place of code too long to show,
- * and shows the code only where the clipboard refuses it. `quiet` draws it as
- * the second choice beside a first one: its text faint.
+ * the whole box one copy button, and shows the code only where the clipboard
+ * refuses it. `quiet` draws it as the second choice beside a first one: its
+ * text faint.
  */
 function CodeBox({
   code,
@@ -313,25 +339,49 @@ function CodeBox({
         () => setRefused((count) => count + 1),
       );
   };
+  const icon = copied ? <CheckIcon {...ICON} /> : <CopyIcon {...ICON} />;
+  const live = (
+    <span {...props(styles.live)} aria-live="polite">
+      {copied ? m.copy_done() : ''}
+    </span>
+  );
+  // The label is words, not code, so the whole box is the copy button, named by them.
+  if (!showCode) {
+    return (
+      <>
+        <button
+          {...props(styles.code, styles.codeButton, defaultMarker(), style)}
+          onClick={copy}
+          type="button"
+        >
+          <span
+            {...props(
+              styles.codeText,
+              wrap && styles.codeWrap,
+              styles.codeLabel,
+              quiet && styles.codeQuiet,
+            )}
+          >
+            {label}
+          </span>
+          <span {...props(styles.copy, styles.copyIcon)}>{icon}</span>
+        </button>
+        {live}
+      </>
+    );
+  }
   return (
     <div {...props(styles.code, style)}>
       <pre
-        {...props(
-          styles.codeText,
-          wrap && styles.codeWrap,
-          !showCode && styles.codeLabel,
-          quiet && styles.codeQuiet,
-        )}
+        {...props(styles.codeText, wrap && styles.codeWrap, quiet && styles.codeQuiet)}
         ref={text}
       >
-        {showCode ? code : label}
+        {code}
       </pre>
       <button {...props(styles.copy)} aria-label={copyLabel} onClick={copy} type="button">
-        {copied ? <CheckIcon {...ICON} /> : <CopyIcon {...ICON} />}
+        {icon}
       </button>
-      <span {...props(styles.live)} aria-live="polite">
-        {copied ? m.copy_done() : ''}
-      </span>
+      {live}
     </div>
   );
 }
