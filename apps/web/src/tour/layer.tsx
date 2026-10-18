@@ -14,6 +14,9 @@ const AIM_EVERY = 150;
 // The frame stands this far off its target, and its corners round that much more.
 const PAD = 4;
 
+// How far the frame's line and ring reach past its inside: the 1px line, then the 3px ring.
+const RING = 4;
+
 // Space between the frame and what is said beside it, as grab keeps it.
 const GAP = 6;
 
@@ -62,9 +65,9 @@ const styles = create({
   },
   // Everything but the frame, dimmed as the demo's dialogs dim the page behind them: a shadow
   // spread over the whole window from the frame's edge, so it takes no pointer and hides no
-  // target. A desktop only.
+  // target. A desktop only. It starts outside the frame's line and ring, so it paints over neither,
+  // its corners those of the ring's outside, set with the frame's.
   dim: {
-    borderRadius: 'inherit',
     boxShadow: {
       default: 'none',
       [FINE]: {
@@ -72,7 +75,7 @@ const styles = create({
         default: `0 0 0 200vmax color-mix(in srgb, ${palette.ink} 40%, transparent)`,
       },
     },
-    inset: 0,
+    inset: -RING,
     opacity: 0,
     position: 'absolute',
     transitionDuration: {
@@ -351,6 +354,7 @@ export function Layer({
   const layer = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
+  const shade = useRef<HTMLSpanElement>(null);
   const read = useEffectEvent(() => ({ aim: aim(), boxed }));
   // A new stop is looked up on the next frame, not at the next turn.
   const again = useRef(false);
@@ -363,7 +367,8 @@ export function Layer({
     const host = layer.current;
     const frame = box.current;
     const note = tip.current;
-    if (host === null || frame === null || note === null) {
+    const dimmer = shade.current;
+    if (host === null || frame === null || note === null || dimmer === null) {
       return;
     }
     raise(host);
@@ -480,6 +485,8 @@ export function Layer({
         frame.style.width = `${around.right - around.left}px`;
         frame.style.height = `${around.bottom - around.top}px`;
         frame.style.borderRadius = `${round + PAD}px`;
+        // The frame's corners round its outside, already one line out of the `RING`.
+        dimmer.style.borderRadius = `${round + PAD + RING - 1}px`;
       }
       frame.style.opacity = framed ? '1' : '0';
       const put = place(around, size, view, seat, outer, avoid, bare);
@@ -500,7 +507,7 @@ export function Layer({
   return (
     <div {...props(styles.layer)} data-devknobs="tour" ref={layer}>
       <div {...props(styles.box, strong && styles.boxStrong)} aria-hidden="true" ref={box}>
-        <span {...props(styles.dim, dim && styles.dimOn)} />
+        <span {...props(styles.dim, dim && styles.dimOn)} ref={shade} />
         <span {...props(styles.pulse)} key={pulseKey} />
       </div>
       <div {...props(styles.tip)} ref={tip}>
