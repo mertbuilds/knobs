@@ -178,6 +178,10 @@ const styles = create({
     color: colors.muted,
     marginInlineStart: 'auto',
   },
+  // A button sizes to its content; this one fills the row it sits in.
+  fill: {
+    width: '100%',
+  },
   footer: {
     borderTopColor: colors.border,
     borderTopStyle: 'solid',
@@ -317,6 +321,7 @@ function CodeBox({
   const [refused, setRefused] = useState(0);
   const showCode = label === undefined || refused > 0;
   const text = useRef<HTMLPreElement>(null);
+  const copyButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!copied) {
       return;
@@ -324,8 +329,10 @@ function CodeBox({
     const timer = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(timer);
   }, [copied]);
+  // The label button is gone once the code shows, so focus moves to the copy button that took its place.
   useEffect(() => {
     if (refused > 0 && text.current !== null) {
+      copyButton.current?.focus();
       getSelection()?.selectAllChildren(text.current);
     }
   }, [refused]);
@@ -378,7 +385,13 @@ function CodeBox({
       >
         {code}
       </pre>
-      <button {...props(styles.copy)} aria-label={copyLabel} onClick={copy} type="button">
+      <button
+        {...props(styles.copy)}
+        aria-label={copyLabel}
+        onClick={copy}
+        ref={copyButton}
+        type="button"
+      >
         {icon}
       </button>
       {live}
@@ -511,7 +524,7 @@ function Landing() {
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
-      <Tour install={promptBox('install_prompt_tour')} />
+      <Tour install={promptBox('install_prompt_tour', styles.fill)} />
 
       <section {...props(styles.section)}>
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
