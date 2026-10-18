@@ -3,10 +3,14 @@ pre-commit:
   jobs:
     - name: oxlint
       glob: '*.{ts,tsx,js,jsx}'
+      exclude:
+        - 'packages/devknobs/**'
       run: pnpm exec oxlint --fix {staged_files}
       stage_fixed: true
     - name: oxfmt
       glob: '*.{ts,tsx,js,jsx,json,jsonc,yaml,yml,md}'
+      exclude:
+        - 'packages/devknobs/**'
       run: pnpm exec oxfmt {staged_files}
       stage_fixed: true
 
