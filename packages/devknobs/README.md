@@ -21,8 +21,9 @@ Install devknobs in this project. It is a dev-only panel that emulates browser p
 
 1. Detect the package manager from the lockfile and add devknobs as a dev dependency (npm i -D devknobs, or the pnpm, yarn or bun equivalent).
 2. Mount it once, on the client, in development only:
-- Next.js: in the root layout, load DevKnobs from "devknobs/react" with next/dynamic and ssr: false, only when process.env.NODE_ENV === "development", as the usage section of the docs shows.
-- Everything else (Vite, TanStack Start, React Router, SvelteKit, a plain page): call if (import.meta.env.DEV) import("devknobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
+- Next.js: make a small client component (the file starts with "use client"). In it, import dynamic from "next/dynamic", then const DevKnobs = process.env.NODE_ENV === "development" ? dynamic(() => import("devknobs/react").then((m) => m.DevKnobs), { ssr: false }) : null; and render {DevKnobs && <DevKnobs />}. Render that component once in app/layout (App Router) or pages/_app (Pages Router).
+- Everything else with a bundler (Vite, TanStack Start, React Router, SvelteKit): call if (import.meta.env.DEV) import("devknobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
+- A plain page with no bundler: skip the npm install and add <script src="//unpkg.com/devknobs/dist/index.global.js"></script> to the page. It mounts itself. Keep it out of the deployed page.
 3. Keep devknobs out of production builds. A static import stays in the bundle even behind a dev check, so gate the import itself as above. If the project has a build script, run it and check that the output has no devknobs.
 4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/devknobs/dist/early.global.js"></script>
 5. Change nothing else in the project.
@@ -64,6 +65,10 @@ a static import stays in the production bundle even behind that check, because
 the bundler still has to keep the module. in next.js, gate the import itself:
 
 ```jsx
+"use client";
+
+import dynamic from "next/dynamic";
+
 const DevKnobs =
   process.env.NODE_ENV === "development"
     ? dynamic(() => import("devknobs/react").then((m) => m.DevKnobs), {
@@ -71,8 +76,11 @@ const DevKnobs =
       })
     : null;
 
-// in the layout
-{DevKnobs && <DevKnobs />}
+export function DevPanel() {
+  return DevKnobs && <DevKnobs />;
+}
+
+// render <DevPanel /> once in app/layout or pages/_app
 ```
 
 api: `mount(options?)`, `unmount()`, `getState()`, `setState(patch)`,
