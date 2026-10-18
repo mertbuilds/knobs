@@ -17,3 +17,12 @@ body {
   font-display: swap;
   src: url('/api/demo/asset.woff2') format('woff2');
 }
+
+/* The footer's links: the text color, light and dark, and no underline, among muted words. Here,
+   not in StyleX: the theme's global `a` rules are unlayered, so they outrank StyleX's layered
+   classes. `:visited` too, since the theme's own `a:visited` outranks `footer a`. */
+footer a,
+footer a:visited {
+  color: var(--foreground);
+  text-decoration-line: none;
+}

@@ -1,15 +1,21 @@
-import { colors, font } from '@knobs/ui/tokens.stylex';
+import { colors, font, palette } from '@knobs/ui/tokens.stylex';
 import { create, keyframes, props } from '@stylexjs/stylex';
 import { type ReactNode, useEffect, useEffectEvent, useRef } from 'react';
 import type { Aim } from './targets.ts';
 
 const CALM = '@media (prefers-reduced-motion: reduce)';
+const DARK = '@media (prefers-color-scheme: dark)';
+// A mouse or a trackpad: a desktop, where the window has room for a dimmed page around the target.
+const FINE = '@media (pointer: fine)';
 
 // How often the target is looked up again, in ms. Its place is read every frame.
 const AIM_EVERY = 150;
 
 // The frame stands this far off its target, and its corners round that much more.
 const PAD = 4;
+
+// How far the frame's line and ring reach past its inside: the 1px line, then the 3px ring.
+const RING = 4;
 
 // Space between the frame and what is said beside it, as grab keeps it.
 const GAP = 6;
@@ -56,6 +62,31 @@ const styles = create({
   boxStrong: {
     borderColor: colors.accent,
     boxShadow: `0 0 0 1px ${colors.grabBarText}, 0 0 0 4px color-mix(in srgb, ${colors.accent} 35%, transparent)`,
+  },
+  // Everything but the frame, dimmed as the demo's dialogs dim the page behind them: a shadow
+  // spread over the whole window from the frame's edge, so it takes no pointer and hides no
+  // target. A desktop only. It starts outside the frame's line and ring, so it paints over neither,
+  // its corners those of the ring's outside, set with the frame's.
+  dim: {
+    boxShadow: {
+      default: 'none',
+      [FINE]: {
+        [DARK]: `0 0 0 200vmax color-mix(in srgb, ${colors.track} 70%, transparent)`,
+        default: `0 0 0 200vmax color-mix(in srgb, ${palette.ink} 40%, transparent)`,
+      },
+    },
+    inset: -RING,
+    opacity: 0,
+    position: 'absolute',
+    transitionDuration: {
+      [CALM]: '0s',
+      default: '200ms',
+    },
+    transitionProperty: 'opacity',
+    transitionTimingFunction: 'ease-out',
+  },
+  dimOn: {
+    opacity: 1,
   },
   // Read by screen readers, never drawn.
   hidden: {
@@ -302,6 +333,7 @@ export function Layer({
   aim,
   boxed,
   children,
+  dim,
   pulseKey,
   said,
   strong,
@@ -310,6 +342,8 @@ export function Layer({
   /** Draw the frame around the target, or only stand beside it. */
   boxed: boolean;
   children: ReactNode;
+  /** Dim the window around the frame, while the visitor finds their bearings. */
+  dim: boolean;
   /** A new one sends the ring out once more. */
   pulseKey: string;
   /** What assistive tech is told, once per change. */
@@ -320,6 +354,7 @@ export function Layer({
   const layer = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
+  const shade = useRef<HTMLSpanElement>(null);
   const read = useEffectEvent(() => ({ aim: aim(), boxed }));
   // A new stop is looked up on the next frame, not at the next turn.
   const again = useRef(false);
@@ -332,7 +367,8 @@ export function Layer({
     const host = layer.current;
     const frame = box.current;
     const note = tip.current;
-    if (host === null || frame === null || note === null) {
+    const dimmer = shade.current;
+    if (host === null || frame === null || note === null || dimmer === null) {
       return;
     }
     raise(host);
@@ -449,6 +485,8 @@ export function Layer({
         frame.style.width = `${around.right - around.left}px`;
         frame.style.height = `${around.bottom - around.top}px`;
         frame.style.borderRadius = `${round + PAD}px`;
+        // The frame's corners round its outside, already one line out of the `RING`.
+        dimmer.style.borderRadius = `${round + PAD + RING - 1}px`;
       }
       frame.style.opacity = framed ? '1' : '0';
       const put = place(around, size, view, seat, outer, avoid, bare);
@@ -469,6 +507,7 @@ export function Layer({
   return (
     <div {...props(styles.layer)} data-devknobs="tour" ref={layer}>
       <div {...props(styles.box, strong && styles.boxStrong)} aria-hidden="true" ref={box}>
+        <span {...props(styles.dim, dim && styles.dimOn)} ref={shade} />
         <span {...props(styles.pulse)} key={pulseKey} />
       </div>
       <div {...props(styles.tip)} ref={tip}>

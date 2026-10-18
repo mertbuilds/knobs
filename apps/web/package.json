@@ -2,6 +2,7 @@
   "name": "@knobs/web",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "vite build && node ../../scripts/dev-tools-check.ts",
