@@ -11,7 +11,7 @@ import {
 import { quietFetch } from "../requests/quiet";
 import { displayName, isComposite } from "./fiber";
 import { locateJsx, opensAt } from "./locate";
-import { classifySourcePath, normalizeFilePath, rememberRoot, rootOf } from "./paths";
+import { classifySourcePath, normalizeFilePath, packageName, rememberRoot, rootOf } from "./paths";
 import { sourceName } from "./stack";
 import type { ResolvedSource } from "./types";
 
@@ -35,12 +35,15 @@ function sameOrigin(url: string): boolean {
 
 /**
  * The fetch bippy reads bundles and source maps with. It only reaches the
- * page's own origin, a dev server, and never anything else. One function for
- * every grab, so bippy keeps its source map cache across them. The requests
- * log leaves these out.
+ * page's own origin, a dev server, and never anything else. A package's file
+ * is not read: its path already names it, and its bundle and map are large.
+ * One function for every grab, so bippy keeps its source map cache across
+ * them. The requests log leaves these out.
  */
-function sourceFetch(url: string, init?: RequestInit): Promise<Response> {
-  if (!sameOrigin(url)) return Promise.resolve(new Response(null, { status: 404 }));
+export function sourceFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (!sameOrigin(url) || packageName(url) !== null) {
+    return Promise.resolve(new Response(null, { status: 404 }));
+  }
   const timeout = AbortSignal.timeout(TIMEOUT);
   const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   return quietFetch(url, { ...init, signal });
