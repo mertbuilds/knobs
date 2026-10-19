@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { foldRest, moveHinge } from "../src/engine/foldhand";
 import * as foldrun from "../src/engine/foldrun";
+import { loadFrames } from "../src/engine/frames";
 import {
   createFoldSlider,
   FOLD_MAGNET,
@@ -122,7 +123,8 @@ describe("the fold chip beside the slider", () => {
 });
 
 describe("the fold slider, destroyed", () => {
-  test("stops listening to the fold and the hinge, so none stay behind a mount after another", () => {
+  test("stops listening to the fold and the hinge, so none stay behind a mount after another", async () => {
+    await loadFrames();
     let listening = 0;
     const listen =
       <T>(watch: (watcher: T) => () => void) =>

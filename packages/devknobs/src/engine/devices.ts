@@ -49,6 +49,11 @@ export interface DeviceForm extends Partial<
 /** The postures a foldable takes, the one it is picked in first. */
 export const POSTURES: readonly PostureValue[] = ["closed", "open"];
 
+/** How far open a posture leaves the hinge. */
+export function openOf(posture: PostureValue): number {
+  return posture === "open" ? 1 : 0;
+}
+
 /**
  * Popular devices in 2026, by kind, iPhones and Pixels newest first. A
  * Pixel's size is its panel in px over its density, rounded up as Chrome

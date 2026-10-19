@@ -61,3 +61,10 @@ export function removeLayer(name: LayerName): void {
   patch = null;
   base = null;
 }
+
+/** No movement: the user asks for less, or the browser cannot animate. */
+export function still(): boolean {
+  if (typeof window.matchMedia !== "function" || typeof Element === "undefined") return true;
+  if (typeof Element.prototype.animate !== "function") return true;
+  return baseMatchMedia("(prefers-reduced-motion: reduce)").matches;
+}

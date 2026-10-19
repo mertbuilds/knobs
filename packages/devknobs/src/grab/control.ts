@@ -1,7 +1,7 @@
 // adapted from react-grab (MIT, Copyright (c) 2025 Aiden Bai)
 import * as engine from "../engine";
 import { isDevknobsFrame, needsFrame, post, readMessage } from "../engine/frame";
-import { frameWindow } from "../engine/width";
+import { frameWindow } from "../engine/frames";
 import { typesInField } from "../ui/keys";
 import {
   defaultGrabKey,

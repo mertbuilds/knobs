@@ -29,7 +29,7 @@ import * as time from "./time";
 import * as touch from "./touch";
 import * as touchPointer from "./touchpointer";
 import * as ua from "./ua";
-import * as width from "./width";
+import * as width from "./frames";
 
 export interface EngineOptions {
   /** Keep the knobs in sessionStorage across reloads. Defaults to true. */
