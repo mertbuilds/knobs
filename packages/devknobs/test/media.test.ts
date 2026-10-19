@@ -224,6 +224,55 @@ function define(name: string, value: unknown): void {
   Object.defineProperty(globalThis, name, { configurable: true, value });
 }
 
+let listened: EventListenerOrEventListenerObject[] = [];
+
+/** A list that can be listened to in every way a page can, and that notes each listener added. */
+class ListenedList extends FakeMediaQueryList {
+  #handler: ((event: Event) => void) | null = null;
+
+  override get matches(): boolean {
+    return super.matches;
+  }
+
+  override addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    if (listener) listened.push(listener);
+    super.addEventListener(type, listener, options);
+  }
+
+  addListener(listener: (event: Event) => void): void {
+    listened.push(listener);
+    EventTarget.prototype.addEventListener.call(this, "change", listener);
+  }
+
+  get onchange(): ((event: Event) => void) | null {
+    return this.#handler;
+  }
+
+  set onchange(handler: ((event: Event) => void) | null) {
+    if (handler && !this.#handler) {
+      listened.push(handler);
+      EventTarget.prototype.addEventListener.call(this, "change", (event) =>
+        this.#handler?.(event),
+      );
+    }
+    this.#handler = handler;
+  }
+}
+
+const LISTENED_ADD = ListenedList.prototype.addEventListener;
+
+/** Make `matchMedia` hand out `ListenedList`s, and list the listeners they get. */
+function listenedLists(): EventListenerOrEventListenerObject[] {
+  listened = [];
+  define("window", { matchMedia: (query: string) => new ListenedList(query) });
+  define("MediaQueryList", ListenedList);
+  return listened;
+}
+
 describe("the prefers knobs across an unmount", () => {
   beforeEach(() => {
     define("window", { matchMedia: (query: string) => new FakeMediaQueryList(query) });
@@ -297,6 +346,52 @@ describe("the prefers knobs across an unmount", () => {
     apply(SYSTEM_MEDIA);
     expect(list.matches).toBe(false);
     expect(heard).toEqual([true, false]);
+  });
+
+  test("a list the page only reads gets no listener, and one it listens to gets the guard first", () => {
+    const added = listenedLists();
+    apply(SYSTEM_MEDIA);
+    for (let round = 0; round < 100; round++) expect(window.matchMedia(DARK).matches).toBe(false);
+    expect(added).toEqual([]);
+
+    const page = (event: Event) => event;
+    const lists = [0, 1, 2].map(() => window.matchMedia(DARK) as unknown as ListenedList);
+    const [byEvent, byListener, byHandler] = lists;
+    byEvent?.addEventListener("resize", page);
+    expect(added).toEqual([page]);
+    byEvent?.addEventListener("change", page);
+    byListener?.addListener(page);
+    if (byHandler) byHandler.onchange = page;
+    const guard = added[1];
+    expect(guard).not.toBe(page);
+    expect(added).toEqual([page, guard, page, guard, page, guard, page]);
+
+    const heard = lists.map(hear);
+    apply({ ...SYSTEM_MEDIA, scheme: "dark" });
+    expect(heard).toEqual([[true], [true], [true]]);
+    destroy();
+    expect(Object.hasOwn(ListenedList.prototype, "addEventListener")).toBe(true);
+    expect(MediaQueryList.prototype.addEventListener).toBe(LISTENED_ADD);
+    expect(Object.hasOwn(ListenedList.prototype, "addListener")).toBe(true);
+  });
+
+  test("a list the page did not listen to gets its guard at the unmount, to be first", () => {
+    const added = listenedLists();
+    const list = new ListenedList(DARK);
+    Object.assign(window, {
+      [EARLY]: {
+        release: () => [{ list, query: DARK, heard: false, guarded: false }],
+      },
+    });
+    apply(SYSTEM_MEDIA);
+    expect(added).toEqual([]);
+    destroy();
+    expect(added).toHaveLength(1);
+    const heard = hear(list);
+    apply(SYSTEM_MEDIA);
+    apply({ ...SYSTEM_MEDIA, scheme: "dark" });
+    expect(added).toHaveLength(2);
+    expect(heard).toEqual([true]);
   });
 
   test("tell a list the early script handed over, after an unmount and a mount", () => {
