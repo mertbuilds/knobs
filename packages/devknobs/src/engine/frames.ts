@@ -15,7 +15,10 @@ import { dropEarly } from "./placeholder";
 type FrameKit = typeof Kit;
 
 let kit: FrameKit | null = null;
-let asked = false;
+/** Brings the kit in. Tests hand in their own with `loadKitWith`. */
+let load: () => Promise<FrameKit> = () => import("./framekit");
+/** The one load of the kit. A failed one stays failed: the browser keeps a module that did not load. */
+let loading: Promise<void> | null = null;
 /** Calls to make once the kit is in, before it draws. */
 const waiting: ((kit: FrameKit) => void)[] = [];
 /** The last knobs that needed no frame, before the ones that load it. */
@@ -40,15 +43,23 @@ function arrived(loaded: FrameKit): void {
 }
 
 /** Load the frame's kit, once. Resolves once it is in and has drawn what the knobs ask. */
-export async function loadFrames(): Promise<void> {
-  if (kit) return;
-  asked = true;
-  try {
-    arrived(await import("./framekit"));
-  } catch (error) {
-    asked = false;
-    throw error;
-  }
+export function loadFrames(): Promise<void> {
+  loading ??= load().then(arrived);
+  return loading;
+}
+
+/** For tests: load the kit from `next` in place of `framekit.ts`. */
+export function loadKitWith(next: () => Promise<FrameKit>): void {
+  load = next;
+}
+
+/** The kit did not load: no frame comes, so the knobs that asked for one go back to none. */
+function failed(error: unknown): void {
+  console.error("devknobs: the device frame could not load", error);
+  before = null;
+  latest = null;
+  dropEarly();
+  exit?.();
 }
 
 /** Run `watch` now if the kit is in, else once it is. Returns the way to stop either. */
@@ -78,7 +89,7 @@ export function apply(state: DevknobsState): void {
     return;
   }
   latest = state;
-  if (!asked) void loadFrames();
+  if (!loading) loadFrames().catch(failed);
 }
 
 export function sync(state: DevknobsState): void {
