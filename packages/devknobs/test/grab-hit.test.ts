@@ -117,4 +117,39 @@ describe("hit testing", () => {
     expect(grabTargetAt(rootAt(link, [link, item]), 150, 90)).toBe(as(item));
     expect(grabTargetAt(rootAt(link, [link, item]), 20, 20)).toBe(as(link));
   });
+
+  test("among many children, takes the one under the point and none on a gap, reading few boxes", () => {
+    let read = 0;
+    const cells = Array.from({ length: 5000 }, (_, index) => {
+      const cell = place(node("span"), index * 10, 0, 8, 20);
+      cell.textContent = String(index);
+      const own = cell.getClientRects;
+      cell.getClientRects = () => {
+        read += 1;
+        return own();
+      };
+      return cell;
+    });
+    const row = place(node("div", cells), 0, 0, 50_000, 20);
+    node("body", [row]);
+    expect(grabTargetAt(rootAt(row), 43_219, 10)).toBe(as(row));
+    expect(read).toBe(0);
+    expect(grabTargetAt(rootAt(row), 43_214, 10)).toBe(as(cells[4321] ?? null));
+    expect(read).toBe(1);
+  });
+
+  test("a link over two lines holds the point on either line, not in the gap of their union", () => {
+    const link = place(node("a"), 0, 0, 200, 40);
+    link.textContent = "Take photos with the phone you have";
+    link.getClientRects = () => [
+      { left: 100, top: 0, right: 200, bottom: 15, width: 100, height: 15 },
+      { left: 0, top: 25, right: 80, bottom: 40, width: 80, height: 15 },
+    ];
+    const text = place(node("p", [link]), 0, 0, 200, 40);
+    node("body", [text]);
+    expect(grabTargetAt(rootAt(text), 150, 5)).toBe(as(link));
+    expect(grabTargetAt(rootAt(text), 40, 30)).toBe(as(link));
+    expect(grabTargetAt(rootAt(text), 40, 5)).toBe(as(text));
+    expect(grabTargetAt(rootAt(text), 150, 20)).toBe(as(text));
+  });
 });
