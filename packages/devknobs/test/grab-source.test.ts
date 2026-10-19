@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { StackFrame } from "bippy/source";
-import { isSited, mapped, relocated } from "../src/grab/source";
+import { isSited, mapped, relocated, sourceFetch } from "../src/grab/source";
 
 const SCRIPT = "http://localhost:5173/src/features/Cart.tsx?t=1";
 
@@ -105,5 +105,37 @@ describe("relocated", () => {
     expect(relocated(wrong, RAW, H1, ROUTE, null).lineNumber).toBe(6);
     expect(relocated(wrong, RAW, { tag: "h2", host: true }, ROUTE, null)).toBe(wrong);
     expect(relocated(RAW, RAW, { tag: "h2", host: true }, ROUTE, null)).toBe(RAW);
+  });
+});
+
+describe("sourceFetch", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "location");
+  });
+
+  test("reads the app's own files, and not a package's or another origin's", async () => {
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: { href: "http://localhost:5173/", origin: "http://localhost:5173" },
+    });
+    const asked: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      asked.push(url);
+      return new Response("code");
+    }) as unknown as typeof fetch;
+    const app = "http://localhost:5173/src/features/Cart.tsx?t=1";
+    const packages = [
+      "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6b0316c7",
+      "http://localhost:5173/node_modules/.vite/deps/@tanstack_react-router.js?v=6b0316c7",
+      "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js.map",
+      "http://localhost:5173/@fs/repo/node_modules/clsx/dist/clsx.mjs",
+    ];
+    expect((await sourceFetch(app)).status).toBe(200);
+    for (const url of packages) expect((await sourceFetch(url)).status).toBe(404);
+    expect((await sourceFetch("https://cdn.example.com/src/App.tsx")).status).toBe(404);
+    expect(asked).toEqual([app]);
   });
 });

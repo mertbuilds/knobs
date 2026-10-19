@@ -62,17 +62,30 @@ function styleOf(element: Element): CSSStyleDeclaration | null {
   return element.ownerDocument.defaultView?.getComputedStyle(element) ?? null;
 }
 
-/** One of the element's boxes holds the point. A link over two lines has two, not their union. */
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+function inside(rect: Box, x: number, y: number): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+/**
+ * One of the element's boxes holds the point. A link over two lines has two,
+ * not their union. The union holds every box that has an area, so a point
+ * outside it is in none of them, which spares reading the boxes.
+ */
 function holds(element: Element, x: number, y: number): boolean {
-  return Array.from(element.getClientRects()).some(
-    (rect) =>
-      rect.width > 0 &&
-      rect.height > 0 &&
-      x >= rect.left &&
-      x <= rect.right &&
-      y >= rect.top &&
-      y <= rect.bottom,
-  );
+  if (!inside(element.getBoundingClientRect(), x, y)) return false;
+  const rects = element.getClientRects();
+  for (let index = 0; index < rects.length; index++) {
+    const rect = rects[index];
+    if (rect && rect.width > 0 && rect.height > 0 && inside(rect, x, y)) return true;
+  }
+  return false;
 }
 
 function area(element: Element): number {
@@ -108,10 +121,6 @@ function under(root: HitRoot, top: Element, x: number, y: number): Element {
   return top;
 }
 
-function childrenOf(element: Element): Element[] {
-  return [...Array.from(element.children), ...Array.from(element.shadowRoot?.children ?? [])];
-}
-
 /**
  * Down from the hit element to the deepest child that holds the point, the
  * smallest where several do. A hit test stops at a card whose children take
@@ -122,13 +131,18 @@ function descend(start: Element, x: number, y: number): Element {
   for (let depth = 0; depth < MAX_DEPTH; depth += 1) {
     let best: Element | null = null;
     let smallest = Number.POSITIVE_INFINITY;
-    for (const child of childrenOf(current)) {
-      if (child.hasAttribute("data-devknobs") || !holds(child, x, y)) continue;
-      if (isHidden(child) || isClearLayer(child)) continue;
-      const size = area(child);
-      if (size > smallest) continue;
-      best = child;
-      smallest = size;
+    // The element's own children, then its shadow root's, without a list of them.
+    for (const children of [current.children, current.shadowRoot?.children]) {
+      if (!children) continue;
+      for (let index = 0; index < children.length; index++) {
+        const child = children[index];
+        if (!child || child.hasAttribute("data-devknobs") || !holds(child, x, y)) continue;
+        if (isHidden(child) || isClearLayer(child)) continue;
+        const size = area(child);
+        if (size > smallest) continue;
+        best = child;
+        smallest = size;
+      }
     }
     if (!best) break;
     current = best;

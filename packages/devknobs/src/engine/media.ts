@@ -160,6 +160,8 @@ interface Handover {
   list: MediaQueryList;
   query: string;
   heard: boolean;
+  /** The early guard is on it. An early script that does not say put one on every list. */
+  guarded?: boolean;
 }
 
 /** What the early script leaves on `window` for the full one to take over. */
@@ -189,11 +191,19 @@ const heard = new WeakMap<MediaQueryList, boolean>();
  * when the browser does not know a feature, and the feature is lost with it.
  */
 const queries = new WeakMap<MediaQueryList, string>();
+/** The tracked lists the guard is on, first in line, since the page listened to them. */
+const guarded = new WeakSet<MediaQueryList>();
+const PRUNE_FROM = 256;
+/** Dead lists are dropped from `tracked` once it grows to this. */
+let pruneAt = PRUNE_FROM;
 
 let current: MediaValue = SYSTEM_MEDIA;
 /** `matches` as `MediaQueryList.prototype` had it, to put back. */
 let nativeMatches: PropertyDescriptor | null = null;
 let readMatches: ((this: MediaQueryList) => boolean) | null = null;
+/** The ways to listen on a list as `MediaQueryList.prototype` had them, own or not, to put back. */
+let nativeListen: Map<ListenName, PropertyDescriptor | undefined> | null = null;
+let addNative: EventTarget["addEventListener"] | null = null;
 let patched = false;
 let refreshQueued = false;
 /** Set once the full script took this early copy over: its guards answer to that one. */
@@ -360,15 +370,87 @@ function guard(event: Event): void {
 }
 
 /**
- * The guard goes on before the list reaches the page. Listeners on a list run
- * in the order they were added, capture or not, so only the first one can
- * stop an event before the page's own.
+ * The guard goes on just before the page's first change listener. Listeners
+ * on a list run in the order they were added, capture or not, so only the
+ * first one can stop an event before the page's own. A list the page never
+ * listens to gets none, so the browser can let it go.
  */
+function guardFirst(list: MediaQueryList): void {
+  if (guarded.has(list) || !queries.has(list)) return;
+  guarded.add(list);
+  // What the page would have heard, had the guard been on from the start.
+  heard.set(list, list.matches);
+  (addNative ?? list.addEventListener).call(list, "change", guard);
+}
+
 function track(list: MediaQueryList, query: string): void {
   queries.set(list, query);
   heard.set(list, list.matches);
   tracked.add(new WeakRef(list));
-  list.addEventListener("change", guard);
+  if (tracked.size < pruneAt) return;
+  for (const ref of tracked) if (!ref.deref()) tracked.delete(ref);
+  pruneAt = Math.max(PRUNE_FROM, tracked.size * 2);
+}
+
+type ListenName = "addEventListener" | "addListener" | "onchange";
+
+const LISTEN_NAMES: readonly ListenName[] = ["addEventListener", "addListener", "onchange"];
+
+/** `addEventListener("change")`, `addListener` and `onchange` put the guard on first. */
+function patchListen(): void {
+  const proto = MediaQueryList.prototype;
+  nativeListen = new Map(
+    LISTEN_NAMES.map((name) => [name, Object.getOwnPropertyDescriptor(proto, name)]),
+  );
+  const add = proto.addEventListener;
+  addNative = add;
+  Object.defineProperty(proto, "addEventListener", {
+    configurable: true,
+    writable: true,
+    value: function addEventListener(
+      this: MediaQueryList,
+      ...args: Parameters<MediaQueryList["addEventListener"]>
+    ): void {
+      if (args[1] && String(args[0]) === "change") guardFirst(this);
+      add.apply(this, args);
+    },
+  });
+  const listen = proto.addListener;
+  if (typeof listen === "function") {
+    Object.defineProperty(proto, "addListener", {
+      configurable: true,
+      writable: true,
+      value: function addListener(
+        this: MediaQueryList,
+        ...args: Parameters<MediaQueryList["addListener"]>
+      ): void {
+        if (args[0]) guardFirst(this);
+        listen.apply(this, args);
+      },
+    });
+  }
+  const onchange = nativeListen.get("onchange");
+  const set = onchange?.set;
+  if (onchange && set) {
+    Object.defineProperty(proto, "onchange", {
+      ...onchange,
+      set(this: MediaQueryList, value: unknown): void {
+        if (value !== null && value !== undefined) guardFirst(this);
+        set.call(this, value);
+      },
+    });
+  }
+}
+
+function restoreListen(): void {
+  if (!nativeListen) return;
+  const proto = MediaQueryList.prototype;
+  for (const [name, descriptor] of nativeListen) {
+    if (descriptor) Object.defineProperty(proto, name, descriptor);
+    else Reflect.deleteProperty(proto, name);
+  }
+  nativeListen = null;
+  addNative = null;
 }
 
 /** This knob's layer of the shared `matchMedia` patch: a list that names a feature is tracked. */
@@ -390,13 +472,15 @@ function ensureMatchMedia(): void {
   scope[EARLY] = null;
   const handed = early?.release(guard) ?? [];
   patched = true;
-  for (const { list, query, heard: value } of handed) {
+  for (const { list, query, heard: value, guarded: on } of handed) {
     queries.set(list, query);
     heard.set(list, value);
     tracked.add(new WeakRef(list));
+    if (on !== false) guarded.add(list);
   }
   // Only once the early script let go, so the patch goes over the browser's own.
   addLayer("media", trackLists);
+  patchListen();
   const descriptor = Object.getOwnPropertyDescriptor(MediaQueryList.prototype, "matches");
   const read = descriptor?.get;
   if (!descriptor || !read) return;
@@ -460,6 +544,7 @@ function teardown(): void {
   }
   if (patched) {
     removeLayer("media");
+    restoreListen();
     if (nativeMatches) Object.defineProperty(MediaQueryList.prototype, "matches", nativeMatches);
     nativeMatches = null;
     readMatches = null;
@@ -472,9 +557,15 @@ function teardown(): void {
  * Put `matchMedia` and `matches` back and stop watching for new stylesheets.
  * The lists stay tracked and keep their guards, which only note what the page
  * hears while nothing is emulated, so the next mount tells each where it stands.
+ * A list the page has not listened to yet gets its guard now, while it can
+ * still be first.
  */
 export function destroy(): void {
   reset();
+  for (const ref of tracked) {
+    const list = ref.deref();
+    if (list) guardFirst(list);
+  }
   teardown();
   Reflect.deleteProperty(window, EARLY);
 }
@@ -493,6 +584,7 @@ function release(next: (event: Event) => void): Handover[] {
       list,
       query: queries.get(list) ?? list.media,
       heard: heard.get(list) ?? list.matches,
+      guarded: guarded.has(list),
     });
   }
   forward = next;
