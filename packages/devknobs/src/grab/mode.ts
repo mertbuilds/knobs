@@ -2,7 +2,7 @@ import { ensureStyle, removeStyle } from "../engine/style";
 import { pause } from "../engine/touchpointer";
 import { copyGrab } from "./clipboard";
 import { componentOf, grabEntry, joinEntries, quickEntry } from "./context";
-import { DWELL, settles, speedOf } from "./dwell";
+import { dwellOf, settles, speedOf } from "./dwell";
 import { grabTargetAt, isDevknobs } from "./hit";
 import { isCLike } from "./keys";
 import { createNavigator, stepOf } from "./navigate";
@@ -218,12 +218,14 @@ export function startMode(options: ModeOptions, page: ModePage = PAGE): Mode {
     if (target === current) return;
     const held = at - since;
     const boxed = current !== null || at - leftAt < HIDE_WAIT;
-    if (now || !target || settles({ boxed, held, speed })) {
+    const inside = current !== null && target !== null && target.contains(current);
+    const hover = { boxed, held, speed, inside };
+    if (now || !target || settles(hover)) {
       navigator.clear();
       select(target);
       return;
     }
-    settleTimer = window.setTimeout(() => hit(), Math.min(HIT_EVERY, DWELL - held));
+    settleTimer = window.setTimeout(() => hit(), Math.min(HIT_EVERY, dwellOf(hover) - held));
   }
 
   /** A hit test still to come is run now, so a click or a key acts on its element. */

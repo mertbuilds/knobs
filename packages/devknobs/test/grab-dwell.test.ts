@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
-import { DWELL, SLOW, settles, speedOf } from "../src/grab/dwell";
+import { CONTAINER_DWELL, DWELL, dwellOf, SLOW, settles, speedOf } from "../src/grab/dwell";
 import { type Mode, type ModePage, startMode } from "../src/grab/mode";
 import type { Overlay } from "../src/grab/overlay";
 import type { GrabEntry } from "../src/grab/types";
@@ -9,21 +9,37 @@ describe("settles", () => {
   const fast = 4 * SLOW;
 
   test("the first box is up at once, however fast the pointer goes", () => {
-    expect(settles({ boxed: false, held: 0, speed: fast })).toBe(true);
+    expect(settles({ boxed: false, held: 0, speed: fast, inside: false })).toBe(true);
   });
 
   test("a slow pointer takes the box with it at once", () => {
-    expect(settles({ boxed: true, held: 0, speed: 0 })).toBe(true);
-    expect(settles({ boxed: true, held: 0, speed: SLOW / 2 })).toBe(true);
+    expect(settles({ boxed: true, held: 0, speed: 0, inside: false })).toBe(true);
+    expect(settles({ boxed: true, held: 0, speed: SLOW / 2, inside: false })).toBe(true);
   });
 
   test("a fast pointer leaves the box where it is", () => {
-    expect(settles({ boxed: true, held: 0, speed: SLOW })).toBe(false);
-    expect(settles({ boxed: true, held: DWELL - 1, speed: fast })).toBe(false);
+    expect(settles({ boxed: true, held: 0, speed: SLOW, inside: false })).toBe(false);
+    expect(settles({ boxed: true, held: DWELL - 1, speed: fast, inside: false })).toBe(false);
   });
 
   test("a fast pointer that stays on one element takes the box there", () => {
-    expect(settles({ boxed: true, held: DWELL, speed: fast })).toBe(true);
+    expect(settles({ boxed: true, held: DWELL, speed: fast, inside: false })).toBe(true);
+  });
+
+  test("a box grows to what holds it only after the longer hold, however slow the pointer", () => {
+    expect(settles({ boxed: true, held: 0, speed: 0, inside: true })).toBe(false);
+    expect(settles({ boxed: true, held: DWELL, speed: fast, inside: true })).toBe(false);
+    expect(settles({ boxed: true, held: CONTAINER_DWELL - 1, speed: 0, inside: true })).toBe(false);
+    expect(settles({ boxed: true, held: CONTAINER_DWELL, speed: fast, inside: true })).toBe(true);
+  });
+
+  test("the first box is up at once on what holds the last one too", () => {
+    expect(settles({ boxed: false, held: 0, speed: fast, inside: true })).toBe(true);
+  });
+
+  test("the hold is the longer one for what holds the box", () => {
+    expect(dwellOf({ boxed: true, held: 0, speed: 0, inside: false })).toBe(DWELL);
+    expect(dwellOf({ boxed: true, held: 0, speed: 0, inside: true })).toBe(CONTAINER_DWELL);
   });
 });
 
@@ -250,6 +266,37 @@ describe("grab's box", () => {
     expect(shown()).toEqual([as(a), null]);
     wait(500);
     expect(shown()).toEqual([as(a), null]);
+  });
+
+  test("waits longer before it grows to the parent in the gap between two items", () => {
+    laid = [a, row, b];
+    start(50);
+    wait(40);
+    move(98);
+    wait(40);
+    move(102);
+    wait(CONTAINER_DWELL - 1);
+    expect(shown()).toEqual([as(a)]);
+    wait(1);
+    expect(shown()).toEqual([as(a), as(row)]);
+  });
+
+  test("goes from one item to the next without the parent between them", () => {
+    laid = [a, row, b];
+    start(50);
+    wait(40);
+    move(98);
+    wait(40);
+    move(102);
+    for (const x of [140, 180, 205]) {
+      wait(40);
+      move(x);
+      expect(boxed()).toBe(as(a));
+    }
+    wait(100);
+    expect(shown()).toEqual([as(a), as(b)]);
+    wait(500);
+    expect(shown()).toEqual([as(a), as(b)]);
   });
 
   test("takes what a scroll put under a pointer that waits", () => {

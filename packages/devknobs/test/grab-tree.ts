@@ -17,6 +17,7 @@ export interface FakeElement {
   getClientRects(): FakeRect[];
   hasAttribute(name: string): boolean;
   getRootNode(): unknown;
+  contains(other: FakeElement | null): boolean;
 }
 
 export interface FakeRect {
@@ -64,6 +65,10 @@ export function node(
     getClientRects: () => (self.box.width > 0 && self.box.height > 0 ? [self.box] : []),
     hasAttribute: (name) => name in attrs,
     getRootNode: () => ({}),
+    contains: (other) => {
+      for (let at = other; at; at = at.parentElement) if (at === self) return true;
+      return false;
+    },
   };
   children.forEach((child, index) => {
     child.parentElement = self;
