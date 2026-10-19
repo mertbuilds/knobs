@@ -3,7 +3,7 @@ import { isCustomColor, parseColor, toHex } from "../engine/color";
 import { DEVICES, deviceOf, formId, formOf, hasTouch, POSTURES } from "../engine/devices";
 import { frameForced, knobFrame } from "../engine/frame";
 import { isMatName, MAT_COLOR_NAMES, MAT_COLORS, matGradient } from "../engine/matcolors";
-import { landSplash } from "../engine/matsplash";
+import { landSplash } from "../engine/frames";
 import { mockOf } from "../engine/mock";
 import { DEFAULT_STATE } from "../engine/store";
 import { GRAB_COLOR_NAMES, GRAB_COLORS } from "../grab/colors";

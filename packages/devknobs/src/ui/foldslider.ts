@@ -1,7 +1,6 @@
 import * as engine from "../engine";
-import { deviceOf } from "../engine/devices";
-import { openOf } from "../engine/fold";
-import { foldRest, holdingHinge, letGo, moveHinge, takeHinge, watchFold, watchHinge } from "../engine/foldhand";
+import { deviceOf, openOf } from "../engine/devices";
+import { foldRest, holdingHinge, letGo, moveHinge, takeHinge, watchFold, watchHinge } from "../engine/frames";
 import type { DevknobsState, PostureValue } from "../types";
 import { icon } from "./icons";
 

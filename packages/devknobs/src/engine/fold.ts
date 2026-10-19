@@ -1,8 +1,11 @@
 import type { PostureValue } from "../types";
+import { openOf } from "./devices";
 import { tune } from "./foldlook";
 import { finds } from "./foldtune";
 import type { Rect, Sides } from "./mock";
 import { type Corners, fitCorners, lerp } from "./morph";
+
+export { openOf };
 
 /**
  * A foldable folding open or shut in view, as a book does: the half of the
@@ -54,10 +57,6 @@ export interface Hinge {
   velocity: number;
 }
 
-/** How far open a posture leaves the hinge. */
-export function openOf(posture: PostureValue): number {
-  return posture === "open" ? 1 : 0;
-}
 
 /** The hinge a hand holds a step on toward `target`: shut, open, or anywhere between, where the hand puts it. */
 export function hingeStep(hinge: Hinge, target: number): Hinge {

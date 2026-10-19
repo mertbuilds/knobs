@@ -12,7 +12,7 @@
 
 import * as engine from "../engine";
 import { needsFrame, readMessage } from "../engine/frame";
-import { frameWindow } from "../engine/width";
+import { frameWindow } from "../engine/frames";
 import type { InspectControl } from "../grab/inspect";
 import { label } from "../styles/tree";
 import { onPane, openPane, paneView, retitlePane, showPane } from "./pane";

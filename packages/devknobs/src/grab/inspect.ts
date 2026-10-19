@@ -1,5 +1,5 @@
 import { isDevknobsFrame, post, readMessage } from "../engine/frame";
-import { frameWindow } from "../engine/width";
+import { frameWindow } from "../engine/frames";
 import { label } from "../styles/tree";
 import type { BoxRing } from "./boxmodel";
 import { createGrab, type GrabControl, type GrabControlOptions, type LoadMode } from "./control";

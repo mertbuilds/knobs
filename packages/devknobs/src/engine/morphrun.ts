@@ -1,4 +1,3 @@
-import { baseMatchMedia } from "./matchmedia";
 import {
   bezier,
   type Curve,
@@ -18,6 +17,8 @@ import {
 } from "./morph";
 import { stopFold } from "./foldrun";
 import { stopTurn } from "./turnrun";
+
+export { still } from "./matchmedia";
 
 /**
  * Runs a device change's plan on the frame's nodes, a step at a time. What it
@@ -91,12 +92,6 @@ export function forget(): void {
   clipped = false;
 }
 
-/** No movement: the user asks for less, or the browser cannot animate. */
-export function still(): boolean {
-  if (typeof window.matchMedia !== "function" || typeof Element === "undefined") return true;
-  if (typeof Element.prototype.animate !== "function") return true;
-  return baseMatchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 /** Is a css color fully see-through? */
 function clear(color: string): boolean {
