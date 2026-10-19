@@ -131,6 +131,8 @@ interface Browser {
   /** `localStorage`. */
   local: Map<string, string>;
   attributes: Map<string, string>;
+  /** How often `<html>` had an attribute set or removed. */
+  attributeWrites: number;
 }
 
 interface BrowserOptions {
@@ -179,6 +181,7 @@ function stubBrowser(jar: string, options: BrowserOptions = {}): Browser {
     storage: new Map(),
     local: new Map(),
     attributes: new Map(),
+    attributeWrites: 0,
   };
   if (options.owner !== undefined) {
     const write = { kind: "cookie", key: PARAGLIDE_COOKIE, prior: null, value: options.owner };
@@ -199,9 +202,11 @@ function stubBrowser(jar: string, options: BrowserOptions = {}): Browser {
       documentElement: {
         getAttribute: (name: string) => browser.attributes.get(name) ?? null,
         setAttribute: (name: string, value: string) => {
+          browser.attributeWrites += 1;
           browser.attributes.set(name, value);
         },
         removeAttribute: (name: string) => {
+          browser.attributeWrites += 1;
           browser.attributes.delete(name);
         },
       },
@@ -623,6 +628,24 @@ describe("apply", () => {
     expect(readCookie(page.jar, PARAGLIDE_COOKIE)).toBe("tr");
     expect(owner(page)).toBe("tr");
     expect(page.reloads).toBe(1);
+  });
+
+  test("leaves lang and dir unwritten when they already hold the value", () => {
+    const page = stubPage();
+    page.attributes.set("lang", "en");
+    page.attributes.set("dir", "ltr");
+    page.attributeWrites = 0;
+    apply({ lang: "system", dir: "system" });
+    apply({ lang: "system", dir: "system" });
+    expect(page.attributeWrites).toBe(0);
+    apply({ lang: "tr", dir: "system" });
+    expect(page.attributeWrites).toBe(1);
+    apply({ lang: "tr", dir: "system" });
+    expect(page.attributeWrites).toBe(1);
+    apply({ lang: "system", dir: "system" });
+    expect(page.attributes.get("lang")).toBe("en");
+    expect(page.attributes.get("dir")).toBe("ltr");
+    expect(page.attributeWrites).toBe(2);
   });
 
   test("makes the language the Intl default until reset", () => {

@@ -413,8 +413,10 @@ let holder: MutationObserver | null = null;
 let holdWindow = 0;
 let holdCount = 0;
 
+/** A write of the value already there would still restyle the whole page, so it is left out. */
 function setAttribute(name: string, value: string | null): void {
   const root = document.documentElement;
+  if (root.getAttribute(name) === value) return;
   if (value === null) root.removeAttribute(name);
   else root.setAttribute(name, value);
 }
