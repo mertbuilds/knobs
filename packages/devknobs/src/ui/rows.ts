@@ -464,7 +464,10 @@ export function createRows(context: RowsContext): Rows {
     },
     tick(state: DevknobsState, live: Live): void {
       for (const view of views) {
-        if (!view.box.hidden) view.value.textContent = rowText(view.row, state, live);
+        if (view.box.hidden) continue;
+        // A write of the same text would still replace the node, a mutation for every observer.
+        const text = rowText(view.row, state, live);
+        if (view.value.textContent !== text) view.value.textContent = text;
       }
       if (openRow === "clock") for (const update of viewOf("clock")?.updates ?? []) update(state);
     },
