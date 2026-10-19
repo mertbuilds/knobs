@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  EXITED,
   FRAME_ATTRIBUTE,
   FRAME_NAME,
   frameForced,
@@ -12,7 +13,8 @@ import {
   readMessage,
   UNFRAMED,
 } from "../src/engine/frame";
-import { DEFAULT_STATE } from "../src/engine/store";
+import { DEFAULT_STATE, merge, parse } from "../src/engine/store";
+import { DEVICE } from "../src/ui/deviceknobs";
 
 const ORIGIN = "http://localhost:3000";
 
@@ -56,6 +58,31 @@ describe("framed", () => {
   test("hands back a state that is already full", () => {
     const state = { ...DEFAULT_STATE, text: 20 };
     expect(framed(state)).toBe(state);
+  });
+});
+
+describe("the frame leaving on its own", () => {
+  const exit = (state: typeof DEFAULT_STATE) => merge(state, EXITED);
+  // Picking none for the device, then the other knobs the exit turns off.
+  const none = (state: typeof DEFAULT_STATE) =>
+    merge(merge(state, DEVICE.write("none", state)), { ...UNFRAMED, panel: { docked: false } });
+
+  test("takes the device off and the browser it brought, as picking none does", () => {
+    const phone = merge(DEFAULT_STATE, { device: "iphone-17", frame: true, panel: { docked: true } });
+    expect(phone.ua.preset).toBe("iphone-safari");
+    const exited = exit(phone);
+    expect(exited.device).toBe("none");
+    expect(exited.ua.preset).toBe("system");
+    expect(needsFrame(exited)).toBe(false);
+    expect(exited).toEqual(none(phone));
+    expect(parse(JSON.stringify(exited))).toEqual(parse(JSON.stringify(none(phone))));
+  });
+
+  test("keeps a browser picked since the device, as picking none does", () => {
+    const phone = merge(DEFAULT_STATE, { device: "iphone-17" });
+    const picked = merge(phone, { ua: { preset: "android-chrome" } });
+    expect(exit(picked).ua.preset).toBe("android-chrome");
+    expect(exit(picked)).toEqual(none(picked));
   });
 });
 
