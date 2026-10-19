@@ -70,10 +70,14 @@ interface Call {
   open: number;
 }
 
-/** The calls that make `tag` in transformed code: `jsxDEV("h1", ...)` or `jsxDEV(Row, ...)`. */
-function jsxCalls(code: string, tag: string, host: boolean): Call[] {
+/**
+ * The calls that make `tag` in transformed code: `jsxDEV("h1", ...)` or `jsxDEV(Row, ...)`.
+ * A call's name starts where a run of name characters does, so the scan does
+ * not try again inside one, as in a long inline source map.
+ */
+export function jsxCalls(code: string, tag: string, host: boolean): Call[] {
   const name = host ? `["']${escape(tag)}["']` : escape(tag);
-  const pattern = new RegExp(`[\\w$.]*jsxs?(?:DEV)?\\(\\s*${name}\\s*,`, "g");
+  const pattern = new RegExp(`(?<![\\w$.])[\\w$.]*jsxs?(?:DEV)?\\(\\s*${name}\\s*,`, "g");
   return Array.from(code.matchAll(pattern), (match) => ({
     start: match.index,
     end: match.index + match[0].length,

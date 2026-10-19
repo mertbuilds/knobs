@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { locateJsx, opensAt, tagPlaces } from "../src/grab/locate";
+import { jsxCalls, locateJsx, opensAt, tagPlaces } from "../src/grab/locate";
 
 /** A route's file as it is written. The page starts on line 9. */
 const SOURCE = `import { useState } from 'react';
@@ -114,5 +114,47 @@ describe("locateJsx", () => {
     const noted = CODE.replace("lineNumber: 13,", "line: 13,");
     expect(locateJsx(SOURCE, "p", true, noted, callPlace('"p"', 0))).toBeNull();
     expect(locateJsx(SOURCE, "p", true, CODE, { line: 1, column: 0 })).toBeNull();
+  });
+});
+
+/** The scan before it learned where a name starts, to check the new one finds the same calls. */
+function oldCalls(code: string, tag: string, host: boolean) {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const name = host ? `["']${escaped}["']` : escaped;
+  const pattern = new RegExp(`[\\w$.]*jsxs?(?:DEV)?\\(\\s*${name}\\s*,`, "g");
+  return Array.from(code.matchAll(pattern), (match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    open: match.index + match[0].indexOf("("),
+  }));
+}
+
+/** A dev module's inline source map: one long run of base64, as Vite puts at a module's end. */
+const MAP = `\n//# sourceMappingURL=data:application/json;base64,${"eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpb".repeat(1500)}\n`;
+
+describe("jsxCalls", () => {
+  test("finds the same calls as a scan that tries every start", () => {
+    const code = [
+      CODE,
+      'React.jsx("p", {}); a.b.jsxs( "p" , {}); $jsxDEV("p", {}); xjsx("p", {}); (jsx)("p", {});',
+      "jsxDEV(Row, {}); _jsxs(Rows, {}); jsx(Row,{}); jsx(Row.Item, {});",
+    ].join("\n");
+    for (const [tag, host] of [
+      ["p", true],
+      ["section", true],
+      ["Row", false],
+      ["Row.Item", false],
+    ] as const) {
+      expect(jsxCalls(code, tag, host)).toEqual(oldCalls(code, tag, host));
+      expect(jsxCalls(`${code}${MAP}`, tag, host)).toEqual(oldCalls(code, tag, host));
+    }
+    expect(jsxCalls(CODE, "p", true)).toHaveLength(3);
+  });
+
+  test("runs in linear time over a long inline source map", () => {
+    const code = `${CODE}${MAP}`;
+    const started = performance.now();
+    for (let round = 0; round < 10; round++) jsxCalls(code, "p", true);
+    expect(performance.now() - started).toBeLessThan(50);
   });
 });
