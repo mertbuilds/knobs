@@ -3,7 +3,7 @@ import { pause } from "../engine/touchpointer";
 import { copyGrab } from "./clipboard";
 import { componentOf, grabEntry, joinEntries, quickEntry } from "./context";
 import { dwellOf, settles, speedOf } from "./dwell";
-import { grabTargetAt, isDevknobs } from "./hit";
+import { composedContains, grabTargetAt, isDevknobs } from "./hit";
 import { isCLike } from "./keys";
 import { createNavigator, stepOf } from "./navigate";
 import { createOverlay, HIDE_WAIT, type Overlay } from "./overlay";
@@ -218,7 +218,7 @@ export function startMode(options: ModeOptions, page: ModePage = PAGE): Mode {
     if (target === current) return;
     const held = at - since;
     const boxed = current !== null || at - leftAt < HIDE_WAIT;
-    const inside = current !== null && target !== null && target.contains(current);
+    const inside = current !== null && target !== null && composedContains(target, current);
     const hover = { boxed, held, speed, inside };
     if (now || !target || settles(hover)) {
       navigator.clear();

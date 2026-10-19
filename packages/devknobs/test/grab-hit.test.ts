@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  composedContains,
   composedParent,
   deepElementAt,
   grabTargetAt,
@@ -31,6 +32,17 @@ describe("hit testing", () => {
     node("body", [host]);
     expect(deepElementAt(rootAt(host), 1, 1)).toBe(as(inner));
     expect(composedParent(as(inner))).toBe(as(host));
+  });
+
+  test("finds what an element holds, through its shadow root too", () => {
+    const inner = node("button");
+    const host = node("my-card");
+    shadow(host, [inner], inner);
+    const body = node("body", [host]);
+    expect(composedContains(as(host), as(inner))).toBe(true);
+    expect(composedContains(as(body), as(inner))).toBe(true);
+    expect(composedContains(as(inner), as(host))).toBe(false);
+    expect(composedContains(as(node("div")), as(inner))).toBe(false);
   });
 
   test("passes over devknobs' own nodes, in their shadow roots too", () => {

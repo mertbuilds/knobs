@@ -40,6 +40,14 @@ export function composedParent(element: Element): Element | null {
   return root && "host" in root ? (root as ShadowRoot).host : null;
 }
 
+/** The element is the ancestor or under it in the composed tree, through shadow roots too. */
+export function composedContains(ancestor: Element, element: Element): boolean {
+  for (let current: Element | null = element; current; current = composedParent(current)) {
+    if (current === ancestor) return true;
+  }
+  return false;
+}
+
 /** Part of devknobs itself: its panel, its frame's letterbox, its overlays. */
 export function isDevknobs(element: Element): boolean {
   for (let current: Element | null = element; current; current = composedParent(current)) {

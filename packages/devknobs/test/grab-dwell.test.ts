@@ -3,7 +3,7 @@ import { CONTAINER_DWELL, DWELL, dwellOf, SLOW, settles, speedOf } from "../src/
 import { type Mode, type ModePage, startMode } from "../src/grab/mode";
 import type { Overlay } from "../src/grab/overlay";
 import type { GrabEntry } from "../src/grab/types";
-import { as, type FakeElement, node } from "./grab-tree";
+import { as, type FakeElement, node, shadow } from "./grab-tree";
 
 describe("settles", () => {
   const fast = 4 * SLOW;
@@ -279,6 +279,24 @@ describe("grab's box", () => {
     expect(shown()).toEqual([as(a)]);
     wait(1);
     expect(shown()).toEqual([as(a), as(row)]);
+  });
+
+  test("waits as long for a host whose items are in its shadow root", () => {
+    const x = node("x");
+    const y = node("y");
+    const host = node("my-list");
+    shadow(host, [x, y], null);
+    node("body", [host]);
+    laid = [x, host, y];
+    start(50);
+    wait(40);
+    move(98);
+    wait(40);
+    move(102);
+    wait(CONTAINER_DWELL - 1);
+    expect(shown()).toEqual([as(x)]);
+    wait(1);
+    expect(shown()).toEqual([as(x), as(host)]);
   });
 
   test("goes from one item to the next without the parent between them", () => {
