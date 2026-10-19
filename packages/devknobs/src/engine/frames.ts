@@ -19,6 +19,8 @@ let kit: FrameKit | null = null;
 let load: () => Promise<FrameKit> = () => import("./framekit");
 /** The one load of the kit. A failed one stays failed: the browser keeps a module that did not load. */
 let loading: Promise<void> | null = null;
+/** The kit did not load, so no frame can come. */
+let down = false;
 /** Calls to make once the kit is in, before it draws. */
 const waiting: ((kit: FrameKit) => void)[] = [];
 /** The last knobs that needed no frame, before the ones that load it. */
@@ -56,6 +58,7 @@ export function loadKitWith(next: () => Promise<FrameKit>): void {
 /** The kit did not load: no frame comes, so the knobs that asked for one go back to none. */
 function failed(error: unknown): void {
   console.error("devknobs: the device frame could not load", error);
+  down = true;
   before = null;
   latest = null;
   dropEarly();
@@ -86,6 +89,11 @@ export function apply(state: DevknobsState): void {
     before = state;
     // No frame was drawn, so the early script's stand-in goes, as the frame does with none.
     dropEarly();
+    return;
+  }
+  if (down) {
+    // Each pick of a device after that goes back to none, which needs no frame and so ends here.
+    exit?.();
     return;
   }
   latest = state;

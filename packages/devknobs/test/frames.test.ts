@@ -148,7 +148,7 @@ describe("the frame's kit, loaded when a frame is first needed", () => {
     expect(fake.calls).toEqual([]);
   });
 
-  test("that does not load takes the device off once, and is not asked again", async () => {
+  test("that does not load takes the device off each time, and is not asked again", async () => {
     const frames = await freshFrames();
     const error = spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -165,6 +165,9 @@ describe("the frame's kit, loaded when a frame is first needed", () => {
       expect(exits).toBe(1);
       expect(dropped).toBe(1);
       frames.apply(DEVICE);
+      expect(exits).toBe(2);
+      frames.apply(PLAIN);
+      expect(exits).toBe(2);
       await expect(frames.loadFrames()).rejects.toThrow("chunk gone");
       expect(loads).toBe(1);
       expect(error).toHaveBeenCalledTimes(1);
