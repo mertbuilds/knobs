@@ -2,13 +2,13 @@ import type { DevknobsState, DevknobsStatePatch } from "../types";
 import * as requests from "../requests";
 import { hasTouch } from "./devices";
 import {
+  EXITED,
   framed,
   isDevknobsFrame,
   nativeScheme,
   needsFrame,
   post,
   readMessage,
-  UNFRAMED,
 } from "./frame";
 import * as geo from "./geo";
 import * as header from "./header";
@@ -144,7 +144,7 @@ export function start(options: EngineOptions = {}): void {
   // Before any knob, so a patch a knob puts on `fetch` wraps the log's and comes off first.
   requests.start();
   // A page that will not load in the frame offers this way out, of a pinned panel's frame too.
-  width.onExit(() => setState({ ...UNFRAMED, panel: { docked: false } }));
+  width.onExit(() => setState(EXITED));
   // The letterbox zooms the frame from its own control, the wheel and the keys.
   width.onZoom((zoom) => setState({ zoom }));
   applyState(merge(stored ? load() : { ...DEFAULT_STATE }, options.state ?? {}));

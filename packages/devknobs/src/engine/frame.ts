@@ -1,5 +1,5 @@
 import { type BoxRing, RINGS } from "../grab/boxmodel";
-import type { DevknobsState, PanelValue, SchemeValue } from "../types";
+import type { DevknobsState, DevknobsStatePatch, PanelValue, SchemeValue } from "../types";
 import { parse } from "./store";
 
 /** Marks the iframe the width knob renders the page in. */
@@ -122,6 +122,12 @@ export const UNFRAMED: FrameKnobs = {
   dpr: "system",
   vision: "none",
 };
+
+/**
+ * The frame leaving on its own: every knob that keeps it up off and the panel
+ * unpinned. No device as well, so the browser it brought goes as picking none does.
+ */
+export const EXITED: DevknobsStatePatch = { ...UNFRAMED, device: "none", panel: { docked: false } };
 
 function positive(value: number | string): boolean {
   return typeof value === "number" && value > 0;
