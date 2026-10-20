@@ -70,15 +70,15 @@ main does the same from CI.
 ## devknobs
 
 `pnpm dev` runs the site against devknobs' source, so an edit in `packages/devknobs/src` reloads
-the page. To release a new version: bump `version` in `packages/devknobs/package.json`, add the
-`CHANGELOG.md` entry, then:
+the page. To release a new version: in a PR, bump `version` in `packages/devknobs/package.json`
+and add the `CHANGELOG.md` entry. After the merge, tag it:
 
 ```sh
-pnpm --filter devknobs build
-cd packages/devknobs
-npm pack --dry-run   # check the file list
-npm publish
+git tag devknobs@X.Y.Z && git push origin devknobs@X.Y.Z
 ```
+
+The Release workflow publishes it to npm through trusted publishing (no token). One-time setup:
+`npm trust github devknobs --file release.yml --repo mertbuilds/knobs --allow-publish`.
 
 ## Going to production: accounts checklist
 
