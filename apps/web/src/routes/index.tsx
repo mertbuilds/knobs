@@ -1,7 +1,7 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, defaultMarker, props, type StyleXStyles, when } from '@stylexjs/stylex';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { CheckIcon, CopyIcon } from 'lucide-react';
+import { CheckIcon, CopyIcon, StarIcon } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
@@ -74,12 +74,21 @@ function whenIdle(task: () => void): () => void {
 // panel still reaches `document` with the real button in its composed path.
 const PANEL = '[data-devknobs="panel"]';
 
+const REPO = 'https://github.com/mertbuilds/knobs';
+
 const DOCS = 'https://github.com/mertbuilds/knobs/tree/main/packages/devknobs#readme';
 
 const NOTICES =
   'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
 const styles = create({
+  // The wordmark, and the way to the code at the end of its row.
+  brand: {
+    alignItems: 'center',
+    columnGap: spacing.s4,
+    display: 'flex',
+    justifyContent: 'space-between',
+  },
   // A code box is a panel field: the card ground, 8 round, and the copy
   // button 4 inside it, so 4 round.
   code: {
@@ -193,6 +202,45 @@ const styles = create({
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
+  // The header's GitHub button: the chip's hairline box around the mark, and the track ground on hover.
+  github: {
+    alignItems: 'center',
+    backgroundColor: {
+      ':hover': colors.track,
+      default: 'transparent',
+    },
+    borderColor: colors.border,
+    borderRadius: radius.base,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexShrink: 0,
+    height: 28,
+    justifyContent: 'center',
+    outlineColor: colors.muted,
+    outlineOffset: 2,
+    outlineStyle: {
+      ':focus-visible': 'solid',
+      default: 'none',
+    },
+    outlineWidth: 1,
+    transitionDuration: '120ms',
+    transitionProperty: 'background-color',
+    transitionTimingFunction: 'ease-out',
+    width: 28,
+  },
+  // The mark's color, here and not on the link: the theme's global `a` rules outrank StyleX's.
+  githubMark: {
+    color: {
+      default: colors.muted,
+      [when.ancestor(':hover')]: colors.fg,
+    },
+    display: 'flex',
+    transitionDuration: '120ms',
+    transitionProperty: 'color',
+    transitionTimingFunction: 'ease-out',
+  },
   hint: {
     color: colors.muted,
     fontSize: '0.8125rem',
@@ -268,6 +316,27 @@ const styles = create({
     fontSize: '0.8125rem',
     fontWeight: font.weightRegular,
     margin: 0,
+  },
+  // The star before its link, and the box its filled twin is laid over.
+  star: {
+    display: 'flex',
+    flexShrink: 0,
+    position: 'relative',
+  },
+  // The star filled in, over its outline, while the link is pointed at.
+  starFilled: {
+    inset: 0,
+    opacity: {
+      default: 0,
+      [when.ancestor(':hover')]: {
+        '@media (hover: hover)': 1,
+        default: null,
+      },
+    },
+    position: 'absolute',
+    transitionDuration: '120ms',
+    transitionProperty: 'opacity',
+    transitionTimingFunction: 'ease-out',
   },
   text: {
     margin: 0,
@@ -479,8 +548,13 @@ function trackClick(event: MouseEvent) {
   if (link === null) {
     return;
   }
-  track('link_click', { href: link.href, label: link.textContent?.trim() });
+  track('link_click', {
+    href: link.href,
+    label: link.textContent?.trim() || (link.getAttribute('aria-label') ?? undefined),
+  });
 }
+
+const onGitHub = (placement: 'footer' | 'header') => () => track('github_clicked', { placement });
 
 function Landing() {
   // The panel is the demo, so it runs here in every environment, not gated on
@@ -515,10 +589,24 @@ function Landing() {
   return (
     <main {...props(styles.page)}>
       <header {...props(styles.section)}>
-        <h1 {...props(styles.wordmark)}>
-          <KnobsMark size={20} />
-          {m.app_name()}
-        </h1>
+        <div {...props(styles.brand)}>
+          <h1 {...props(styles.wordmark)}>
+            <KnobsMark size={20} />
+            {m.app_name()}
+          </h1>
+          <a
+            aria-label={m.link_github()}
+            href={REPO}
+            onClick={onGitHub('header')}
+            rel="noreferrer"
+            target="_blank"
+            {...props(styles.github, defaultMarker())}
+          >
+            <span {...props(styles.githubMark)}>
+              <GitHubMark />
+            </span>
+          </a>
+        </div>
         <p {...props(styles.text)}>{m.tagline()}</p>
         {installChoices()}
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
@@ -533,25 +621,51 @@ function Landing() {
       </section>
 
       <footer {...props(styles.footer)}>
-        <a href={DOCS} {...props(styles.link)}>
+        <a href={DOCS} rel="noreferrer" target="_blank" {...props(styles.link)}>
           {m.link_docs()}
         </a>
-        <a href="https://github.com/mertbuilds/knobs" {...props(styles.link, styles.withIcon)}>
+        <a
+          href={REPO}
+          onClick={onGitHub('footer')}
+          rel="noreferrer"
+          target="_blank"
+          {...props(styles.link, styles.withIcon)}
+        >
           <GitHubMark />
           {m.link_github()}
         </a>
-        <a href="https://www.npmjs.com/package/devknobs" {...props(styles.link, styles.withIcon)}>
+        <a
+          href={REPO}
+          onClick={onGitHub('footer')}
+          rel="noreferrer"
+          target="_blank"
+          {...props(styles.link, styles.withIcon, defaultMarker())}
+        >
+          <span {...props(styles.star)}>
+            <StarIcon {...ICON} />
+            <StarIcon {...ICON} fill="currentColor" {...props(styles.starFilled)} />
+          </span>
+          {m.link_star()}
+        </a>
+        <a
+          href="https://www.npmjs.com/package/devknobs"
+          rel="noreferrer"
+          target="_blank"
+          {...props(styles.link, styles.withIcon)}
+        >
           <NpmMark />
           {m.link_npm()}
         </a>
         {/* The licenses of grab's sources (react-grab, bippy) and the bezel images. */}
-        <a href={NOTICES} {...props(styles.link)}>
+        <a href={NOTICES} rel="noreferrer" target="_blank" {...props(styles.link)}>
           {m.link_notices()}
         </a>
         <span {...props(styles.credit)}>
           {m.link_mertbuilds_before()}{' '}
           <a
             href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
+            rel="noreferrer"
+            target="_blank"
             {...props(styles.link)}
           >
             {m.link_mertbuilds()}
