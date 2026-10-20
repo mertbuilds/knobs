@@ -1,5 +1,25 @@
 # changelog
 
+## 0.2.1
+
+### device frame
+
+- the frame and device code (bezels, the iPhone Duo's fold, browser bars) is a chunk of its own, loaded the first time a knob needs a frame, also when a saved device comes back. `import "devknobs"` loads much less up front, and the early stand-in covers the page until the frame draws. `dist/index.global.js` keeps it all in one file
+- when the frame exits on its own, as when its code or the page in it does not load, the device goes back to none and the browser it brought goes back to system, as picking none does. a ua you picked since is kept. a failed load says so once in the console, and each device pick after it goes back to none
+
+### grab
+
+- the first grab is quicker: frames from packages are named from their path, so their bundles and source maps are no longer fetched, and the scan for jsx calls no longer slows down on a long inline source map
+- the hit test under the pointer skips children whose box is nowhere near it
+
+### panel
+
+- less work while the page sits idle: the 1 Hz tick leaves a row's text alone when it did not change, the locale leaves `lang` and `dir` on `html` alone when they hold the value, and a media query list gets its guard only once the page listens to it, so a page that reads `matches` in render no longer keeps every list alive
+
+### readme
+
+- the install section starts with a setup prompt to paste into an ai agent, and the next.js example is a whole client component
+
 ## 0.2.0
 
 ### requests
