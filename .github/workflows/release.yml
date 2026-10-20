@@ -15,10 +15,7 @@ concurrency:
   group: release-devknobs
   cancel-in-progress: false
 
-env:
-  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-
+# No turbo remote cache here: a release always builds dist from source.
 jobs:
   publish:
     runs-on: ubuntu-latest
