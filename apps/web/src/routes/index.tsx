@@ -213,6 +213,7 @@ const styles = create({
     borderRadius: radius.base,
     borderStyle: 'solid',
     borderWidth: 1,
+    boxSizing: 'border-box',
     display: 'flex',
     flexShrink: 0,
     height: 28,
@@ -547,7 +548,10 @@ function trackClick(event: MouseEvent) {
   if (link === null) {
     return;
   }
-  track('link_click', { href: link.href, label: link.textContent?.trim() });
+  track('link_click', {
+    href: link.href,
+    label: link.textContent?.trim() || (link.getAttribute('aria-label') ?? undefined),
+  });
 }
 
 const onGitHub = (placement: 'footer' | 'header') => () => track('github_clicked', { placement });
@@ -617,7 +621,7 @@ function Landing() {
       </section>
 
       <footer {...props(styles.footer)}>
-        <a href={DOCS} {...props(styles.link)}>
+        <a href={DOCS} rel="noreferrer" target="_blank" {...props(styles.link)}>
           {m.link_docs()}
         </a>
         <a
@@ -643,18 +647,25 @@ function Landing() {
           </span>
           {m.link_star()}
         </a>
-        <a href="https://www.npmjs.com/package/devknobs" {...props(styles.link, styles.withIcon)}>
+        <a
+          href="https://www.npmjs.com/package/devknobs"
+          rel="noreferrer"
+          target="_blank"
+          {...props(styles.link, styles.withIcon)}
+        >
           <NpmMark />
           {m.link_npm()}
         </a>
         {/* The licenses of grab's sources (react-grab, bippy) and the bezel images. */}
-        <a href={NOTICES} {...props(styles.link)}>
+        <a href={NOTICES} rel="noreferrer" target="_blank" {...props(styles.link)}>
           {m.link_notices()}
         </a>
         <span {...props(styles.credit)}>
           {m.link_mertbuilds_before()}{' '}
           <a
             href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
+            rel="noreferrer"
+            target="_blank"
             {...props(styles.link)}
           >
             {m.link_mertbuilds()}
