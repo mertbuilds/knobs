@@ -1,7 +1,7 @@
 import { layoutOf, layoutOptions, platformOf } from "../engine/browserui";
 import { isCustomColor, parseColor, toHex } from "../engine/color";
 import { DEVICES, deviceOf, formId, formOf, hasTouch, POSTURES } from "../engine/devices";
-import { frameForced, knobFrame } from "../engine/frame";
+import { DPR_MAX, DPR_MIN, frameForced, knobFrame, SIZE_MAX, SIZE_MIN } from "../engine/frame";
 import { isMatName, MAT_COLOR_NAMES, MAT_COLORS, matGradient } from "../engine/matcolors";
 import { landSplash } from "../engine/frames";
 import { mockOf } from "../engine/mock";
@@ -22,17 +22,13 @@ import { flag, nameOf, numberIn, OFF_ON, options, parseUserAgent, UA_ALIASES } f
 
 /** The device, viewport and debug knobs, and vision. */
 
-/** The smallest and largest frame a size typed out can ask for, in px. */
-const MIN_SIZE = 120;
-const MAX_SIZE = 8192;
-
 /** `390x844`, `390 × 844` or `390*844` as a width and a height. */
 function parseSize(text: string): Option | null {
   const match = /^(\d+)\s*[x×*]\s*(\d+)(?:\s*px)?$/i.exec(text.trim());
   if (!match) return null;
   const width = Number(match[1]);
   const height = Number(match[2]);
-  if ([width, height].some((size) => size < MIN_SIZE || size > MAX_SIZE)) return null;
+  if ([width, height].some((size) => size < SIZE_MIN || size > SIZE_MAX)) return null;
   return { value: `${width}x${height}`, label: `${width} × ${height}` };
 }
 
@@ -239,7 +235,7 @@ export const WIDTH: Knob = {
   brief: (state) => (typeof state.height === "number" ? "" : String(state.width)),
   parse: (text) => {
     const match = /^(\d+)(?:\s*px)?$/i.exec(text.trim());
-    return match ? numberIn(match[1] ?? "", MIN_SIZE, MAX_SIZE) : null;
+    return match ? numberIn(match[1] ?? "", SIZE_MIN, SIZE_MAX) : null;
   },
   bare: true,
 };
@@ -265,7 +261,7 @@ export const DPR: Knob = {
     return device ? String(device.dpr) : undefined;
   },
   brief: (state) => `dpr ${state.dpr}`,
-  parse: (text) => numberIn(text, 0.25, 5),
+  parse: (text) => numberIn(text, DPR_MIN, DPR_MAX),
 };
 
 /** `80` or `80%` as a zoom, in reason. */

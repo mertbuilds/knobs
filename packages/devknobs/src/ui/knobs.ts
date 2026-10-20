@@ -1,8 +1,10 @@
-import { CLOCK_PRESETS, realNow } from "../engine/clock";
+import { CLOCK_PRESETS, CLOCK_SPEED_MAX, CLOCK_SPEED_MIN, realNow } from "../engine/clock";
 import { GEO_PRESETS, resolveGeo } from "../engine/geo";
 import { sends } from "../engine/header";
 import { LOCALE_PRESETS } from "../engine/locale";
+import { SPEED_MAX, SPEED_MIN } from "../engine/speed";
 import { DEFAULT_STATE } from "../engine/store";
+import { TEXT_MAX, TEXT_MIN } from "../engine/text";
 import { canonicalZone, TIME_ZONE_PRESETS } from "../engine/time";
 import type {
   ClockMode,
@@ -233,7 +235,7 @@ export const TEXT: Knob = {
   read: (state) => String(state.text),
   write: (value) => ({ text: value === "system" ? "system" : Number(value) }),
   reset: { text: DEFAULT_STATE.text },
-  parse: (text) => numberIn(text, 6, 72),
+  parse: (text) => numberIn(text, TEXT_MIN, TEXT_MAX),
 };
 
 export const SPACING: Knob = {
@@ -279,7 +281,7 @@ export const SPEED: Knob = {
   read: (state) => String(state.speed),
   write: (value) => ({ speed: Number(value) }),
   reset: { speed: DEFAULT_STATE.speed },
-  parse: (text) => numberIn(text, 0, 16),
+  parse: (text) => numberIn(text, SPEED_MIN, SPEED_MAX),
 };
 
 export const LOCALE: Knob = {
@@ -465,7 +467,7 @@ export const CLOCK_SPEED: Knob = {
   reset: { clock: { speed: DEFAULT_STATE.clock.speed } },
   name: (value) => `${value}x`,
   parse: (text) => {
-    const option = numberIn(text.replace(/x$/i, ""), 0.001, 1_000_000);
+    const option = numberIn(text.replace(/x$/i, ""), CLOCK_SPEED_MIN, CLOCK_SPEED_MAX);
     return option && { ...option, label: `${option.value}x` };
   },
   // A frozen clock has no speed to go at.

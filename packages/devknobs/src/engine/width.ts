@@ -26,7 +26,7 @@ import { landSplash, spreadMat } from "./matsplash";
 import { createNotice } from "./notice";
 import type { Mock, Rect } from "./mock";
 import { corners, drawMock, UNDER } from "./mockdraw";
-import { drawnAt, glideFrame, landGlide, placeKey } from "./frameglide";
+import { drawnAt, glideFrame, gliding, landGlide, placeKey } from "./frameglide";
 import {
   finishFold,
   foldableShown,
@@ -717,6 +717,17 @@ function painted(): boolean {
   if (!loaded || reload.pending()) return false;
   const doc = frameDocument();
   return doc === null || doc.readyState === "complete";
+}
+
+/**
+ * Has the frame caught up with the knobs: up and its page in, with no reload,
+ * device change, turn, fold, glide or pinned column's slide on its way?
+ * Without a frame there is nothing to wait for.
+ */
+export function idle(): boolean {
+  if (ride !== null || gliding() || running() || turning() || folding()) return false;
+  if (heading === "closed") return true;
+  return host !== null && painted();
 }
 
 /** The mat's opening at the whole window, a px past each edge, square. */

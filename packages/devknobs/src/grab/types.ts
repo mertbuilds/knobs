@@ -47,3 +47,8 @@ export interface GrabPayload {
   content: string;
   entries: GrabEntry[];
 }
+
+/** What `grab` hands back: the payload, and whether it reached the clipboard. */
+export interface GrabResult extends GrabPayload {
+  copied: boolean;
+}

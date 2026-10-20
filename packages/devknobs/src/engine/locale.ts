@@ -285,6 +285,14 @@ function reloadBlocked(): boolean {
   return reloadWait() > 0;
 }
 
+/** The page asked for a reload, and is on its way out. */
+let leaving = false;
+
+/** Did devknobs reload the page, which is now on its way out? */
+export function reloading(): boolean {
+  return leaving;
+}
+
 /** Time this reload, so the next ask moments from now reads as a loop. */
 function reloadOnce(): boolean {
   try {
@@ -299,6 +307,7 @@ function reloadOnce(): boolean {
   }
   ownReload();
   keepOwn();
+  leaving = true;
   window.location.reload();
   return true;
 }
@@ -379,6 +388,11 @@ export function syncStores(lang: string | null): boolean {
 
 /** The put back the throttle held off, waiting out its window. */
 let retry = 0;
+
+/** Is a put back waiting out the throttle, to reload the page when it fires? */
+export function retrying(): boolean {
+  return retry !== 0;
+}
 
 function cancelRetry(): void {
   if (!retry) return;

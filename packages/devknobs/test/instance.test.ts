@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { claim, free, superseded } from "../src/instance";
+import { claim, expose, free, pin, superseded, withdraw } from "../src/instance";
 
 /**
  * A copy's way out, shaped as `unmount` is: a copy taken over does nothing,
@@ -84,5 +84,35 @@ describe("free", () => {
     free(scope, first);
     expect(superseded(scope, first)).toBe(true);
     expect(superseded(scope, second)).toBe(false);
+  });
+});
+
+describe("expose", () => {
+  test("puts the api on the page, and the copy that set it takes it away", () => {
+    const scope = {};
+    const api = {};
+    expose(scope, api);
+    expect(Reflect.get(scope, "devknobs")).toBe(api);
+    withdraw(scope, api);
+    expect("devknobs" in scope).toBe(false);
+  });
+
+  test("a copy taken over leaves the new one's api in place", () => {
+    const scope = {};
+    const first = {};
+    const second = {};
+    expose(scope, first);
+    expose(scope, second);
+    withdraw(scope, first);
+    expect(Reflect.get(scope, "devknobs")).toBe(second);
+  });
+
+  test("a pinned api stays after unmount", () => {
+    const scope = {};
+    const api = {};
+    pin(scope);
+    expose(scope, api);
+    withdraw(scope, api);
+    expect(Reflect.get(scope, "devknobs")).toBe(api);
   });
 });

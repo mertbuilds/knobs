@@ -91,6 +91,11 @@ let flight: { animation: Animation; to: string } | null = null;
 /** Where the frame was last drawn. */
 let placed = "";
 
+/** Is the frame gliding to its place? */
+export function gliding(): boolean {
+  return flight !== null;
+}
+
 /** End a glide where it goes: the frame shows where it is drawn. */
 export function landGlide(): void {
   flight?.animation.cancel();

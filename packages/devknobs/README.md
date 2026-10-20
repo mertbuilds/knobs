@@ -86,8 +86,9 @@ export function DevPanel() {
 ```
 
 api: `mount(options?)`, `unmount()`, `getState()`, `setState(patch)`,
-`reset()`, `replay()`, `grab(elements, options?)`, `PRESETS`. `replay()` is what
-the panel calls replay animations.
+`reset()`, `replay()`, `grab(elements, options?)`, `describe()`, `ready()`,
+`PRESETS`. `replay()` is what the panel calls replay animations. `describe()`
+and `ready()` are for agents, see use with agents below.
 
 ```js
 setState({ scheme: "dark" });
@@ -146,6 +147,37 @@ window, and the handle with the top or the bottom corner of the panel, or of the
 window while the panel is closed. each stays with the edge it snapped to: a
 panel at the bottom grows upward as rows and editors open, and keeps to the
 bottom when the window resizes.
+
+## use with agents
+
+a coding agent can drive the knobs through any browser tool that runs js in
+the page, such as playwright's `page.evaluate` or the chrome devtools mcp's
+`evaluate_script`, and fix what breaks.
+
+- `describe()` lists every knob as json: its key, what it does, the values it
+  takes, its default, and what applying it reloads: `none`, `frame` or `page`.
+- `ready()` resolves with the state once devknobs is mounted and the frame has
+  caught up with the knobs. a page devknobs reloads for the locale knob never
+  settles it, so ask again on the new page. past 10 seconds it rejects with an
+  error, so a timeout never passes for success.
+
+```js
+window.devknobs.setState({ scheme: "dark", panel: { open: false } });
+await window.devknobs.ready();
+```
+
+every way in puts the api on `window.devknobs` while devknobs is mounted: the
+script tag, `mount()` and `<DevKnobs />`. so does the copy inside the width
+knob's frame, so `grab` works there too.
+
+the package ships an agent skill that walks an agent through the loop: learn
+the knobs, set a condition, wait, check the page, grab what is broken, fix it,
+reset. it is at `node_modules/devknobs/skills/devknobs/SKILL.md`. copy it into
+the project's skills to install it, for claude code:
+
+```
+mkdir -p .claude/skills && cp -R node_modules/devknobs/skills/devknobs .claude/skills/
+```
 
 ## the panel
 
@@ -374,8 +406,10 @@ page above hands grab to the frame, and the box and the copy happen there.
 escape in the frame ends it.
 
 pass `grabKey: "alt+shift+g"` for another key, or `grab: false` to leave it out.
-`grab(elements)` copies elements from code. the overlay and the context load
-the first time grab is used.
+`grab(elements)` copies elements from code and resolves with the payload, its
+`content` and `entries`. it comes back even when the copy fails, with `copied`
+false, and is null only when the elements give nothing. the overlay and the
+context load the first time grab is used.
 
 for the full owner stack, with a file, a line and a column for each component,
 React has to report to a devtools hook from its first render. the React

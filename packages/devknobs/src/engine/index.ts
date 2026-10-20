@@ -18,6 +18,7 @@ import * as network from "./network";
 import * as outlines from "./outlines";
 import * as overflow from "./overflow";
 import * as pseudo from "./pseudo";
+import { whenSettled } from "./ready";
 import { replay as replayAnimations } from "./replay";
 import * as scrollbars from "./scrollbars";
 import { resume as resumeScroll } from "./scrollkeep";
@@ -100,6 +101,18 @@ export function applyState(next: DevknobsState): void {
 export function setState(patch: DevknobsStatePatch): DevknobsState {
   applyState(merge(state, patch));
   return state;
+}
+
+/**
+ * The knobs, once devknobs is mounted and the frame has caught up with them.
+ * A page devknobs reloads never resolves it: ask again on the next page.
+ */
+export function ready(): Promise<DevknobsState> {
+  return whenSettled(
+    () => running && width.idle() && !locale.retrying(),
+    locale.reloading,
+    () => state,
+  );
 }
 
 /**

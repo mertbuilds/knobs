@@ -17,6 +17,7 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
+    "skills",
     "CHANGELOG.md",
     "THIRD_PARTY_NOTICES.md"
   ],

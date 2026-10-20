@@ -129,22 +129,22 @@ export const DEFAULT_STATE: DevknobsState = {
   },
 };
 
-const SCHEMES: SchemeValue[] = ["light", "dark", "system"];
-const MOTIONS: MotionValue[] = ["reduce", "system"];
-const CONTRASTS: ContrastValue[] = ["more", "system"];
-const TRANSPARENCIES: TransparencyValue[] = ["reduce", "system"];
-const DIRS: DirValue[] = ["ltr", "rtl", "system"];
-const GEO_ERRORS: GeoErrorValue[] = ["none", "denied", "unavailable", "timeout"];
-const CLOCK_MODES: ClockMode[] = ["system", "offset", "frozen"];
-const ONLINES: OnlineValue[] = ["offline", "system"];
-const CONNECTIONS: ConnectionValue[] = ["slow-2g", "2g", "3g", "4g", "system"];
-const SAVE_DATAS: SaveDataValue[] = ["on", "off", "system"];
-const BARS: BarsValue[] = ["auto", "expanded", "minimized"];
-const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "off"];
-const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
+export const SCHEMES: SchemeValue[] = ["light", "dark", "system"];
+export const MOTIONS: MotionValue[] = ["reduce", "system"];
+export const CONTRASTS: ContrastValue[] = ["more", "system"];
+export const TRANSPARENCIES: TransparencyValue[] = ["reduce", "system"];
+export const DIRS: DirValue[] = ["ltr", "rtl", "system"];
+export const GEO_ERRORS: GeoErrorValue[] = ["none", "denied", "unavailable", "timeout"];
+export const CLOCK_MODES: ClockMode[] = ["system", "offset", "frozen"];
+export const ONLINES: OnlineValue[] = ["offline", "system"];
+export const CONNECTIONS: ConnectionValue[] = ["slow-2g", "2g", "3g", "4g", "system"];
+export const SAVE_DATAS: SaveDataValue[] = ["on", "off", "system"];
+export const BARS: BarsValue[] = ["auto", "expanded", "minimized"];
+export const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "off"];
+export const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
 const EDGES: EdgeValue[] = ["top", "bottom", "none"];
 const SIDES: SideValue[] = ["left", "right"];
-const VISIONS: VisionValue[] = [
+export const VISIONS: VisionValue[] = [
   "none",
   "protanopia",
   "deuteranopia",

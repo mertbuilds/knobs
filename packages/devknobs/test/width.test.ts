@@ -13,6 +13,7 @@ import { type Mark, MARK_EVENT } from "../src/engine/touchmark";
 import {
   apply,
   fit,
+  idle as caughtUp,
   label,
   onZoom,
   origin,
@@ -2491,6 +2492,19 @@ describe("a panel pinned to its side", () => {
         expect(frameWidth()).toBe("1600px");
         expect(widths()).toBe(3);
         expect(waiting()).toBe(0);
+      });
+
+      test("is not idle until the column comes to rest", async () => {
+        opened();
+        await load(FRAMED);
+        Reflect.set(Reflect.get(frameElement(), "contentDocument"), "readyState", "complete");
+        expect(caughtUp()).toBe(true);
+        apply(CLOSED);
+        expect(caughtUp()).toBe(false);
+        slide(150);
+        expect(caughtUp()).toBe(false);
+        slide(1, false);
+        expect(caughtUp()).toBe(true);
       });
 
       test("keeps the page's edge to a column on the left, which the page starts after", () => {

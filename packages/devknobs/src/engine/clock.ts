@@ -3,6 +3,10 @@ import type { ClockValue } from "../types";
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
+/** The slowest and the fastest clock, in clock ms per real ms. */
+export const CLOCK_SPEED_MIN = 0.001;
+export const CLOCK_SPEED_MAX = 1_000_000;
+
 /** Jumps the panel offers, each from the real now. */
 export const CLOCK_PRESETS = [
   { label: "+1h", ms: HOUR },

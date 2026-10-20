@@ -1,5 +1,16 @@
 # changelog
 
+## unreleased
+
+### agents
+
+- `describe()` lists every knob as json, with its values, its default and what applying it reloads: nothing, the frame or the page
+- `ready()` resolves with the state once devknobs is mounted and the frame has caught up. a page reloading for the locale knob never settles it. past 10 seconds it rejects with an error
+- both are on `window.devknobs` and exported from `devknobs`
+- `mount()` and `<DevKnobs />` put the api on `window.devknobs` too, not only the script tag build, and take it away on unmount. the copy in the width knob's frame has it as well
+- `grab()` resolves with the payload even when the clipboard copy fails, as it often does in headless browsers. `copied` says whether it reached the clipboard
+- an agent skill ships in the package at `skills/devknobs/SKILL.md`
+
 ## 0.2.1
 
 ### device frame

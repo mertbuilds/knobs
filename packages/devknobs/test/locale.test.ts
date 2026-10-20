@@ -17,6 +17,7 @@ import {
   RELOAD_KEY,
   RELOAD_VERSION,
   reset,
+  retrying,
   syncStores,
   type Written,
 } from "../src/engine/locale";
@@ -792,6 +793,17 @@ describe("apply", () => {
     tick(page, 5_000);
     expect(readCookie(page.jar, PARAGLIDE_COOKIE)).toBeNull();
     expect(page.storage.has(OWNER_KEY)).toBe(false);
+    expect(page.reloads).toBe(1);
+  });
+
+  test("says a put back is waiting until it reloads the page", () => {
+    const page = stubPage(`${PARAGLIDE_COOKIE}=tr`, { owner: "tr" });
+    expect(retrying()).toBe(false);
+    page.storage.set(RELOAD_KEY, String(page.now));
+    apply({ lang: "system", dir: "system" });
+    expect(retrying()).toBe(true);
+    tick(page, 5_000);
+    expect(retrying()).toBe(false);
     expect(page.reloads).toBe(1);
   });
 

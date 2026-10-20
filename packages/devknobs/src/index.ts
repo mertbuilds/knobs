@@ -1,4 +1,5 @@
 import * as engine from "./engine";
+import { describe } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
 import { GEO_PRESETS } from "./engine/geo";
@@ -7,8 +8,8 @@ import { TIME_ZONE_PRESETS } from "./engine/time";
 import { UA_PRESETS } from "./engine/ua";
 import { createGrab, type GrabControl } from "./grab/control";
 import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
-import type { GrabOptions, GrabPayload } from "./grab/types";
-import { claim, free, superseded } from "./instance";
+import type { GrabOptions, GrabResult } from "./grab/types";
+import { claim, expose, free, superseded, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
 import type { GrabColorValue } from "./types";
 import { createKeys, type LiveKeys } from "./ui/bindings";
@@ -50,11 +51,25 @@ export type {
   WidthValue,
   ZoomValue,
 } from "./types";
+export type {
+  KnobDescription,
+  KnobField,
+  KnobReload,
+  KnobShape,
+  KnobValue,
+} from "./engine/describe";
 export type { DeviceKind, DevicePreset } from "./engine/devices";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
-export type { GrabEntry, GrabFrame, GrabOptions, GrabPayload, ResolvedSource } from "./grab/types";
+export type {
+  GrabEntry,
+  GrabFrame,
+  GrabOptions,
+  GrabPayload,
+  GrabResult,
+  ResolvedSource,
+} from "./grab/types";
 
 export interface MountOptions extends engine.EngineOptions {
   /**
@@ -111,6 +126,7 @@ export function mount(options: MountOptions = {}): void {
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
   claim(window, unmount);
+  expose(window, api);
   engine.start(options);
   // The mount's keys, with the ones the user set in the panel on top.
   const live = createKeys({
@@ -151,6 +167,7 @@ export function unmount(): void {
   keys?.destroy();
   keys = null;
   engine.stop();
+  withdraw(window, api);
   free(window, unmount);
 }
 
@@ -158,16 +175,30 @@ export const getState = engine.getState;
 export const setState = engine.setState;
 export const reset = engine.reset;
 export const replay = engine.replay;
+export const ready = engine.ready;
+export { describe };
 
 /**
  * Copy what an agent needs to find the elements in the code: their html, the
  * components that rendered them and where. Loads on first use, so the page
- * never pays for it until then. Null when nothing was copied.
+ * never pays for it until then. The payload comes back even when the copy
+ * fails, with `copied` false. Null when the elements gave nothing.
  */
 export async function grab(
   elements: Element[],
   options?: GrabOptions,
-): Promise<GrabPayload | null> {
+): Promise<GrabResult | null> {
   const loaded = await import("./grab");
   return loaded.grab(elements, options);
+}
+
+const api = { mount, unmount, getState, setState, reset, replay, grab, describe, ready };
+
+/** What `mount` puts at `window.devknobs`, for agents that run code in the page. */
+export type DevknobsApi = typeof api;
+
+declare global {
+  interface Window {
+    devknobs?: DevknobsApi;
+  }
 }

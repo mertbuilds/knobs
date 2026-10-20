@@ -12,6 +12,14 @@ export const FRAME_ATTRIBUTE = "data-devknobs-frame";
  */
 export const FRAME_NAME = "devknobs-frame";
 
+/** The smallest and the largest frame width or height, in px. */
+export const SIZE_MIN = 120;
+export const SIZE_MAX = 8192;
+
+/** The smallest and the largest device pixel ratio inside the frame. */
+export const DPR_MIN = 0.25;
+export const DPR_MAX = 5;
+
 /** What a zoom key asks of the frame: a step in or out, or back to fit. */
 export type ZoomAction = "zoom-in" | "zoom-out" | "zoom-fit";
 
