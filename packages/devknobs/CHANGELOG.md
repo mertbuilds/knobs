@@ -16,9 +16,10 @@
 
 - less work while the page sits idle: the 1 Hz tick leaves a row's text alone when it did not change, the locale leaves `lang` and `dir` on `html` alone when they hold the value, and a media query list gets its guard only once the page listens to it, so a page that reads `matches` in render no longer keeps every list alive
 
-### readme
+### package
 
-- the install section starts with a setup prompt to paste into an ai agent, and the next.js example is a whole client component
+- the install section starts with a setup prompt to paste into an AI agent, and the Next.js example is a whole client component
+- the package names its home page, https://knobs.dev, its repository and where to report issues, so npm links them, and the author's name has its ü
 
 ## 0.2.0
 
