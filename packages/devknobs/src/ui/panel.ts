@@ -46,6 +46,7 @@ import { stage } from "./stage";
 import { createStorageControl } from "./storageaction";
 import { CSS } from "./styles";
 import { createTips } from "./tooltip";
+import { addStyle } from "../engine/style";
 
 export { wallInput } from "./catalog";
 
@@ -151,7 +152,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   host.setAttribute("data-devknobs", "panel");
   host.style.cssText = HOST_STYLE;
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
+  const style = addStyle(root, "");
 
   const stopSystem = watchSystemMedia((media) => {
     style.textContent = media ? ownCss(media) : CSS;
@@ -308,7 +309,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   // The tooltip sits in the wrapper it is placed in, as the panel places the strip.
   panel.append(body, foot, sizer.strip);
   wrap.append(handle, panel, tip);
-  root.append(style, wrap);
+  root.append(wrap);
 
   const knobRows = createRows({
     root,

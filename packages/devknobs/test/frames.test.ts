@@ -62,6 +62,7 @@ beforeEach(() => {
       dropped++;
       return [];
     },
+    querySelector: () => null,
   });
 });
 

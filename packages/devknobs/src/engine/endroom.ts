@@ -1,4 +1,4 @@
-import { ensureStyle } from "./style";
+import { ensureStyle, findStyle, type OwnStyle } from "./style";
 
 const NAME = "endroom";
 
@@ -18,12 +18,8 @@ export const VARIABLE = "--devknobs-end-room";
  */
 export const CSS = `:root{${VARIABLE}:0px}html{margin-bottom:var(${VARIABLE})!important}`;
 
-function sheetOf(doc: Document): HTMLStyleElement | null {
-  return doc.querySelector<HTMLStyleElement>(`style[data-devknobs="${NAME}"]`);
-}
-
 /** The rule that holds the variable, once the sheet is parsed. */
-function holder(style: HTMLStyleElement): CSSStyleDeclaration | null {
+function holder(style: OwnStyle): CSSStyleDeclaration | null {
   const rule = style.sheet?.cssRules[0] as CSSStyleRule | undefined;
   return rule?.style ?? null;
 }
@@ -35,7 +31,7 @@ function holder(style: HTMLStyleElement): CSSStyleDeclaration | null {
  * checks. No room takes the sheet away, so nothing of the page is overridden.
  */
 export function give(doc: Document, room: number): number {
-  const existing = sheetOf(doc);
+  const existing = findStyle(NAME, doc);
   const held = existing ? holder(existing) : null;
   const had = Number.parseFloat(held?.getPropertyValue(VARIABLE) ?? "") || 0;
   if (room <= 0) {

@@ -2,6 +2,7 @@
 
 ## unreleased
 
+- devknobs' styles, the panel's, grab's, the frame's and those it puts on the page, are constructed stylesheets where the browser adopts them, so a page whose Content Security Policy blocks inline styles no longer gets the panel unstyled. a browser without them gets `<style>` elements as before. the early stand-in's picture sets its styles through the CSSOM, which such a policy allows
 - `native.ua` hands the host the browser the page's requests go out as, from the ua knob or a device's browser, so it can send that user agent and its client hints to servers. the page's own patches stay, it is handed with the switch off too, and a promise it returns holds the frame's next load until it settles
 - `mount({ native })` hands text size, offline and the prefers knobs to a host that sets them for real, such as a browser extension through the DevTools protocol, in place of emulating them in the page. without it nothing changes
 - `native.viewport` takes a plain size or a device with nothing drawn around it, so the host sets the tab's own viewport, ratio and touch screen in place of the frame. anything drawn keeps the frame, and the host gets `null` meanwhile

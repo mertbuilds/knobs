@@ -428,7 +428,7 @@ export function copyPage(frame: HTMLIFrameElement): Element | null {
   // fonts it shows with them, those fetched by now.
   const rules: string[] = [];
   const written = embedFonts(doc);
-  for (const sheet of doc.styleSheets) {
+  for (const sheet of [...doc.styleSheets, ...(doc.adoptedStyleSheets ?? [])]) {
     try {
       for (const rule of sheet.cssRules) rules.push(written(rule));
     } catch {

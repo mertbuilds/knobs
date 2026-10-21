@@ -5,6 +5,7 @@ import { needsFrame, plainFrame } from "./frame";
 import { webStorage } from "./fresh";
 import { matGradient, matStops } from "./matcolors";
 import { newer, stamped } from "./stored";
+import { addStyle, ensureStyle, findStyle, removeStyle } from "./style";
 
 /**
  * What stands in for the frame from a reload's first paint until devknobs
@@ -213,6 +214,7 @@ export function dropEarly(): void {
   for (const node of Array.from(document.querySelectorAll(`[data-devknobs="${EARLY}"]`))) {
     node.remove();
   }
+  removeStyle(EARLY);
 }
 
 /**
@@ -259,10 +261,8 @@ export function stopAdopting(): void {
  */
 export function showEarly(knobs: Drawn): void {
   if (!needsFrame(knobs) || !document.head) return;
-  const style = document.createElement("style");
-  style.setAttribute("data-devknobs", EARLY);
+  const style = ensureStyle(EARLY);
   style.textContent = coverCss(plainFrame(knobs) ? null : knobs.mat);
-  document.head.append(style);
   window.setTimeout(dropEarly, GIVE_UP);
   const snapshot = readSnapshot(knobs, window);
   if (!snapshot) return;
@@ -271,11 +271,13 @@ export function showEarly(knobs: Drawn): void {
   host.style.cssText = `position:fixed;inset:0;z-index:${Z_INDEX}`;
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = snapshot.html;
-  const sheet = document.createElement("style");
-  sheet.textContent = snapshot.css;
-  root.prepend(sheet);
+  // A page's policy that blocks style attributes in parsed html lets the same styles in through the CSSOM.
+  for (const node of Array.from(root.querySelectorAll<HTMLElement>("[style]"))) {
+    node.style.cssText = node.getAttribute("style") ?? "";
+  }
+  addStyle(root, snapshot.css);
   const put = (): boolean => {
-    if (!style.isConnected) return true;
+    if (findStyle(EARLY) !== style) return true;
     if (!document.body) return false;
     document.body.append(host);
     return true;

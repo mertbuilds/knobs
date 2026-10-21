@@ -64,7 +64,7 @@ import { warmFonts } from "./pagefonts";
 import * as reload from "./reload";
 import { keepMounted } from "./remount";
 import * as scrollkeep from "./scrollkeep";
-import { ensureStyle, removeStyle } from "./style";
+import { addStyle, ensureStyle, removeStyle, styleNode } from "./style";
 import { createTouchDot, type TouchDot } from "./touchdot";
 import {
   finishTurn,
@@ -921,7 +921,9 @@ function hidePage(): void {
   const style = ensureStyle(NAME);
   style.textContent =
     "html{overflow:hidden!important}:popover-open:not([data-devknobs]){display:none!important}";
-  stopKeepingStyle = keepMounted(style, { home: () => document.head ?? document.documentElement });
+  // A constructed sheet stays with the document, whatever a page does to its head.
+  const node = styleNode(style);
+  if (node) stopKeepingStyle = keepMounted(node, { home: () => document.head ?? document.documentElement });
 }
 
 function showPage(): void {
@@ -1072,8 +1074,7 @@ function open(veiled: number | null, first: boolean): void {
   host.setAttribute("data-devknobs", "viewport");
   host.style.cssText = `position:fixed;inset:0;z-index:${Z_INDEX}`;
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
-  style.textContent = VIEWPORT_CSS;
+  addStyle(root, VIEWPORT_CSS);
   letterbox = document.createElement("div");
   letterbox.className = "viewport";
   veil = document.createElement("div");
@@ -1156,7 +1157,7 @@ function open(veiled: number | null, first: boolean): void {
   stage.append(drawing);
   letterbox.append(veil, back, readout, stage, notice);
   letterbox.addEventListener("wheel", onWheel, { passive: false });
-  root.append(style, letterbox);
+  root.append(letterbox);
   if (veiled === null) hidePage();
   window.addEventListener("message", onMessage);
   window.addEventListener("resize", resize);
