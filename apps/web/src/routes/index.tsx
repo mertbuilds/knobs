@@ -216,7 +216,7 @@ const styles = create({
       default: 'transparent',
     },
     borderColor: colors.border,
-    borderRadius: radius.base,
+    borderRadius: '0.25rem',
     borderStyle: 'solid',
     borderWidth: 1,
     boxSizing: 'border-box',
@@ -361,7 +361,7 @@ const styles = create({
   // The mark beside the name, centered on its line.
   wordmark: {
     alignItems: 'center',
-    columnGap: 6,
+    columnGap: '0.375rem',
     display: 'flex',
     fontSize: '1.1875rem',
     fontWeight: font.weightMedium,
