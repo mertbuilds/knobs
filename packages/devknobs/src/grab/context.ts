@@ -129,10 +129,9 @@ function entryFrom(
   const ancestors = (max: number, accept: (name: string) => boolean) =>
     componentNames(fiber, max, (name) => isUsefulName(name, next) && accept(name));
   const trace = buildTrace(stack, fiberSource, ancestors, { maxLines: options.maxLines, next });
-  const found = trace.needsSelector
-    ? elementSelector(selectorTarget(element))
-    : nearestSemanticSelector(element);
-  const selector = found && (trace.needsSelector || found.semantic) ? found.selector : null;
+  const found =
+    (trace.needsSelector ? null : nearestSemanticSelector(element)) ??
+    elementSelector(selectorTarget(element));
   const source = selectSource(fiberSource, stack, next);
   const componentName =
     componentNames(fiber, 1, (name) => isUsefulName(name, next))[0] ??
@@ -141,7 +140,13 @@ function entryFrom(
   return {
     tagName: (element.tagName || "").toLowerCase(),
     componentName,
-    content: formatEntry(htmlPreview(element), trace.text, fiber ? listKey(fiber) : null, selector),
+    content: formatEntry(
+      htmlPreview(element),
+      trace.text,
+      fiber ? listKey(fiber) : null,
+      found.semantic ? found.selector : null,
+    ),
+    selector: found.selector,
     source,
     stackContext: trace.text,
     frames: stack.map(toFrame),

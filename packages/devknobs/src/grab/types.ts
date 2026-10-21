@@ -37,6 +37,8 @@ export interface GrabEntry {
   componentName?: string;
   /** The element's line, `[<html> in Comp (at path) ...]`. */
   content: string;
+  /** A css selector for the element. `content` shows it only when it is semantic. */
+  selector: string;
   source: ResolvedSource | null;
   stackContext: string;
   frames: GrabFrame[];

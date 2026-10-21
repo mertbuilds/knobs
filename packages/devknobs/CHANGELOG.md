@@ -16,6 +16,10 @@
 - `grab()` resolves with the payload even when the clipboard copy fails, as it often does in headless browsers. `copied` says whether it reached the clipboard
 - an agent skill ships in the package at `skills/devknobs/SKILL.md`
 
+### grab
+
+- the copied line no longer ends in an `nth-child` selector chain. it shows a selector only when it is built from a test id, a label or a stable id. each entry's new `selector` field has the full one
+
 ## 0.2.1
 
 ### device frame

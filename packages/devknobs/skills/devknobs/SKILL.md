@@ -157,6 +157,7 @@ find one. `source.lineNumber` and `columnNumber` are null when devknobs finds
 the file but not the line, and `content` then names the file alone. Search
 that file for the element's tag and class names. A line that is there points
 at the element's tag in the file. Open that file and fix the code.
+`entries[i].selector` is a css selector for the element, to find it in the page.
 
 `grab` also copies the result to the clipboard. The payload comes back even
 when the copy fails, as it often does in headless browsers; `copied` says

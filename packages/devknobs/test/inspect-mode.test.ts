@@ -23,7 +23,7 @@ let mode: Mode | null = null;
 
 function entryOf(element: Element): GrabEntry {
   const tagName = element.tagName.toLowerCase();
-  return { tagName, content: tagName, source: null, stackContext: "", frames: [] };
+  return { tagName, content: tagName, selector: tagName, source: null, stackContext: "", frames: [] };
 }
 
 const overlay: Overlay = {
