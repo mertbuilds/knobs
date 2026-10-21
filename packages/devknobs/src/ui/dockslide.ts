@@ -160,6 +160,8 @@ export interface DockSlide {
    * its way. The page's frame asks here before it reads the column.
    */
   draw(time: number): boolean;
+  /** Is all of a pinned panel where it goes, its handle included? A floating one always is. */
+  resting(): boolean;
   /** Drop the frame asked for and leave the wrapper as a floating panel's. */
   destroy(): void;
 }
@@ -241,6 +243,7 @@ export function createDockSlide(context: SlideContext): DockSlide {
       draw(now);
     },
     draw,
+    resting: () => sequence?.resting() ?? true,
     destroy: clear,
   };
 }

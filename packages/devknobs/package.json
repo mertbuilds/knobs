@@ -1,6 +1,6 @@
 {
   "name": "devknobs",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": false,
   "license": "MIT",
   "author": "Mert Düzgün",
@@ -17,6 +17,7 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
+    "skills",
     "CHANGELOG.md",
     "THIRD_PARTY_NOTICES.md"
   ],

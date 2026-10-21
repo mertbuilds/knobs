@@ -2,6 +2,10 @@ import type { SpeedValue } from "../types";
 import { collect, onDocumentTimeline } from "./animations";
 import { isOwn, shadowRoots } from "./tree";
 
+/** The slowest and the fastest playback rate the knob takes. 0 pauses. */
+export const SPEED_MIN = 0;
+export const SPEED_MAX = 16;
+
 /** How often the sweep looks again for shadow roots that came or went, in ms. */
 const ROOT_INTERVAL = 500;
 

@@ -23,3 +23,21 @@ export function superseded(scope: object, release: () => void): boolean {
 export function free(scope: object, release: () => void): void {
   if (Reflect.get(scope, OWNER) === release) Reflect.deleteProperty(scope, OWNER);
 }
+
+const PINNED = Symbol.for("devknobs.pinned");
+
+/** Hand the page's agents the api, at `window.devknobs`. */
+export function expose(scope: object, api: object): void {
+  Reflect.set(scope, "devknobs", api);
+}
+
+/** Keep the api on the page after unmount, as the script tag build does, so it can mount again. */
+export function pin(scope: object): void {
+  Reflect.set(scope, PINNED, true);
+}
+
+/** Take the api away, if it is still the one this copy put there and not pinned. */
+export function withdraw(scope: object, api: object): void {
+  if (Reflect.get(scope, PINNED) === true) return;
+  if (Reflect.get(scope, "devknobs") === api) Reflect.deleteProperty(scope, "devknobs");
+}

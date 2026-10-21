@@ -3,6 +3,10 @@ import type { ClockValue } from "../types";
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
+/** The slowest and the fastest clock, in clock ms per real ms. */
+export const CLOCK_SPEED_MIN = 0.001;
+export const CLOCK_SPEED_MAX = 1_000_000;
+
 /** Jumps the panel offers, each from the real now. */
 export const CLOCK_PRESETS = [
   { label: "+1h", ms: HOUR },
@@ -49,12 +53,12 @@ export function virtualNow(clock: ClockValue, real: number): number {
   return real;
 }
 
-type Anchor = "at" | "mode" | "speed";
+type Anchor = "mode" | "speed";
 
 /**
- * Patch a clock, anchoring it again whenever it moves: a new `at` runs from
- * the real now, and a new mode or speed carries on from where the clock
- * stands, so nothing jumps. A `since` of its own is taken as given.
+ * Patch a clock, anchoring it again whenever it moves: an `at` runs from the
+ * real now, and a new mode or speed carries on from where the clock stands,
+ * so nothing jumps. A `since` of its own is taken as given.
  */
 export function mergeClock(
   clock: ClockValue,
@@ -64,8 +68,8 @@ export function mergeClock(
   if (!patch) return clock;
   const next = { ...clock, ...patch };
   if (patch.since !== undefined && patch.since !== clock.since) return next;
+  if (patch.at !== undefined && patch.since === undefined) return { ...next, since: real };
   const moved = (key: Anchor) => patch[key] !== undefined && patch[key] !== clock[key];
-  if (moved("at")) return { ...next, since: real };
   if (moved("mode") || moved("speed")) return { ...next, at: virtualNow(clock, real), since: real };
   return next;
 }

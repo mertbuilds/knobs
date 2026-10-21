@@ -26,7 +26,7 @@ import { landSplash, spreadMat } from "./matsplash";
 import { createNotice } from "./notice";
 import type { Mock, Rect } from "./mock";
 import { corners, drawMock, UNDER } from "./mockdraw";
-import { drawnAt, glideFrame, landGlide, placeKey } from "./frameglide";
+import { drawnAt, glideFrame, gliding, landGlide, placeKey } from "./frameglide";
 import {
   finishFold,
   foldableShown,
@@ -105,6 +105,13 @@ export type ViewportValue = FrameKnobs &
  * final width at once.
  */
 export const RIDE_SLOW = 50;
+
+/**
+ * How long the frame's page may go, in ms after it loads, without its own
+ * devknobs saying it is ready, before the frame counts as caught up without it:
+ * an app may not mount devknobs in the frame at all.
+ */
+export const FRAME_API_WAIT = 1500;
 
 /** How long a wheel or a pinch rests before its zoom goes in the store, in ms. */
 const ZOOM_SETTLE = 200;
@@ -196,6 +203,10 @@ let current: ViewportValue = {
 };
 /** The frame's page has loaded, so what it reports can be trusted. */
 let loaded = false;
+/** When the frame's page last loaded, in ms. */
+let loadedAt = 0;
+/** The page in the frame whose devknobs said it is ready. */
+let readyPage: Document | null = null;
 /** Where the frame was last seen on this origin. */
 let frameUrl = "";
 /** Where the page underneath was scrolled to, which hiding it loses. */
@@ -270,6 +281,7 @@ function warmFold(): void {
 
 function onLoad(): void {
   loaded = true;
+  loadedAt = performance.now();
   const doc = frameDocument();
   if (notice) notice.hidden = doc !== null;
   locate();
@@ -289,7 +301,9 @@ function onLoad(): void {
 
 /** A page that mounts late asks for the knobs once it listens. */
 function onMessage(event: MessageEvent): void {
-  if (readMessage(event, frameWindow(), window.location.origin)?.type === "ready") share();
+  if (readMessage(event, frameWindow(), window.location.origin)?.type !== "ready") return;
+  readyPage = frameDocument();
+  share();
 }
 
 /**
@@ -719,6 +733,28 @@ function painted(): boolean {
   return doc === null || doc.readyState === "complete";
 }
 
+/**
+ * Has the page in the frame mounted its own devknobs, or had its time to? A
+ * page on another origin has none that can be reached.
+ */
+function mounted(): boolean {
+  const doc = frameDocument();
+  if (doc === null || doc === readyPage) return true;
+  return performance.now() - loadedAt >= FRAME_API_WAIT;
+}
+
+/**
+ * Has the frame caught up with the knobs: up, its page in and its devknobs
+ * mounted, with no reload, device change, turn, fold, glide or pinned column's
+ * slide on its way?
+ * Without a frame there is nothing to wait for.
+ */
+export function idle(): boolean {
+  if (ride !== null || gliding() || running() || turning() || folding()) return false;
+  if (heading === "closed") return true;
+  return host !== null && painted() && mounted();
+}
+
 /** The mat's opening at the whole window, a px past each edge, square. */
 function fullRect(): Hole {
   return windowRect({ width: letterbox?.clientWidth ?? 0, height: letterbox?.clientHeight ?? 0 });
@@ -999,6 +1035,7 @@ function open(veiled: number | null, first: boolean): void {
   if (!first) scrollkeep.keep(window, "frame");
   scrollkeep.follow(frameWindow);
   loaded = false;
+  readyPage = null;
   // The frame's page lists its own load. Here it would be a second row for it.
   hushOnce(frameUrl);
   frame.src = frameUrl;
@@ -1074,6 +1111,7 @@ function release(follow: boolean): string {
   window.removeEventListener("resize", resize);
   window.removeEventListener("pagehide", keep);
   frame?.removeEventListener("load", onLoad);
+  readyPage = null;
   touchDot?.apply(false);
   address.unwatch();
   reload.untrack();

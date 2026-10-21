@@ -26,6 +26,7 @@ function fakeKit() {
       frameWindow: () => null,
       panelSized() {},
       zoomKey: () => true,
+      idle: () => calls.length > 0,
     },
     watchFold(watcher: () => void) {
       fold.add(watcher);
@@ -88,6 +89,17 @@ describe("the frame's kit, loaded when a frame is first needed", () => {
     expect(frames.foldRest()).toBeNull();
     expect(frames.takeHinge(DEVICE)).toBe(false);
     expect(frames.holdingHinge()).toBe(false);
+  });
+
+  test("is idle with no frame, not while the kit loads, and then as the frame says", async () => {
+    const frames = await freshFrames();
+    const fake = fakeKit();
+    frames.loadKitWith(async () => fake.kit);
+    expect(frames.idle()).toBe(true);
+    frames.apply(DEVICE);
+    expect(frames.idle()).toBe(false);
+    await frames.loadFrames();
+    expect(frames.idle()).toBe(true);
   });
 
   test("hands a watcher set before it is in to the fold once it is, and its stop takes it off", async () => {

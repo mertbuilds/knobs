@@ -11,7 +11,7 @@ import type { InspectControl } from "../grab/inspect";
 import type { DevknobsState } from "../types";
 import { runAction, stopAction } from "./actions";
 import { type Action, availableActions, type Live } from "./catalog";
-import { readColumn } from "./column";
+import { readColumn, wrapSliding } from "./column";
 import { BINDINGS, createKeys, type LiveKeys } from "./bindings";
 import { createDockSlide } from "./dockslide";
 import { button, el, lay } from "./dom";
@@ -217,6 +217,8 @@ export function createPanel(options: PanelOptions = {}): Panel {
     tips,
     render,
     renderKeys,
+    handleShown: handleShows,
+    showHandle: () => engine.setState({ panel: { handle: true } }),
     searching: () => palette.searching(),
     leaveSearch: () => palette.leaveSearch(),
   });
@@ -275,6 +277,8 @@ export function createPanel(options: PanelOptions = {}): Panel {
     );
     return sliding ? { ...edge, moving: true } : edge;
   });
+  // ready() waits for the panel to land, floating or pinned, and its handle with it.
+  const stopMoving = engine.watchPanel(() => !dockSlide.resting() || wrapSliding(wrap));
 
   // The strip comes last, so the tab key reaches it after all the panel holds.
   // The tooltip sits in the wrapper it is placed in, as the panel places the strip.
@@ -326,7 +330,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     const state = engine.getState();
     const open = state.panel.open;
     wrap.dataset.open = open ? "true" : "false";
-    const handleShown = prefs.get().handle;
+    const handleShown = handleShows();
     wrap.dataset.handle = handleShown ? "shown" : "hidden";
     settings.drawHandle(handleShown);
     dockSlide.aim({
@@ -353,6 +357,11 @@ export function createPanel(options: PanelOptions = {}): Panel {
     sizer.size(() => palette.renderBody(state));
     renderKeys();
     layout();
+  }
+
+  /** The handle shows on a closed panel where the user, the mount and the knobs all let it. */
+  function handleShows(): boolean {
+    return prefs.get().handle && engine.getState().panel.handle;
   }
 
   /** Show the keys in force: on the handle, the footer and the shortcuts. */
@@ -399,7 +408,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
         focused.blur();
         const back = focusBefore;
         // A hidden handle hides once the panel has slid away, which would drop the focus.
-        const shown = back !== handle || prefs.get().handle;
+        const shown = back !== handle || handleShows();
         if (back instanceof HTMLElement && back !== document.body && back.isConnected && shown) {
           back.focus({ preventScroll: true });
         }
@@ -671,6 +680,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
       window.removeEventListener("blur", onBlur);
       resizes.disconnect();
       stopColumn();
+      stopMoving();
       dockSlide.destroy();
       document.removeEventListener("DOMContentLoaded", attach);
       host.remove();

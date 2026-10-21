@@ -10,6 +10,10 @@ import { markInline } from "./owninline";
  * it, and so does this knob.
  */
 
+/** The smallest and the largest root font size the knob takes, in px. */
+export const TEXT_MIN = 6;
+export const TEXT_MAX = 72;
+
 /** What `medium` is with the browser's default setting, in px. */
 const INITIAL = 16;
 

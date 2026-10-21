@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { apply, pseudoText, reset } from "../src/engine/pseudo";
+import { apply, pending, pseudoText, reset } from "../src/engine/pseudo";
 
 describe("pseudoText", () => {
   test("accents every letter, grows the string and brackets it", () => {
@@ -152,6 +152,10 @@ beforeEach(() => {
   define("Node", { ELEMENT_NODE, TEXT_NODE });
   define("NodeFilter", { SHOW_ELEMENT: 1, SHOW_TEXT: 4, FILTER_ACCEPT, FILTER_REJECT });
   define("requestIdleCallback", (run: () => void) => idle.push(run));
+  define("cancelIdleCallback", (id: number) => {
+    idle[id - 1] = () => {};
+  });
+  define("window", { removeEventListener: () => {} });
   define(
     "MutationObserver",
     class {
@@ -174,11 +178,41 @@ beforeEach(() => {
 
 afterEach(() => {
   reset();
-  const names = ["document", "Node", "NodeFilter", "requestIdleCallback", "MutationObserver"];
+  const names = [
+    "document",
+    "Node",
+    "NodeFilter",
+    "requestIdleCallback",
+    "cancelIdleCallback",
+    "window",
+    "MutationObserver",
+  ];
   for (const name of names) Reflect.deleteProperty(globalThis, name);
 });
 
 describe("pseudo on a page", () => {
+  test("is pending from turning on until the page goes idle and the text is swapped", () => {
+    const button = new FakeElement("BUTTON", [new FakeText("Save")]);
+    body.append(button);
+    expect(pending()).toBe(false);
+    apply(true);
+    expect(pending()).toBe(true);
+    expect(button.textContent).toBe("Save");
+    for (const run of idle.splice(0)) run();
+    expect(pending()).toBe(false);
+    expect(button.textContent).toBe(pseudoText("Save"));
+  });
+
+  test("is not pending once turned off before the page went idle", () => {
+    const button = new FakeElement("BUTTON", [new FakeText("Save")]);
+    body.append(button);
+    apply(true);
+    apply(false);
+    expect(pending()).toBe(false);
+    for (const run of idle.splice(0)) run();
+    expect(button.textContent).toBe("Save");
+  });
+
   test("keeps one layer when the page reads its text back and writes it again", () => {
     const button = new FakeElement("BUTTON", [new FakeText("Save")]);
     body.append(button);

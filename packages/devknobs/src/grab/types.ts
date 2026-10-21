@@ -37,6 +37,11 @@ export interface GrabEntry {
   componentName?: string;
   /** The element's line, `[<html> in Comp (at path) ...]`. */
   content: string;
+  /**
+   * A selector for the element. `content` shows it only when it is semantic. Steps into a
+   * shadow root (`>>>`) or a frame (`>>iframe>>`) make it more than a plain css selector.
+   */
+  selector: string;
   source: ResolvedSource | null;
   stackContext: string;
   frames: GrabFrame[];
@@ -46,4 +51,9 @@ export interface GrabPayload {
   /** Every entry's line, one per line. */
   content: string;
   entries: GrabEntry[];
+}
+
+/** What `grab` hands back: the payload, and whether it reached the clipboard. */
+export interface GrabResult extends GrabPayload {
+  copied: boolean;
 }

@@ -124,6 +124,41 @@ function plain(tag: string, testId: string, text: string): Element {
   return element as unknown as Element;
 }
 
+/** A span with no attributes as the first child of a div, both without fibers. */
+function bare(text: string): Element {
+  const doc = {
+    scripts: [],
+    baseURI: "http://localhost/",
+    body: null,
+    documentElement: null,
+    defaultView: null,
+    getElementById: () => null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  const node = (tag: string, parent: object | null, childNodes: object[]) => ({
+    nodeType: 1,
+    tagName: tag.toUpperCase(),
+    namespaceURI: "http://www.w3.org/1999/xhtml",
+    ownerDocument: doc,
+    attributes: [],
+    childNodes,
+    children: [] as object[],
+    parentElement: parent,
+    parentNode: parent,
+    assignedSlot: null,
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    getRootNode: () => doc,
+    matches: () => false,
+    getElementsByTagName: () => [],
+  });
+  const div = node("div", null, []);
+  const span = node("span", div, [{ nodeType: 3, textContent: text }]);
+  div.children.push(span);
+  return span as unknown as Element;
+}
+
 describe("grabContext", () => {
   test("gives each element a line, with a selector where no source names it, duplicates once", async () => {
     const save = plain("button", "save", "Save");
@@ -135,5 +170,12 @@ describe("grabContext", () => {
     );
     expect(payload.entries.map((entry) => entry.tagName)).toEqual(["button", "button"]);
     expect(payload.entries[0]?.frames).toEqual([]);
+    expect(payload.entries[0]?.selector).toBe('[data-testid="save"]');
+  });
+
+  test("keeps an nth-child selector off the line and on the entry", async () => {
+    const payload = await grabContext([bare("skills")]);
+    expect(payload.content).toBe("[<span>skills</span>]");
+    expect(payload.entries[0]?.selector).toBe("div > span:nth-child(1)");
   });
 });

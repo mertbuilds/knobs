@@ -86,8 +86,9 @@ export function DevPanel() {
 ```
 
 api: `mount(options?)`, `unmount()`, `getState()`, `setState(patch)`,
-`reset()`, `replay()`, `grab(elements, options?)`, `PRESETS`. `replay()` is what
-the panel calls replay animations.
+`reset()`, `replay()`, `grab(elements, options?)`, `describe()`, `ready()`,
+`PRESETS`. `replay()` is what the panel calls replay animations. `describe()`
+and `ready()` are for agents, see use with agents below.
 
 ```js
 setState({ scheme: "dark" });
@@ -146,6 +147,46 @@ window, and the handle with the top or the bottom corner of the panel, or of the
 window while the panel is closed. each stays with the edge it snapped to: a
 panel at the bottom grows upward as rows and editors open, and keeps to the
 bottom when the window resizes.
+
+## use with agents
+
+a coding agent can drive the knobs through any browser tool that runs js in
+the page, such as playwright's `page.evaluate` or the chrome devtools mcp's
+`evaluate_script`, and fix what breaks.
+
+- `describe()` lists every knob as json: its key, what it does, the values it
+  takes, its default, and what applying it reloads: `none`, `frame` or `page`.
+- `setState()` throws a `TypeError` at a knob, a field or a value the state
+  does not take, and then changes nothing. `setState(getState())`
+  takes the whole state back.
+- `ready()` resolves with the state once the frame has caught up with the
+  knobs, the frame's own devknobs is up and the panel has finished its slide.
+  a page devknobs reloads for the locale knob never settles it, so ask again on
+  the new page. it rejects at once when devknobs is not mounted, and past 10
+  seconds, so a timeout never passes for success.
+- `grab()` takes an element, an array or a NodeList of them, and skips entries
+  that are not elements, such as a `querySelector` that found nothing.
+- `reset()` leaves the panel as it is: open or closed, docked or not, its
+  handle shown or hidden.
+
+```js
+window.devknobs.setState({ scheme: "dark", panel: { open: false, handle: false } });
+await window.devknobs.ready();
+```
+
+every way in puts the api on `window.devknobs` while devknobs is mounted: the
+script tag, `mount()` and `<DevKnobs />`. so does the copy inside the width
+knob's frame, so `grab` works there too. the script tag build keeps the api
+after `unmount()`, so it can mount again: `ready()` tells whether it is mounted.
+
+the package ships an agent skill that walks an agent through the loop: learn
+the knobs, set a condition, wait, check the page, grab what is broken, fix it,
+reset. it is at `node_modules/devknobs/skills/devknobs/SKILL.md`. copy it into
+the project's skills to install it, for claude code:
+
+```
+mkdir -p .claude/skills && cp -R node_modules/devknobs/skills/devknobs .claude/skills/
+```
 
 ## the panel
 
@@ -374,14 +415,19 @@ page above hands grab to the frame, and the box and the copy happen there.
 escape in the frame ends it.
 
 pass `grabKey: "alt+shift+g"` for another key, or `grab: false` to leave it out.
-`grab(elements)` copies elements from code. the overlay and the context load
-the first time grab is used.
+`grab(elements)` copies elements from code and resolves with the payload, its
+`content` and `entries`. it comes back even when the copy fails, with `copied`
+false, and is null only when the elements give nothing. the overlay and the
+context load the first time grab is used.
 
 for the full owner stack, with a file, a line and a column for each component,
 React has to report to a devtools hook from its first render. the React
 devtools extension has one. without it, load the early script first (see
 below), which puts one in place. with neither, grab names the components it
-finds on the element and falls back to a selector.
+finds on the element and falls back to a selector. the line shows a selector
+only when it is built from a test id, a label, a stable id or another meaningful
+attribute (href, src, role, name, title, alt); each entry's
+`selector` has one for the element in any case.
 
 the copied line keeps to the app's own code: the component the element is
 written in, at the line and column of its jsx, then the components that

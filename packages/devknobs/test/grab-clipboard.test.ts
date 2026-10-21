@@ -8,6 +8,7 @@ function entry(content: string): GrabEntry {
     tagName: "button",
     componentName: "Save",
     content,
+    selector: '[data-testid="save"]',
     source: {
       filePath: "src/Save.tsx",
       lineNumber: 4,

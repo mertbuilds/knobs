@@ -185,6 +185,11 @@ export interface PanelValue {
    */
   docked: boolean;
   /**
+   * Show the handle while the panel is closed, for this tab. The mount's
+   * `handle` option and the user's setting can still hide it.
+   */
+  handle: boolean;
+  /**
    * Ids of the rows set from the panel. Each stays in the list, back at its
    * default too, until its `×` takes it off. Reset all lists the default rows
    * again.

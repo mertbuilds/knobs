@@ -37,6 +37,11 @@ function running(node: Glider, names: string[]): boolean {
     );
 }
 
+/** Is a floating wrapper on its way out, away or across, as the stylesheet slides and glides it? */
+export function wrapSliding(wrap: Glider): boolean {
+  return running(wrap, SLIDES);
+}
+
 /**
  * How much of its side of a window `view` wide the column covers now, and
  * whether it is still on its way. The box is read first, which starts a

@@ -218,6 +218,11 @@ export function apply(value: boolean): void {
   cancelStart = whenIdle(start);
 }
 
+/** Whether pseudo is waiting for the page to go idle before it swaps the text. */
+export function pending(): boolean {
+  return cancelStart !== null;
+}
+
 export function reset(): void {
   cancelStart?.();
   cancelStart = null;

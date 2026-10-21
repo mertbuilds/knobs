@@ -21,7 +21,11 @@ const styles = create({
 });
 
 export function Key({ children }: { children: ReactNode }) {
-  return <kbd {...props(styles.key)}>{children}</kbd>;
+  return (
+    <kbd {...props(styles.key)} dir="ltr">
+      {children}
+    </kbd>
+  );
 }
 
 /**

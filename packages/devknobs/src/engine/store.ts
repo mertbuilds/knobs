@@ -125,26 +125,27 @@ export const DEFAULT_STATE: DevknobsState = {
     edge: "none",
     tab: "top",
     docked: false,
+    handle: true,
     pinned: [...DEFAULT_PINNED],
   },
 };
 
-const SCHEMES: SchemeValue[] = ["light", "dark", "system"];
-const MOTIONS: MotionValue[] = ["reduce", "system"];
-const CONTRASTS: ContrastValue[] = ["more", "system"];
-const TRANSPARENCIES: TransparencyValue[] = ["reduce", "system"];
-const DIRS: DirValue[] = ["ltr", "rtl", "system"];
-const GEO_ERRORS: GeoErrorValue[] = ["none", "denied", "unavailable", "timeout"];
-const CLOCK_MODES: ClockMode[] = ["system", "offset", "frozen"];
-const ONLINES: OnlineValue[] = ["offline", "system"];
-const CONNECTIONS: ConnectionValue[] = ["slow-2g", "2g", "3g", "4g", "system"];
-const SAVE_DATAS: SaveDataValue[] = ["on", "off", "system"];
-const BARS: BarsValue[] = ["auto", "expanded", "minimized"];
-const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "off"];
-const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
-const EDGES: EdgeValue[] = ["top", "bottom", "none"];
-const SIDES: SideValue[] = ["left", "right"];
-const VISIONS: VisionValue[] = [
+export const SCHEMES: SchemeValue[] = ["light", "dark", "system"];
+export const MOTIONS: MotionValue[] = ["reduce", "system"];
+export const CONTRASTS: ContrastValue[] = ["more", "system"];
+export const TRANSPARENCIES: TransparencyValue[] = ["reduce", "system"];
+export const DIRS: DirValue[] = ["ltr", "rtl", "system"];
+export const GEO_ERRORS: GeoErrorValue[] = ["none", "denied", "unavailable", "timeout"];
+export const CLOCK_MODES: ClockMode[] = ["system", "offset", "frozen"];
+export const ONLINES: OnlineValue[] = ["offline", "system"];
+export const CONNECTIONS: ConnectionValue[] = ["slow-2g", "2g", "3g", "4g", "system"];
+export const SAVE_DATAS: SaveDataValue[] = ["on", "off", "system"];
+export const BARS: BarsValue[] = ["auto", "expanded", "minimized"];
+export const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "off"];
+export const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
+export const EDGES: EdgeValue[] = ["top", "bottom", "none"];
+export const SIDES: SideValue[] = ["left", "right"];
+export const VISIONS: VisionValue[] = [
   "none",
   "protanopia",
   "deuteranopia",
@@ -155,7 +156,7 @@ const VISIONS: VisionValue[] = [
 
 const MAT_COLORS: MatColorName[] = ["blue", "green", "magenta", "purple", "red", "graphite"];
 
-const GRAB_COLORS: Exclude<GrabColorValue, CustomColor>[] = [
+export const GRAB_COLORS: Exclude<GrabColorValue, CustomColor>[] = [
   "auto",
   "blue",
   "green",
@@ -345,6 +346,8 @@ export function parse(json: string | null | undefined, place?: string | null): D
     panel: {
       open: bool(panel.open, DEFAULT_STATE.panel.open),
       ...placeOf(panel, home),
+      // A session stored before the handle could be hidden from it shows the handle.
+      handle: bool(panel.handle, DEFAULT_STATE.panel.handle),
       // A stored panel keeps its list as it is, an empty one too, and one stored
       // before rows stayed listed has none pinned. With no panel stored, a
       // fresh session, the default rows are listed.

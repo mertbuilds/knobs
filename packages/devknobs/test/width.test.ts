@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { SCREENS, turn } from "../src/engine/devices";
 import { type ColumnEdge, DOCK_WIDTH, setDockWidth, watchColumn } from "../src/engine/dock";
 import { FOLD_TIME } from "../src/engine/fold";
@@ -13,6 +13,8 @@ import { type Mark, MARK_EVENT } from "../src/engine/touchmark";
 import {
   apply,
   fit,
+  FRAME_API_WAIT,
+  idle as caughtUp,
   label,
   onZoom,
   origin,
@@ -2032,7 +2034,7 @@ describe("a panel pinned to its side", () => {
   /** The window, which the letterbox is as big as, and every other box in it for these fakes. */
   let view: { width: number; height: number };
   /** What the frame listens for on the window. */
-  let heard: Map<string, Set<() => void>>;
+  let heard: Map<string, Set<(event?: object) => void>>;
   /** The waits the frame set and has not dropped, by the time they take. */
   let waits: { run: () => void; ms: number; id: number }[];
   let nextWait = 1;
@@ -2063,6 +2065,11 @@ describe("a panel pinned to its side", () => {
   const frameWidth = () => styleOf(frameElement(), "width");
   const fire = (type: string) => {
     for (const listener of [...(heard.get(type) ?? [])]) listener();
+  };
+  /** The page in the frame, or another window, says its devknobs is mounted. */
+  const ready = (from: unknown = Reflect.get(frameElement(), "contentWindow")) => {
+    const event = { source: from, origin: location.origin, data: { source: "devknobs", type: "ready" } };
+    for (const listener of [...(heard.get("message") ?? [])]) listener(event);
   };
   /** The window takes a new width, and says so. */
   const resizeTo = (width: number) => {
@@ -2144,12 +2151,12 @@ describe("a panel pinned to its side", () => {
     Reflect.set(document, "querySelector", (selector: string) =>
       selector === '[data-devknobs="panel"]' ? { offsetWidth: PANEL } : find(selector),
     );
-    Reflect.set(window, "addEventListener", (type: string, listener: () => void) => {
+    Reflect.set(window, "addEventListener", (type: string, listener: (event?: object) => void) => {
       const set = heard.get(type) ?? new Set();
       set.add(listener);
       heard.set(type, set);
     });
-    Reflect.set(window, "removeEventListener", (type: string, listener: () => void) => {
+    Reflect.set(window, "removeEventListener", (type: string, listener: (event?: object) => void) => {
       heard.get(type)?.delete(listener);
     });
     Reflect.set(window, "setTimeout", (run: () => void, ms: number) => {
@@ -2493,6 +2500,20 @@ describe("a panel pinned to its side", () => {
         expect(waiting()).toBe(0);
       });
 
+      test("is not idle until the column comes to rest", async () => {
+        opened();
+        await load(FRAMED);
+        Reflect.set(Reflect.get(frameElement(), "contentDocument"), "readyState", "complete");
+        ready();
+        expect(caughtUp()).toBe(true);
+        apply(CLOSED);
+        expect(caughtUp()).toBe(false);
+        slide(150);
+        expect(caughtUp()).toBe(false);
+        slide(1, false);
+        expect(caughtUp()).toBe(true);
+      });
+
       test("keeps the page's edge to a column on the left, which the page starts after", () => {
         letMove();
         apply({ ...CLOSED, panel: { ...CLOSED.panel, side: "left" } });
@@ -2757,6 +2778,57 @@ describe("a panel pinned to its side", () => {
         slide(0, false);
         expect(glided).toEqual([]);
       });
+    });
+  });
+
+  describe("the frame's own devknobs", () => {
+    /** The frame's page loads, and is done loading. */
+    const loadPage = async (href = FRAMED, origin: "same" | "other" = "same") => {
+      await load(href, origin);
+      const page = Reflect.get(frameElement(), "contentDocument");
+      if (page) Reflect.set(page, "readyState", "complete");
+    };
+
+    test("is not caught up until the page in the frame says its devknobs is mounted", async () => {
+      apply(PLAIN);
+      await loadPage();
+      expect(caughtUp()).toBe(false);
+      ready({});
+      expect(caughtUp()).toBe(false);
+      ready();
+      expect(caughtUp()).toBe(true);
+    });
+
+    test("waits again for the next page the frame loads, whatever the last one said", async () => {
+      apply(PLAIN);
+      await loadPage();
+      ready();
+      expect(caughtUp()).toBe(true);
+      await loadPage(PAGE);
+      expect(caughtUp()).toBe(false);
+      ready();
+      expect(caughtUp()).toBe(true);
+    });
+
+    test("counts a page that never mounts it as caught up once it had its time", async () => {
+      const now = spyOn(performance, "now").mockReturnValue(1000);
+      try {
+        apply(PLAIN);
+        await loadPage();
+        now.mockReturnValue(1000 + FRAME_API_WAIT - 1);
+        expect(caughtUp()).toBe(false);
+        now.mockReturnValue(1000 + FRAME_API_WAIT);
+        expect(caughtUp()).toBe(true);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    test("does not wait on a page on another origin, whose devknobs cannot be reached", async () => {
+      apply(PLAIN);
+      await loadPage();
+      await loadPage("https://example.com/", "other");
+      expect(caughtUp()).toBe(true);
     });
   });
 

@@ -125,6 +125,15 @@ export function frameWindow(): Window | null {
   return kit?.width.frameWindow() ?? null;
 }
 
+/**
+ * Has the frame caught up with the knobs? Not while its kit loads for knobs
+ * that need one. A failed load clears the knobs it waited on.
+ */
+export function idle(): boolean {
+  if (kit) return kit.width.idle();
+  return latest === null;
+}
+
 export function panelSized(glide: boolean): void {
   kit?.width.panelSized(glide);
 }

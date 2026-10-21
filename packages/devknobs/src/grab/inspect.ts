@@ -45,7 +45,7 @@ export function oneAtATime(grab: GrabControl, inspect: GrabControl): () => void 
 const HELD = Symbol.for("devknobs.inspected");
 
 /** Told by its node type, as `instanceof` fails for an element of the frame's window. */
-function isElement(value: unknown): value is Element {
+export function isElement(value: unknown): value is Element {
   return typeof value === "object" && value !== null && "nodeType" in value && value.nodeType === 1;
 }
 
