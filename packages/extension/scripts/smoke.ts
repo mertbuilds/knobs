@@ -123,6 +123,30 @@ const server = createServer(async (request, response) => {
     response.end('ok');
     return;
   }
+  // Pages whose policy lets no inline style in, attributes neither, and the same with none,
+  // with no style of their own, so the two draw the same. `deny` refuses frames too, and `ext`
+  // leaves devknobs to the extension.
+  const strict = /^\/(strict|loose)(-deny)?(\?ext)?$/.exec(path);
+  if (strict) {
+    const [, kind, deny, ext] = strict;
+    if (kind === 'strict') {
+      response.setHeader('content-security-policy', "style-src 'self'; style-src-attr 'none'");
+    }
+    if (deny) {
+      response.setHeader('x-frame-options', 'DENY');
+    }
+    response.setHeader('content-type', 'text/html');
+    response.end(
+      `<!doctype html><html><head><meta charset="utf-8"><title>csp</title>${ext ? '' : '<script src="/devknobs/index.global.js"></script>'}</head><body><h1>devknobs csp</h1><p>hi <code>x</code></p></body></html>`,
+    );
+    return;
+  }
+  const bezel = /^\/devknobs\/bezels\/([\w.-]+)$/.exec(path)?.[1];
+  if (bezel) {
+    response.setHeader('content-type', 'image/webp');
+    response.end(await readFile(join(devknobsDist, 'bezels', bezel)).catch(() => ''));
+    return;
+  }
   if (path === '/devknobs/index.global.js') {
     response.setHeader('content-type', 'text/javascript');
     response.end(await readFile(join(devknobsDist, 'index.global.js')));
@@ -1077,6 +1101,140 @@ async function workerFrames() {
   }
 }
 
+/** What the panel, its rows, and devknobs' layers on the page compute to, which no style means defaults. */
+const looks = (tab: Page) =>
+  tab.evaluate(() => {
+    const panel = document.querySelector('[data-devknobs="panel"]')?.shadowRoot;
+    const viewport = document.querySelector('[data-devknobs="viewport"]')?.shadowRoot;
+    const elements = {
+      blocked: viewport?.querySelector('.blocked:not([hidden])'),
+      grab: document.querySelector('[data-devknobs="grab"]')?.shadowRoot?.querySelector('.layer'),
+      host: document.querySelector('[data-devknobs="panel"]'),
+      row: panel?.querySelector('[data-row]'),
+      viewport: viewport?.querySelector('.viewport'),
+      wrap: panel?.querySelector('.wrap'),
+    };
+    return Object.fromEntries(
+      Object.entries(elements).map(([name, element]) => {
+        if (!element) {
+          return [name, null];
+        }
+        const { backgroundColor, display, position } = getComputedStyle(element);
+        return [name, { backgroundColor, display, position }];
+      }),
+    );
+  });
+
+/**
+ * A page whose policy lets in no inline style, `style-src 'self'; style-src-attr 'none'`, gets
+ * devknobs drawn as on a page with no policy, pixel for pixel: the panel open, a knob's editor
+ * open, grab's overlay, the notice of a frame refused, and a phone's frame in its body.
+ */
+async function strictPolicy() {
+  const browser = await chromium.launch({ channel: 'chromium', headless: true });
+  try {
+    type Step = { name: string; run: (tab: Page, base: string) => Promise<void> };
+    const steps: Array<Step> = [
+      {
+        name: 'panel open',
+        run: async (tab) => {
+          await openPanel(tab);
+        },
+      },
+      {
+        name: 'knob open',
+        run: async (tab) => {
+          await openPanel(tab);
+          await tab.evaluate(() =>
+            document
+              .querySelector('[data-devknobs="panel"]')!
+              .shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]')!
+              .click(),
+          );
+        },
+      },
+      {
+        name: 'grab',
+        run: async (tab) => {
+          await openPanel(tab);
+          await tab.evaluate(() => window.devknobs!.setState({ panel: { pinned: ['grab'] } }));
+          await tab.evaluate(() => window.devknobs!.ready());
+          await tab.evaluate(() =>
+            document
+              .querySelector('[data-devknobs="panel"]')!
+              .shadowRoot!.querySelector<HTMLElement>('[data-row="grab"] [aria-pressed]')!
+              .click(),
+          );
+          const box = (await tab.locator('h1').boundingBox())!;
+          await tab.mouse.move(box.x + 10, box.y + 10);
+          await tab.mouse.move(box.x + 20, box.y + 12);
+        },
+      },
+      {
+        name: 'refusal notice',
+        run: async (tab, base) => {
+          await tab.goto(`${base}-deny`);
+          await ready(tab);
+          await set(tab, { frame: true, width: 400 });
+          await tab.waitForFunction(
+            () =>
+              document
+                .querySelector('[data-devknobs="viewport"]')
+                ?.shadowRoot?.querySelector('.blocked:not([hidden])') != null,
+          );
+        },
+      },
+      {
+        name: 'phone mock',
+        run: async (tab) => {
+          await set(tab, { browser: 'off', device: 'iphone-17', mock: true });
+          await tab.waitForFunction(
+            () =>
+              document
+                .querySelector('[data-devknobs="viewport"]')
+                ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')
+                ?.contentWindow?.devknobs !== undefined,
+          );
+        },
+      },
+    ];
+    for (const step of steps) {
+      const shots: Array<Buffer> = [];
+      const seen: Array<unknown> = [];
+      for (const kind of ['loose', 'strict']) {
+        const tab = await browser.newPage({
+          colorScheme: 'light',
+          reducedMotion: 'reduce',
+          viewport,
+        });
+        const blocked: Array<string> = [];
+        tab.on('console', (message) => {
+          if (/Content Security Policy/.test(message.text())) {
+            blocked.push(message.text());
+          }
+        });
+        const base = `${url}${kind}`;
+        await tab.goto(base);
+        await ready(tab);
+        await step.run(tab, base);
+        await tab.evaluate(() => window.devknobs!.ready());
+        await tab.waitForTimeout(600);
+        seen.push(await looks(tab));
+        shots.push(await tab.screenshot());
+        if (kind === 'strict') {
+          log(`strict policy: ${step.name}`, { blocked, looks: seen[1] });
+          assert.deepEqual(blocked, [], `nothing of devknobs is blocked: ${step.name}`);
+        }
+        await tab.close();
+      }
+      assert.deepEqual(seen[1], seen[0], `the same styles: ${step.name}`);
+      assert.ok(shots[0]!.equals(shots[1]!), `the same pixels: ${step.name}`);
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 const UA_KINDS = ['page', 'fetch', 'image', 'worker-fetch'];
 const hints = (headers: Record<string, string> | undefined) =>
   Object.keys(headers ?? {}).filter((name) => name.startsWith('sec-ch-ua'));
@@ -1553,6 +1711,19 @@ try {
     };
   });
   log('csp page', csp);
+  assert.deepEqual(csp, { api: true, panel: true, styled: true });
+  // No inline style at all, attributes neither: the extension's panel looks as on any page.
+  await tab.goto(`${url}strict?ext`);
+  await ready(tab);
+  await openPanel(tab);
+  const strictLooks = await looks(tab);
+  await tab.goto(`${url}loose?ext`);
+  await ready(tab);
+  await openPanel(tab);
+  log('strict policy, extension', strictLooks);
+  assert.deepEqual(strictLooks, await looks(tab));
+  assert.equal((strictLooks['wrap'] as { display: string } | null)?.display, 'flex');
+  await set(tab, { panel: { open: false } });
 
   // A page that refuses every frame: the width knob's frame of it loads all the same.
   await tab.goto(`${url}deny`);
@@ -1723,6 +1894,7 @@ try {
   await refusalCauses();
   await workerFrames();
   await uaRequests();
+  await strictPolicy();
 
   process.stdout.write('smoke passed\n');
 } finally {
