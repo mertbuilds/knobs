@@ -47,8 +47,10 @@ const styles = create({
     lineHeight: 1.5,
     margin: 0,
   },
+  // The name takes the room beside a value that fits, so the value sits at the row's end.
   name: {
     color: colors.muted,
+    flexGrow: 1,
   },
   row: {
     alignItems: 'baseline',
@@ -85,15 +87,14 @@ const styles = create({
     lineHeight: 1.5,
     margin: 0,
   },
+  // A value too long for the room beside its name goes under it, from the start, as wide as the card.
   value: {
     fontFamily: font.mono,
     fontSize: font.sizeXs,
     fontVariantNumeric: 'tabular-nums',
     margin: 0,
-    marginInlineStart: 'auto',
     minWidth: 0,
-    overflowWrap: 'anywhere',
-    textAlign: 'end',
+    overflowWrap: 'break-word',
   },
   wide: {
     gridColumn: '1 / -1',

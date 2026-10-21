@@ -139,7 +139,8 @@ const styles = create({
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
   },
-  // The panel's small icon button: faint, and the track ground on hover.
+  // The panel's small icon button: faint, and the track ground on hover. One code line tall, so it
+  // sits on the first line, and in rem, so it grows with the text.
   copy: {
     alignItems: 'center',
     backgroundColor: {
@@ -155,7 +156,7 @@ const styles = create({
     cursor: 'pointer',
     display: 'flex',
     flexShrink: 0,
-    height: 22,
+    height: '1.375rem',
     justifyContent: 'center',
     outlineColor: colors.muted,
     outlineOffset: -1,
@@ -168,7 +169,12 @@ const styles = create({
     transitionDuration: '120ms',
     transitionProperty: 'background-color, color',
     transitionTimingFunction: 'ease-out',
-    width: 22,
+    width: '1.375rem',
+  },
+  // The page's 16px icon, in rem, so it grows with the text.
+  glyph: {
+    height: '1rem',
+    width: '1rem',
   },
   // The copy button's icon inside a box that is the button: its hover ground follows the box's.
   copyIcon: {
@@ -216,7 +222,7 @@ const styles = create({
     boxSizing: 'border-box',
     display: 'flex',
     flexShrink: 0,
-    height: 28,
+    height: '1.75rem',
     justifyContent: 'center',
     outlineColor: colors.muted,
     outlineOffset: 2,
@@ -228,7 +234,7 @@ const styles = create({
     transitionDuration: '120ms',
     transitionProperty: 'background-color',
     transitionTimingFunction: 'ease-out',
-    width: 28,
+    width: '1.75rem',
   },
   // The mark's color, here and not on the link: the theme's global `a` rules outrank StyleX's.
   githubMark: {
@@ -347,6 +353,11 @@ const styles = create({
     columnGap: spacing.s2,
     display: 'inline-flex',
   },
+  // The logo beside the name, 20px at the page's default size and growing with it.
+  logo: {
+    height: '1.25rem',
+    width: '1.25rem',
+  },
   // The mark beside the name, centered on its line.
   wordmark: {
     alignItems: 'center',
@@ -415,7 +426,11 @@ function CodeBox({
         () => setRefused((count) => count + 1),
       );
   };
-  const icon = copied ? <CheckIcon {...ICON} /> : <CopyIcon {...ICON} />;
+  const icon = copied ? (
+    <CheckIcon {...ICON} {...props(styles.glyph)} />
+  ) : (
+    <CopyIcon {...ICON} {...props(styles.glyph)} />
+  );
   const live = (
     <span {...props(styles.live)} aria-live="polite">
       {copied ? m.copy_done() : ''}
@@ -591,7 +606,7 @@ function Landing() {
       <header {...props(styles.section)}>
         <div {...props(styles.brand)}>
           <h1 {...props(styles.wordmark)}>
-            <KnobsMark size={20} />
+            <KnobsMark size={20} style={styles.logo} />
             {m.app_name()}
           </h1>
           <a
@@ -603,7 +618,7 @@ function Landing() {
             {...props(styles.github, defaultMarker())}
           >
             <span {...props(styles.githubMark)}>
-              <GitHubMark />
+              <GitHubMark style={styles.glyph} />
             </span>
           </a>
         </div>
