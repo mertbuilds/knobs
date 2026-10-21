@@ -361,6 +361,34 @@ describe("the pinned panel's slide", () => {
     expect(steps(run(at))).toEqual(["sliding none", "out none"]);
   });
 
+  test("rests only once the handle has come in after the column", () => {
+    const at = stage();
+    at.aim({ open: true });
+    expect(at.slide.resting()).toBe(true);
+    at.aim({ open: false });
+    expect(at.slide.resting()).toBe(false);
+    const rests = [];
+    for (let i = 0; at.asked.size > 0 && i < 100; i++) {
+      at.paint();
+      rests.push(at.slide.resting());
+    }
+    expect(rests.at(-1)).toBe(true);
+    expect(rests.slice(0, -1).every((rest) => !rest)).toBe(true);
+    expect(at.says()).toBe("away edge");
+  });
+
+  test("with less motion it rests at once, as does a floating panel", () => {
+    const at = stage();
+    at.setStill(true);
+    at.aim({ open: true });
+    at.aim({ open: false });
+    expect(at.slide.resting()).toBe(true);
+    const floating = stage();
+    floating.aim({ docked: false, open: true });
+    floating.aim({ docked: false, open: false });
+    expect(floating.slide.resting()).toBe(true);
+  });
+
   test("with less motion it jumps, and asks for no frame", () => {
     const at = stage();
     at.setStill(true);

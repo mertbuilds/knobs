@@ -20,6 +20,7 @@ import {
   MOTIONS,
   ONLINES,
   ORIENTATIONS,
+  resetState,
   SAVE_DATAS,
   SCHEMES,
   TRANSPARENCIES,
@@ -141,6 +142,21 @@ describe("describe", () => {
     if (locale && typeof locale.default === "object") locale.default.lang = "xx";
     expect(describeKnobs()).not.toEqual(first);
     expect(DEFAULT_STATE.locale.lang).toBe("system");
+  });
+
+  test("says reset leaves the panel as it is, as it does", () => {
+    const panel = describeKnobs().find((knob) => knob.key === "panel");
+    expect(panel?.description).toContain("reset() leaves it as it is");
+    const placed = merge(DEFAULT_STATE, { panel: { open: true, docked: true } });
+    expect(resetState(placed).panel).toMatchObject({ open: true, docked: true });
+  });
+
+  test("lists the panel's handle, shown by default, to hide from screenshots", () => {
+    const panel = describeKnobs().find((knob) => knob.key === "panel");
+    const fields = panel?.value.type === "object" ? panel.value.fields : {};
+    expect(fields.handle?.value).toEqual({ type: "boolean" });
+    expect(fields.handle?.description).toContain("screenshots");
+    expect(panel?.default).toEqual({ open: false, docked: false, handle: true });
   });
 });
 

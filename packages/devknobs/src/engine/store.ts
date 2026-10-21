@@ -125,6 +125,7 @@ export const DEFAULT_STATE: DevknobsState = {
     edge: "none",
     tab: "top",
     docked: false,
+    handle: true,
     pinned: [...DEFAULT_PINNED],
   },
 };
@@ -142,8 +143,8 @@ export const SAVE_DATAS: SaveDataValue[] = ["on", "off", "system"];
 export const BARS: BarsValue[] = ["auto", "expanded", "minimized"];
 export const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "off"];
 export const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
-const EDGES: EdgeValue[] = ["top", "bottom", "none"];
-const SIDES: SideValue[] = ["left", "right"];
+export const EDGES: EdgeValue[] = ["top", "bottom", "none"];
+export const SIDES: SideValue[] = ["left", "right"];
 export const VISIONS: VisionValue[] = [
   "none",
   "protanopia",
@@ -155,7 +156,7 @@ export const VISIONS: VisionValue[] = [
 
 const MAT_COLORS: MatColorName[] = ["blue", "green", "magenta", "purple", "red", "graphite"];
 
-const GRAB_COLORS: Exclude<GrabColorValue, CustomColor>[] = [
+export const GRAB_COLORS: Exclude<GrabColorValue, CustomColor>[] = [
   "auto",
   "blue",
   "green",
@@ -345,6 +346,8 @@ export function parse(json: string | null | undefined, place?: string | null): D
     panel: {
       open: bool(panel.open, DEFAULT_STATE.panel.open),
       ...placeOf(panel, home),
+      // A session stored before the handle could be hidden from it shows the handle.
+      handle: bool(panel.handle, DEFAULT_STATE.panel.handle),
       // A stored panel keeps its list as it is, an empty one too, and one stored
       // before rows stayed listed has none pinned. With no panel stored, a
       // fresh session, the default rows are listed.

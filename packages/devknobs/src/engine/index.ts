@@ -47,6 +47,8 @@ let running = false;
 /** Running inside the width knob's frame, where the page above drives the knobs. */
 let inFrame = false;
 let stopRelay: (() => void) | null = null;
+/** Says the panel is on its way out or away, null with no panel. */
+let panelMoving: (() => boolean) | null = null;
 const listeners = new Set<Listener>();
 
 export function getState(): DevknobsState {
@@ -104,15 +106,29 @@ export function setState(patch: DevknobsStatePatch): DevknobsState {
 }
 
 /**
- * The knobs, once devknobs is mounted and the frame has caught up with them.
- * A page devknobs reloads never resolves it: ask again on the next page.
+ * The knobs, once the frame has caught up with them and the panel has slid
+ * where it goes. A page devknobs reloads never resolves it: ask again on the
+ * next page. Rejects while devknobs is not mounted, and when it unmounts
+ * during the wait.
  */
 export function ready(): Promise<DevknobsState> {
   return whenSettled(
-    () => running && width.idle() && !locale.retrying(),
+    () => width.idle() && !locale.retrying() && !pseudo.pending() && !panelMoving?.(),
     locale.reloading,
     () => state,
+    () => running,
   );
+}
+
+/**
+ * The panel says how to tell it is still sliding, open or closed, its handle
+ * with it, so `ready()` waits for it to land. Returns the way to stop.
+ */
+export function watchPanel(moving: () => boolean): () => void {
+  panelMoving = moving;
+  return () => {
+    if (panelMoving === moving) panelMoving = null;
+  };
 }
 
 /**

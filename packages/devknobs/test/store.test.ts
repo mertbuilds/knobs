@@ -10,6 +10,7 @@ import {
   PLACE_VERSION,
   parse,
   placeText,
+  resetState,
   STATE_VERSION,
   STORAGE_KEY,
   save,
@@ -113,6 +114,7 @@ describe("parse", () => {
         edge: "bottom",
         tab: "none",
         docked: false,
+        handle: true,
         pinned: ["scheme", "clock"],
       },
     });
@@ -251,6 +253,7 @@ describe("parse", () => {
       edge: "none",
       tab: "none",
       docked: false,
+      handle: true,
       pinned: [],
     });
   });
@@ -283,6 +286,13 @@ describe("parse", () => {
     // The rows pinned to the list are another thing, and neither reads as the other.
     const both = parse(JSON.stringify({ panel: { docked: true, pinned: ["scheme"] } })).panel;
     expect(both).toMatchObject({ docked: true, pinned: ["scheme"] });
+  });
+
+  test("shows the handle when the session predates hiding it or stored junk", () => {
+    expect(parse(JSON.stringify({ panel: { open: false } })).panel.handle).toBe(true);
+    expect(parse(JSON.stringify({ panel: { handle: "no" } })).panel.handle).toBe(true);
+    expect(parse(JSON.stringify({ panel: { handle: false } })).panel.handle).toBe(false);
+    expect(resetState(merge(DEFAULT_STATE, { panel: { handle: false } })).panel.handle).toBe(false);
   });
 
   test("pins no row when the session predates pinned rows or stored junk", () => {

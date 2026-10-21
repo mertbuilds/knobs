@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readColumn } from "../src/ui/column";
+import { readColumn, wrapSliding } from "../src/ui/column";
 
 /** A transition on its way, as far as it is told from any other animation. */
 const transition = (property: string) => ({ transitionProperty: property });
@@ -56,5 +56,14 @@ describe("readColumn", () => {
     const panel = node([transition("width")]);
     readColumn(node([]), panel, "right", 1600);
     expect(panel.order).toEqual(["box", "animations"]);
+  });
+});
+
+describe("wrapSliding", () => {
+  test("is on its way while the floating wrapper slides out or away, or glides", () => {
+    expect(wrapSliding(node([]))).toBe(false);
+    expect(wrapSliding(node([transition("transform")]))).toBe(true);
+    expect(wrapSliding(node([transition("translate")]))).toBe(true);
+    expect(wrapSliding(node([transition("visibility"), { effect: {} }]))).toBe(false);
   });
 });

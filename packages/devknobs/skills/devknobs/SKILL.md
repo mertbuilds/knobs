@@ -14,15 +14,31 @@ Playwright `page.evaluate`, Chrome DevTools MCP `evaluate_script`, or similar.
 devknobs must be installed in the app. See the install section of the
 devknobs README (`node_modules/devknobs/README.md`).
 
-Check that the api is on the page:
+Check that devknobs is mounted:
 
 ```js
-typeof window.devknobs?.describe === "function";
+await window.devknobs.ready();
 ```
 
 Every way of mounting devknobs puts the api on `window.devknobs`: the script
 tag, `mount()` and `<DevKnobs />`. Inside the width knob's frame the frame's own
-copy has it too. If the check fails, devknobs is not mounted on this page.
+copy has it too. If `window.devknobs` is undefined, devknobs is not on this
+page. The script tag build keeps the api after `unmount()`, so the api alone
+does not prove a mount. `ready()` does: it rejects at once with
+`devknobs: not mounted` when nothing is mounted.
+
+Then note the panel as the user left it. Keep the result in your notes, as a
+later evaluate or a reload loses page variables:
+
+```js
+JSON.stringify(window.devknobs.getState().panel);
+```
+
+This note comes from the tab's `sessionStorage`, so it is the user's layout
+only in a fresh tab. In a tab an earlier agent may have used, also read
+`localStorage.getItem("devknobs:place")`. It holds the place the user last
+gave the panel (`side`, `y`, `top`, `edge`, `tab`, `docked`). Use those fields
+over the ones in the note.
 
 ## Learn the knobs
 
@@ -38,13 +54,25 @@ It returns one entry per knob:
 - `description`: what the knob does.
 - `value`: the values it takes. `enum` lists them. `number` has `min`, `max`
   and keywords in `or`. `string` has `examples` and keywords in `or`. `object`
-  lists its `fields`, and you can patch one field at a time.
-- `default`: the value `reset()` goes back to.
+  lists its `fields`, and you can patch one field at a time. In `clock`, a new
+  `mode` or `speed` starts from what the clock reads now, so set `mode` and
+  `at` in one patch.
+- `default`: the value `reset()` goes back to. `reset()` leaves `panel` as it
+  is: open or closed, docked or not, handle shown or hidden.
 - `reload`: what applying it takes. `none`, `frame` or `page`.
+
+`getState()` holds some internal fields that `describe()` does not list, such
+as `grabColor` and the panel's place. Do not compare the two key for key.
 
 ## Set a condition
 
 1. Call `setState(patch)`. It is sync and returns the new state.
+   A wrong key or value throws a TypeError, and then nothing changes:
+   `devknobs: unknown knob <key>[.<field>]` or
+   `devknobs: bad value for <key>[.<field>]: <value>`. Fix the patch from
+   `describe()`. Combinations are not checked: `orientation` is dropped
+   without a numeric width and height, and `posture` without a device that
+   folds. Compare `getState()` with what you set.
 2. Wait for it to apply:
    - `reload` is `none` or `frame`: `await window.devknobs.ready()`.
    - `reload` is `page`: the page may reload, or it may not. devknobs skips a
@@ -52,12 +80,20 @@ It returns one entry per knob:
      `await window.devknobs.ready()` either way. If the page navigates
      instead, wait for the load in your browser tool and call
      `await window.devknobs.ready()` on the new page. A `ready()` from the old
-     page never settles.
+     page never settles. In Playwright or a DevTools tool, the reload ends the
+     evaluate with an error such as `Execution context was destroyed` or
+     `Inspected target navigated or closed`. That error is the expected sign
+     of the reload.
 
-`ready()` resolves with the state once devknobs is mounted and the device frame
-has caught up. After 10 seconds it rejects with the error
+`ready()` resolves with the state once the device frame has caught up, the
+pseudo text is in and the panel has finished its slide. After 10 seconds it rejects with the error
 `devknobs: not settled after 10 seconds`. A rejection is not success: check the
 page before you trust it.
+
+To leave a device, call `reset()` or set
+`{ device: "none", width: "full", height: "full", dpr: "system" }`.
+`device: "none"` alone keeps the device's width, height and dpr, so the frame
+stays up.
 
 ```js
 window.devknobs.setState({ scheme: "dark", motion: "reduce" });
@@ -73,41 +109,60 @@ await window.devknobs.ready();
 
 ## Check the page
 
-1. Close the panel, so it stays out of screenshots:
-   `window.devknobs.setState({ panel: { open: false } })`.
+1. Close the panel, hide its handle and unpin it, so it stays out of
+   screenshots and out of the page's width, then wait for it to slide away:
+   `window.devknobs.setState({ panel: { open: false, handle: false, docked: false } })`,
+   then `await window.devknobs.ready()`. `reset()` keeps this. Patch only
+   `open`, `docked` and `handle`. The other panel fields are the user's
+   layout. `panel.handle` is your layer. The user's own "show handle" setting
+   can hide the handle too, and `getState()` does not show that setting.
 2. Take a screenshot, or read the DOM.
 3. A numeric width or height, a device, a numeric dpr, a vision other than
    `none`, `frame: true`, or a panel pinned to its side (`panel.docked`) render
    the page in an iframe. `ua` does not bring
    the frame up. It only reloads the frame while one is up. The iframe is in
-   a shadow root, so reach it through its host:
+   a shadow root, so reach it through its host. Then wait for the frame's own
+   `ready()`, which can come a second after the top one:
 
    ```js
    const frame = document
      .querySelector('[data-devknobs="viewport"]')
      ?.shadowRoot?.querySelector("iframe[data-devknobs-frame]");
+   await frame?.contentWindow?.devknobs?.ready();
    frame?.contentDocument;
    ```
 
    Read the DOM there. The page in the frame runs its own devknobs, so call
-   `grab` on `frame.contentWindow.devknobs` there.
+   `grab` on `frame.contentWindow.devknobs` for elements in the frame. The top
+   page's `grab` on such an element gives component names with no file or line.
+   After `ready()` the frame's devknobs is there if the app mounts devknobs on
+   that page.
 
 ## Find the code
 
 For an element that looks wrong, call `grab`:
 
 ```js
-const el = document.querySelector("header nav");
-const payload = await window.devknobs.grab([el]);
+const payload = await window.devknobs.grab(document.querySelector("h1"));
 payload?.content;
 ```
 
+`grab` takes an element, an array or a NodeList, as `querySelectorAll` gives.
+
 `content` is one line per element: its html, the components that rendered it
 and their source files with line and column. `entries[i].source?.filePath`
-holds the file. `source` is null when devknobs cannot find one. Open that file and fix the code. `grab` also copies the
-result to the clipboard. The payload comes back even when the copy fails, as it
-often does in headless browsers; `copied` says whether it reached the
-clipboard. `grab` returns `null` only when the elements give nothing.
+holds the file, relative to the app's dev server root (the vite root), not the
+repo. In a monorepo, find the app first. `source` is null when devknobs cannot
+find one. `source.lineNumber` and `columnNumber` are null when devknobs finds
+the file but not the line, and `content` then names the file alone. Search
+that file for the element's tag and class names. A line that is there points
+at the element's tag in the file. Open that file and fix the code.
+
+`grab` also copies the result to the clipboard. The payload comes back even
+when the copy fails, as it often does in headless browsers; `copied` says
+whether it reached the clipboard. `grab` skips entries that are not elements,
+such as a `querySelector` that found nothing, and returns `null` when nothing
+is left or the elements give nothing.
 
 After a fix, reload the page. The knobs stay set across reloads. Call
 `await window.devknobs.ready()` and check again.
@@ -130,16 +185,29 @@ const conditions = [
 For each condition:
 
 1. `window.devknobs.reset()`.
-2. `window.devknobs.setState({ ...condition, panel: { open: false } })`.
+2. `window.devknobs.setState(condition)`. The panel stays as you set it in
+   "Check the page".
 3. Wait as in "Set a condition".
 4. Screenshot or read the DOM. Note what breaks.
 5. `grab` the broken elements, fix the code, check again.
 
 Test locale apart, as it can reload the page: `{ locale: { lang: "ar" } }`. The
 `reset()` after it can reload the page too, so wait for the load. Also try
-`{ pseudo: true }` to find text that is cut off or not translated.
+`{ pseudo: true }` to find text that is cut off or not translated. It also
+changes data values, such as numbers and names. That is not a bug.
 
 ## Finish
 
-Call `window.devknobs.reset()` when you are done. The knobs are kept in
-`sessionStorage` and stay set across reloads in the tab until a reset.
+Put the knobs back, and the panel as you noted it at the start:
+
+```js
+window.devknobs.reset();
+window.devknobs.setState({ panel: NOTED_PANEL }); // the panel json you noted
+await window.devknobs.ready();
+```
+
+The knobs are kept in `sessionStorage` and stay set across reloads in the tab
+until a reset. The panel's place, docked or not with it, is also kept in
+`localStorage` under `devknobs:place`, which every tab of the origin reads
+when it opens. Your `setState` does not write it, but the user's next drag
+or pin in this tab does, with what you left. So put the panel back.

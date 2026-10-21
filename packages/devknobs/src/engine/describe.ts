@@ -57,6 +57,7 @@ export interface KnobDescription {
   key: keyof DevknobsState;
   description: string;
   value: KnobShape;
+  /** The value `reset()` goes back to, or for `panel`, which `reset()` leaves as it is, the first mount's. */
   default: KnobValue;
   reload: KnobReload;
 }
@@ -130,25 +131,28 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
       examples: [...TIME_ZONE_PRESETS],
       or: ["geo", "system"],
     }),
-    clock: spec("The clock the page reads.", {
-      type: "object",
-      fields: {
-        mode: field(
-          "system for the real clock, offset to run on from at, frozen to stop at at.",
-          oneOf(CLOCK_MODES),
-        ),
-        at: field("The instant the clock reads, in epoch ms.", { type: "number" }),
-        speed: field("Clock ms per real ms while it runs.", {
-          type: "number",
-          min: CLOCK_SPEED_MIN,
-          max: CLOCK_SPEED_MAX,
-        }),
-        header: field(
-          "Send the clock's instant to the page's own origin in an x-devknobs-now header.",
-          flag,
-        ),
+    clock: spec(
+      "The clock the page reads. A new mode or speed starts from what the clock reads now, so set mode and at in one patch.",
+      {
+        type: "object",
+        fields: {
+          mode: field(
+            "system for the real clock, offset to run on from at, frozen to stop at at.",
+            oneOf(CLOCK_MODES),
+          ),
+          at: field("The instant the clock reads, in epoch ms.", { type: "number" }),
+          speed: field("Clock ms per real ms while it runs.", {
+            type: "number",
+            min: CLOCK_SPEED_MIN,
+            max: CLOCK_SPEED_MAX,
+          }),
+          header: field(
+            "Send the clock's instant to the page's own origin in an x-devknobs-now header.",
+            flag,
+          ),
+        },
       },
-    }),
+    ),
     network: spec("navigator.onLine and navigator.connection. Requests still go out.", {
       type: "object",
       fields: {
@@ -219,13 +223,17 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
     overflow: spec("Mark the boxes that stick out of the viewport sideways.", flag),
     outlines: spec("Outline every element.", flag),
     panel: spec(
-      "The devknobs panel. Close it to keep it out of screenshots.",
+      "The devknobs panel. Close it and hide its handle to keep it out of screenshots. reset() leaves it as it is, open or closed, docked or not.",
       {
         type: "object",
         fields: {
           open: field("The panel is open.", flag),
           docked: field(
             "Pinned to its side as a column, with the page in a frame beside it.",
+            flag,
+          ),
+          handle: field(
+            "Show the knobs handle on the window's edge while the panel is closed. false keeps it out of screenshots for this tab.",
             flag,
           ),
         },
@@ -250,8 +258,8 @@ export function describe(): KnobDescription[] {
 /** A knob's default, trimmed to the fields it lists. */
 function defaultOf(key: keyof DevknobsState): KnobValue {
   if (key === "panel") {
-    const { open, docked } = DEFAULT_STATE.panel;
-    return { open, docked };
+    const { open, docked, handle } = DEFAULT_STATE.panel;
+    return { open, docked, handle };
   }
   if (key === "clock") {
     const { mode, at, speed, header } = DEFAULT_STATE.clock;

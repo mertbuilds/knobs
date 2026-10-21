@@ -90,6 +90,14 @@ describe("mergeClock", () => {
     expect(next).toEqual({ ...running, at: REAL + 7 * DAY, since: REAL + 1000 });
   });
 
+  test("a new mode with the same instant keeps the instant", () => {
+    const at = REAL + 7 * DAY;
+    const offset = mergeClock(DEFAULT_STATE.clock, { mode: "offset", at }, REAL);
+    const frozen = mergeClock(offset, { mode: "frozen", at }, REAL + 60_000);
+    expect(frozen).toMatchObject({ mode: "frozen", at, since: REAL + 60_000 });
+    expect(virtualNow(frozen, REAL + DAY)).toBe(at);
+  });
+
   test("a new speed or mode carries on from where the clock stands", () => {
     const later = REAL + 1000;
     const standing = virtualNow(running, later);

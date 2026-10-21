@@ -6,7 +6,7 @@ import { defaultKeys } from "../src/ui/keys";
 import { viewHead } from "../src/ui/pane";
 import type { LivePrefs } from "../src/ui/prefs";
 import { rowLine } from "../src/ui/rows";
-import { createSettings } from "../src/ui/settings";
+import { createSettings, type Settings, type SettingsContext } from "../src/ui/settings";
 import { CSS } from "../src/ui/styles";
 import type { Tips } from "../src/ui/tooltip";
 import { FakeNode, fake, leave, page, rules } from "./kit-dom";
@@ -28,17 +28,9 @@ function parts(of: unknown): string[] {
   return fake(of).children.map((child) => child.className || child.tag);
 }
 
-/** The settings, built with nothing behind them. */
-function settings(): FakeNode {
-  const keys: LiveKeys = {
-    get: () => defaultKeys(),
-    custom: () => false,
-    set: () => {},
-    subscribe: () => () => {},
-    recording: false,
-    destroy: () => {},
-  };
-  const prefs: LivePrefs = {
+/** Preferences that show the handle and keep nothing, but the handle a test sets. */
+function quietPrefs(onHandle: (on: boolean) => void = () => {}): LivePrefs {
+  return {
     get: () => ({
       handle: true,
       listWidth: 240,
@@ -46,11 +38,23 @@ function settings(): FakeNode {
       stylesMode: "simple",
       stylesBox: true,
     }),
-    setHandle: () => {},
+    setHandle: onHandle,
     setWidth: () => {},
     setStylesMode: () => {},
     setStylesBox: () => {},
     subscribe: () => () => {},
+    destroy: () => {},
+  };
+}
+
+/** The settings, built with nothing behind them but what a test hands them. */
+function buildSettings(more: Partial<SettingsContext> = {}): Settings {
+  const keys: LiveKeys = {
+    get: () => defaultKeys(),
+    custom: () => false,
+    set: () => {},
+    subscribe: () => () => {},
+    recording: false,
     destroy: () => {},
   };
   const tips: Tips = {
@@ -61,9 +65,9 @@ function settings(): FakeNode {
     tooltip: () => {},
     destroy: () => {},
   };
-  const made = createSettings({
+  return createSettings({
     keys,
-    prefs,
+    prefs: quietPrefs(),
     grab: null,
     inspect: null,
     mac: true,
@@ -73,10 +77,16 @@ function settings(): FakeNode {
     tips,
     render: () => {},
     renderKeys: () => {},
+    handleShown: () => true,
+    showHandle: () => {},
     searching: () => false,
     leaveSearch: () => {},
+    ...more,
   });
-  return fake(made.view);
+}
+
+function settings(): FakeNode {
+  return fake(buildSettings().view);
 }
 
 beforeEach(page);
@@ -216,6 +226,41 @@ describe("a row's line", () => {
     expect(rowLine(actionRow({ ...entry, binding: "reset" })).key?.className).toBe(
       "hint-key row-key",
     );
+  });
+});
+
+describe("the settings' handle switch", () => {
+  /** The switch, as the settings draw it. */
+  const switchOf = (made: Settings): FakeNode => {
+    const [found] = fake(made.view).find("switch");
+    if (!found) throw new Error("no switch");
+    return found;
+  };
+
+  test("turned on, shows the handle again, in the knobs as in the preferences", () => {
+    const set: boolean[] = [];
+    let shown = 0;
+    const made = buildSettings({
+      prefs: quietPrefs((on) => set.push(on)),
+      handleShown: () => false,
+      showHandle: () => (shown += 1),
+    });
+    switchOf(made).fire("click");
+    expect(set).toEqual([true]);
+    expect(shown).toBe(1);
+  });
+
+  test("turned off, hides the handle in the preferences alone", () => {
+    const set: boolean[] = [];
+    let shown = 0;
+    const made = buildSettings({
+      prefs: quietPrefs((on) => set.push(on)),
+      handleShown: () => true,
+      showHandle: () => (shown += 1),
+    });
+    switchOf(made).fire("click");
+    expect(set).toEqual([false]);
+    expect(shown).toBe(0);
   });
 });
 

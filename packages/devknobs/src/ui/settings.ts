@@ -46,6 +46,10 @@ export interface SettingsContext {
   render(): void;
   /** Show the keys in force, everywhere the panel shows them. */
   renderKeys(): void;
+  /** Whether the handle shows on a closed panel: the user, the mount and the knobs all let it. */
+  handleShown(): boolean;
+  /** Let the knobs show the handle, which an agent may have hidden. */
+  showHandle(): void;
   /** Whether the search is open. */
   searching(): boolean;
   leaveSearch(): void;
@@ -226,9 +230,10 @@ export function createSettings(context: SettingsContext): Settings {
   tips.tooltip(keysToggle, "settings");
   // Hiding the handle says how to bring the closed panel back, so nobody is shut out.
   handleSwitch.addEventListener("click", () => {
-    const on = !prefs.get().handle;
+    const on = !context.handleShown();
     prefs.setHandle(on);
     if (on) {
+      context.showHandle();
       if (tips.isFor(handleSwitch)) tips.hide();
       return;
     }

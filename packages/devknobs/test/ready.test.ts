@@ -64,6 +64,7 @@ describe("whenSettled", () => {
       () => true,
       () => false,
       () => "state",
+      () => true,
     );
     expect(await outcome(waiting)).toBe("pending");
     clock.step();
@@ -78,6 +79,7 @@ describe("whenSettled", () => {
       () => settled,
       () => false,
       () => "state",
+      () => true,
     );
     clock.step();
     clock.step();
@@ -94,6 +96,7 @@ describe("whenSettled", () => {
       () => false,
       () => false,
       () => "state",
+      () => true,
     );
     clock.step();
     clock.expire();
@@ -107,6 +110,7 @@ describe("whenSettled", () => {
       () => false,
       () => false,
       () => "state",
+      () => true,
     );
     clock.expire();
     expect(await outcome(waiting)).toBe("rejected");
@@ -119,6 +123,7 @@ describe("whenSettled", () => {
       () => true,
       () => false,
       () => "state",
+      () => true,
     );
     clock.expire();
     expect(await waiting).toBe("state");
@@ -131,6 +136,7 @@ describe("whenSettled", () => {
       () => true,
       () => true,
       () => "state",
+      () => true,
     );
     clock.step();
     clock.expire();
@@ -144,8 +150,52 @@ describe("whenSettled", () => {
       () => false,
       () => true,
       () => "state",
+      () => true,
     );
     clock.expire();
     expect(await outcome(waiting)).toBe("pending");
+  });
+
+  test("rejects right away when nothing is mounted", async () => {
+    const clock = frames();
+    const waiting = whenSettled(
+      () => true,
+      () => false,
+      () => "state",
+      () => false,
+    );
+    await expect(waiting).rejects.toThrow("devknobs: not mounted");
+    expect(clock.pending()).toBe(0);
+  });
+
+  test("rejects when devknobs unmounts during the wait", async () => {
+    const clock = frames();
+    let mounted = true;
+    const waiting = whenSettled(
+      () => false,
+      () => false,
+      () => "state",
+      () => mounted,
+    );
+    clock.step();
+    expect(await outcome(waiting)).toBe("pending");
+    mounted = false;
+    clock.step();
+    await expect(waiting).rejects.toThrow("devknobs: not mounted");
+    expect(clock.pending()).toBe(0);
+  });
+
+  test("says not mounted in a hidden tab too, once the wait is over", async () => {
+    const clock = frames();
+    let mounted = true;
+    const waiting = whenSettled(
+      () => false,
+      () => false,
+      () => "state",
+      () => mounted,
+    );
+    mounted = false;
+    clock.expire();
+    await expect(waiting).rejects.toThrow("devknobs: not mounted");
   });
 });

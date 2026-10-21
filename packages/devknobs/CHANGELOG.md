@@ -5,9 +5,14 @@
 ### agents
 
 - `describe()` lists every knob as json, with its values, its default and what applying it reloads: nothing, the frame or the page
-- `ready()` resolves with the state once devknobs is mounted and the frame has caught up. a page reloading for the locale knob never settles it. past 10 seconds it rejects with an error
+- `ready()` resolves with the state once the frame has caught up, the frame's own devknobs is up (or 1.5 seconds after its page loads without one), the pseudo text is in and the panel has finished its slide. a page reloading for the locale knob never settles it. it rejects at once with `devknobs: not mounted` when devknobs is not mounted or unmounts during the wait, and past 10 seconds with an error
+- `setState()` throws a `TypeError` at an unknown knob or field, or a value the knob does not take, and changes nothing. `panel.pinned` takes only row ids, each once. `setState(getState())` works
+- `panel.handle` hides the panel's handle for the tab, so a closed panel stays out of screenshots. the show handle switch in the settings shows it off then, and turning it on brings the handle back
+- `reset()` leaves the panel open or closed, docked or not, and its handle as it is. `describe()` says so
+- `grab()` takes an element, an array or a NodeList of them, skips entries that are not elements and resolves `null` when none are left
 - both are on `window.devknobs` and exported from `devknobs`
 - `mount()` and `<DevKnobs />` put the api on `window.devknobs` too, not only the script tag build, and take it away on unmount. the copy in the width knob's frame has it as well
+- `grab()` finds the right line on a dev server whose source map is off in more cases: a tag also named in a comment or a string, a `key` after a spread, a list item among others of its tag, and a helper called from more than one place. where it cannot find the line, `source.lineNumber` is null, not a line of the transformed module
 - `grab()` resolves with the payload even when the clipboard copy fails, as it often does in headless browsers. `copied` says whether it reached the clipboard
 - an agent skill ships in the package at `skills/devknobs/SKILL.md`
 

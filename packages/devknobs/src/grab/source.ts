@@ -10,9 +10,9 @@ import {
 } from "bippy/source";
 import { quietFetch } from "../requests/quiet";
 import { displayName, isComposite } from "./fiber";
-import { locateJsx, opensAt } from "./locate";
+import { locateCall, locateJsx, type Place as SourcePlace } from "./locate";
 import { classifySourcePath, normalizeFilePath, packageName, rememberRoot, rootOf } from "./paths";
-import { sourceName } from "./stack";
+import { isUsefulName, sourceName } from "./stack";
 import type { ResolvedSource } from "./types";
 
 /** How long a grab waits on bundles and source maps before it goes without them. */
@@ -92,6 +92,11 @@ function scriptPath(fileName: string | undefined, script: string | undefined): s
   }
 }
 
+/** The function a frame names, a helper's lowercase name too, and not a minifier's one letter. */
+function frameName(name: string | undefined, next: boolean): string | null {
+  return name && name.length > 1 && isUsefulName(name, next) ? name : null;
+}
+
 /**
  * A place a source map gave, set right against the frame it came from. The
  * map's column counts from 0, where a stack and an editor count from 1. Its
@@ -102,7 +107,7 @@ export function mapped<T extends Place>(place: T, raw: Place | null | undefined,
   return {
     ...place,
     fileName: scriptPath(place.fileName, raw?.fileName),
-    functionName: sourceName(raw?.functionName, next) ?? place.functionName,
+    functionName: frameName(raw?.functionName, next) ?? place.functionName,
     columnNumber:
       typeof place.columnNumber === "number" ? place.columnNumber + 1 : place.columnNumber,
   };
@@ -161,31 +166,14 @@ export interface MappedSource {
   content: string;
 }
 
-/** The map put the frame where its element's tag opens. */
-export function isSited(frame: StackFrame, site: Site, source: MappedSource): boolean {
-  const { lineNumber: line, columnNumber: column } = frame;
-  if (!frame.isSymbolicated || typeof line !== "number" || typeof column !== "number") return false;
-  return opensAt(source.content, { line, column }, site.host ? site.tag : null);
+/** Where the raw frame's call is in the transformed code, the column from 0. */
+function callOf(raw: StackFrame): SourcePlace | null {
+  return typeof raw.lineNumber === "number" && typeof raw.columnNumber === "number"
+    ? { line: raw.lineNumber, column: raw.columnNumber - 1 }
+    : null;
 }
 
-/**
- * A frame the map left without a place, or on one where no tag opens, set on
- * the place its element is written, by a search of the source. With nothing
- * found, the frame stays as the map left it.
- */
-export function relocated(
-  frame: StackFrame,
-  raw: StackFrame,
-  site: Site,
-  source: MappedSource,
-  code: string | null,
-): StackFrame {
-  const call =
-    typeof raw.lineNumber === "number" && typeof raw.columnNumber === "number"
-      ? { line: raw.lineNumber, column: raw.columnNumber - 1 }
-      : null;
-  const place = locateJsx(source.content, site.tag, site.host, code, call);
-  if (!place) return frame;
+function placedAt(frame: StackFrame, source: MappedSource, place: SourcePlace): StackFrame {
   return {
     ...frame,
     fileName: source.name,
@@ -195,20 +183,75 @@ export function relocated(
   };
 }
 
+/**
+ * A frame set on the place its element is written, by a search of the source.
+ * The map can leave a frame without a place, or put it on another element's
+ * tag, even one of the same name. With nothing found, the frame stays as the
+ * map left it.
+ */
+export function relocated(
+  frame: StackFrame,
+  raw: StackFrame,
+  site: Site,
+  source: MappedSource,
+  code: string | null,
+): StackFrame {
+  const place = locateJsx(source.content, site.tag, site.host, code, callOf(raw));
+  return place ? placedAt(frame, source, place) : frame;
+}
+
+/**
+ * A frame that calls a function among the jsx, as `{list()}`, set on that
+ * call in the source when the function is called there once, or once in the
+ * frame's own function. Otherwise the frame stays as the map left it.
+ */
+export function recalled(
+  frame: StackFrame,
+  raw: StackFrame,
+  source: MappedSource,
+  code: string,
+): StackFrame {
+  const call = callOf(raw);
+  const place = call && locateCall(source.content, code, call, raw.functionName ?? null);
+  return place ? placedAt(frame, source, place) : frame;
+}
+
 /** Only a map of one source with its text, as a dev server's is, can be checked. */
-async function siteFrame(frame: StackFrame, raw: StackFrame, site: Site): Promise<StackFrame> {
-  const url = raw.fileName;
-  if (!url) return frame;
+async function mappedSource(url: string): Promise<MappedSource | null> {
   const map = await getSourceMap(url, true, sourceFetch);
-  if (!map) return frame;
+  if (!map) return null;
   rememberRoot(rootOf(map.file, url));
   const [name] = map.sources;
   const content = map.sourcesContent?.[0];
-  if (!name || !content || map.sources.length !== 1) return frame;
-  const source = { name, content };
-  if (isSited(frame, site, source)) return frame;
+  if (!name || !content || map.sources.length !== 1) return null;
+  return { name, content };
+}
+
+async function siteFrame(frame: StackFrame, raw: StackFrame, site: Site): Promise<StackFrame> {
+  const url = raw.fileName;
+  const source = url ? await mappedSource(url) : null;
+  if (!url || !source) return frame;
   const alone = relocated(frame, raw, site, source, null);
   return alone === frame ? relocated(frame, raw, site, source, await moduleCode(url)) : alone;
+}
+
+async function callFrame(frame: StackFrame, raw: StackFrame): Promise<StackFrame> {
+  const url = raw.fileName;
+  const source = url ? await mappedSource(url) : null;
+  const code = url && source ? await moduleCode(url) : null;
+  return source && code ? recalled(frame, raw, source, code) : frame;
+}
+
+/** A site's frame against its tag, any other but the definition's against the call it makes. */
+function placeFrame(
+  frame: StackFrame,
+  raw: StackFrame | null | undefined,
+  site: Site | undefined,
+  index: number,
+): Promise<StackFrame> {
+  if (!raw) return Promise.resolve(frame);
+  if (site) return siteFrame(frame, raw, site);
+  return index > 0 ? callFrame(frame, raw) : Promise.resolve(frame);
 }
 
 /**
@@ -225,8 +268,7 @@ async function ownerStack(fiber: Fiber, stack: StackFrame[], next: boolean): Pro
   return Promise.all(
     stack.map(async (frame, index) => {
       const rawFrame = index === 0 ? first : raw[index - 1];
-      const site = found.get(index - 1);
-      const placed = site && rawFrame ? await siteFrame(frame, rawFrame, site) : frame;
+      const placed = await placeFrame(frame, rawFrame, found.get(index - 1), index);
       return placed.isSymbolicated ? mapped(placed, rawFrame, next) : placed;
     }),
   );
@@ -235,6 +277,27 @@ async function ownerStack(fiber: Fiber, stack: StackFrame[], next: boolean): Pro
 function ownerName(fiber: Fiber, next: boolean): string | null {
   const owner = ownerFiber(fiber);
   return owner && isComposite(owner) ? sourceName(displayName(owner.type), next) : null;
+}
+
+/**
+ * An app frame as a source. A frame no map moved points into the transformed
+ * module, past the file's own lines, so it keeps its file and drops its line.
+ */
+export function appSource(
+  frame: StackFrame,
+  fileName: string,
+  componentName: string | null,
+  next: boolean,
+): ResolvedSource {
+  const placed = next || frame.isSymbolicated === true;
+  return {
+    filePath: normalizeFilePath(fileName),
+    lineNumber: placed ? (frame.lineNumber ?? null) : null,
+    columnNumber: placed ? (frame.columnNumber ?? null) : null,
+    componentName,
+    origin: "app",
+    symbolicated: frame.isSymbolicated === true,
+  };
 }
 
 /**
@@ -250,14 +313,7 @@ function ownSource(fiber: Fiber, stack: StackFrame[], next: boolean): ResolvedSo
     .slice(1, 1 + own)
     .find((item) => classifySourcePath(item.fileName).origin === "app");
   if (!frame?.fileName) return null;
-  return {
-    filePath: normalizeFilePath(frame.fileName),
-    lineNumber: frame.lineNumber ?? null,
-    columnNumber: frame.columnNumber ?? null,
-    componentName: sourceName(frame.functionName, next) ?? ownerName(fiber, next),
-    origin: "app",
-    symbolicated: frame.isSymbolicated === true,
-  };
+  return appSource(frame, frame.fileName, sourceName(frame.functionName, next) ?? ownerName(fiber, next), next);
 }
 
 async function fiberSource(fiber: Fiber, next: boolean): Promise<ResolvedSource | null> {
@@ -267,13 +323,15 @@ async function fiberSource(fiber: Fiber, next: boolean): Promise<ResolvedSource 
   const raw = fiber._debugSource ? null : getRawSource(fiber);
   const moved = !fiber._debugSource && found.fileName !== raw?.fileName;
   const source = moved ? mapped(found, raw, next) : found;
+  const symbolicated = Boolean(fiber._debugSource) || moved;
+  const placed = next || symbolicated;
   return {
     filePath: normalizeFilePath(source.fileName),
-    lineNumber: source.lineNumber ?? null,
-    columnNumber: source.columnNumber ?? null,
+    lineNumber: placed ? (source.lineNumber ?? null) : null,
+    columnNumber: placed ? (source.columnNumber ?? null) : null,
     componentName: sourceName(source.functionName, next) ?? ownerName(fiber, next),
     origin: classifySourcePath(source.fileName).origin,
-    symbolicated: Boolean(fiber._debugSource) || moved,
+    symbolicated,
   };
 }
 

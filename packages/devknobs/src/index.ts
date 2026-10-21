@@ -1,4 +1,5 @@
 import * as engine from "./engine";
+import { checkPatch } from "./engine/check";
 import { describe } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
@@ -11,7 +12,7 @@ import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
 import type { GrabOptions, GrabResult } from "./grab/types";
 import { claim, expose, free, superseded, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
-import type { GrabColorValue } from "./types";
+import type { DevknobsState, DevknobsStatePatch, GrabColorValue } from "./types";
 import { createKeys, type LiveKeys } from "./ui/bindings";
 import { forwardKeys } from "./ui/keys";
 import { createPanel, type Panel } from "./ui/panel";
@@ -172,7 +173,17 @@ export function unmount(): void {
 }
 
 export const getState = engine.getState;
-export const setState = engine.setState;
+
+/**
+ * Apply a patch of knobs. A knob or a field the state does not have, or a
+ * value it does not take, throws a TypeError, and then nothing changes. The
+ * whole of `getState()` goes back in.
+ */
+export function setState(patch: DevknobsStatePatch): DevknobsState {
+  checkPatch(patch);
+  return engine.setState(patch);
+}
+
 export const reset = engine.reset;
 export const replay = engine.replay;
 export const ready = engine.ready;
@@ -180,12 +191,14 @@ export { describe };
 
 /**
  * Copy what an agent needs to find the elements in the code: their html, the
- * components that rendered them and where. Loads on first use, so the page
- * never pays for it until then. The payload comes back even when the copy
- * fails, with `copied` false. Null when the elements gave nothing.
+ * components that rendered them and where. Takes an element, an array or a
+ * NodeList of them. Loads on first use, so the page never pays for it until
+ * then. The payload comes back even when the copy fails, with `copied` false. Entries that are
+ * not elements, such as a `querySelector` that found nothing, are skipped.
+ * Null when the elements gave nothing.
  */
 export async function grab(
-  elements: Element[],
+  elements?: Element | Iterable<Element | null | undefined> | null,
   options?: GrabOptions,
 ): Promise<GrabResult | null> {
   const loaded = await import("./grab");
