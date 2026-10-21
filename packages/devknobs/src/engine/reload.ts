@@ -1,5 +1,6 @@
 import type { DevknobsState } from "../types";
 import { type Identity, identityOf, patchedAs, patchWindow, stale } from "./identity";
+import { handing } from "./native";
 import { keep } from "./scrollkeep";
 
 /** How long a frame's next page gets to take over once the last one hid, in ms. */
@@ -212,12 +213,19 @@ function reload(): void {
   identity = null;
   renewing = true;
   frame.reloading();
-  keep(frame.view(), "frame");
-  try {
-    frame.view()?.location.reload();
-  } catch {
-    // Another origin, which the knobs never reached.
-  }
+  const view = frame.view();
+  keep(view, "frame");
+  const go = () => {
+    try {
+      view?.location.reload();
+    } catch {
+      // Another origin, which the knobs never reached.
+    }
+  };
+  // A host still setting what the requests carry, such as the user agent, goes first.
+  const waiting = handing();
+  if (waiting) void waiting.then(go);
+  else go();
 }
 
 /**

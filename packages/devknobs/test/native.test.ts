@@ -8,10 +8,13 @@ import {
   drawnAround,
   drive,
   framing,
+  handing,
   inPage,
   type NativeDriver,
   type NativeMedia,
+  type NativeUa,
   type NativeViewport,
+  nativeUa,
   nativeViewport,
   release,
 } from "../src/engine/native";
@@ -40,12 +43,16 @@ function recorder() {
     offline: [] as boolean[],
     media: [] as NativeMedia[],
     viewport: [] as (NativeViewport | null)[],
+    ua: [] as (NativeUa | null)[],
   };
   const driver: Required<Omit<NativeDriver, "setting" | "refused" | "framed">> = {
     text: (value) => calls.text.push(value),
     offline: (value) => calls.offline.push(value),
     media: (value) => calls.media.push(value),
     viewport: (value) => calls.viewport.push(value),
+    ua: (value) => {
+      calls.ua.push(value);
+    },
   };
   return { calls, driver };
 }
@@ -115,6 +122,7 @@ describe("drive", () => {
       offline: [true],
       media: [{ scheme: "dark", motion: "reduce", contrast: "more", transparency: "reduce" }],
       viewport: [null],
+      ua: [null],
     });
   });
 
@@ -156,7 +164,7 @@ describe("release", () => {
   test("hands a driver that was never handed anything nothing", () => {
     const { calls, driver } = recorder();
     release(driver);
-    expect(calls).toEqual({ text: [], offline: [], media: [], viewport: [] });
+    expect(calls).toEqual({ text: [], offline: [], media: [], viewport: [], ua: [] });
   });
 });
 
@@ -173,6 +181,62 @@ function phone(patch: Parameters<typeof merge>[1] = {}): DevknobsState {
     ...patch,
   });
 }
+
+describe("nativeUa", () => {
+  test("is null for the browser's own", () => {
+    expect(nativeUa({ preset: "system", custom: "" })).toBeNull();
+    expect(nativeUa({ preset: "custom", custom: "  " })).toBeNull();
+  });
+
+  test("is a preset's browser, with its hints where it has them", () => {
+    expect(nativeUa({ preset: "iphone-safari", custom: "" })).toEqual({
+      userAgent: ua.uaPreset("iphone-safari")!.userAgent,
+      platform: "iPhone",
+      mobile: true,
+      brands: [],
+      uaPlatform: "iOS",
+    });
+    const android = nativeUa({ preset: "android-chrome", custom: "" });
+    expect(android).toMatchObject({ mobile: true, uaPlatform: "Android", platform: "Linux armv81" });
+    expect(android?.brands.map(({ brand }) => brand)).toContain("Google Chrome");
+    expect(android?.hints?.model).toBe("Pixel 10");
+  });
+
+  test("is a custom string alone", () => {
+    expect(nativeUa({ preset: "custom", custom: " Bot/1 " })).toEqual({
+      userAgent: "Bot/1",
+      platform: "",
+      mobile: false,
+      brands: [],
+      uaPlatform: "",
+    });
+  });
+});
+
+describe("the ua part", () => {
+  test("is handed on change, and kept by a release that keeps it", () => {
+    const { calls, driver } = recorder();
+    drive(driver, phone());
+    drive(driver, phone({ text: 20 }));
+    release(driver, false);
+    expect(calls.ua.map((value) => value?.uaPlatform ?? null)).toEqual(["iOS"]);
+    release(driver);
+    expect(calls.ua.at(-1)).toBeNull();
+  });
+
+  test("holds what the frame waits for until its promise settles", async () => {
+    let settle = () => {};
+    const promise = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    drive({ ua: () => promise }, phone());
+    const waiting = handing();
+    expect(waiting).not.toBeNull();
+    settle();
+    await waiting;
+    expect(handing()).toBeNull();
+  });
+});
 
 describe("nativeViewport", () => {
   test("is null with no size knob", () => {
@@ -364,7 +428,7 @@ describe("the engine with a native driver", () => {
     engine.start({ persist: false, native: driver });
     engine.setState({ text: 24 });
     expect(textApply).toHaveBeenLastCalledWith("system");
-    expect(calls).toEqual({ text: [], offline: [], media: [], viewport: [] });
+    expect(calls).toEqual({ text: [], offline: [], media: [], viewport: [], ua: [] });
   });
 
   test("a plain device goes to the driver and keeps the page out of the frame", () => {
@@ -458,6 +522,18 @@ describe("the engine with a native driver", () => {
     engine.stop();
     engine.start({ persist: false, native: { ...recorder().driver, setting } });
     expect(engine.nativeSwitch()?.on).toBe(true);
+  });
+
+  test("hands the ua with the switch off too, and keeps it as the switch goes off", () => {
+    const { calls, driver } = recorder();
+    engine.start({ persist: false, native: driver });
+    engine.setState({ ua: { preset: "android-chrome" } });
+    engine.setNative(false);
+    expect(calls.ua.at(-1)?.uaPlatform).toBe("Android");
+    engine.setState({ ua: { preset: "iphone-safari" } });
+    expect(calls.ua.at(-1)?.uaPlatform).toBe("iOS");
+    engine.stop();
+    expect(calls.ua.at(-1)).toBeNull();
   });
 
   test("inside the width knob's frame, the page above says whether the driver is on", () => {

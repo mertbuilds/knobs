@@ -5,11 +5,13 @@ import type {
   SchemeValue,
   TextValue,
   TransparencyValue,
+  UaValue,
 } from "../types";
 import { layoutOf } from "./browserui";
 import { deviceOf, formId } from "./devices";
 import { knobFrame } from "./frame";
 import { mockOf } from "./mock";
+import { type UaPreset, uaPreset, userAgentOf } from "./ua";
 
 /** The prefers knobs, as a host sets them for real. */
 export interface NativeMedia {
@@ -38,6 +40,13 @@ export interface NativeViewport {
 }
 
 /**
+ * The browser the page's requests go out as: the ua knob's preset, a
+ * device's browser too. A custom string has the user agent alone, with an
+ * empty `platform` and `uaPlatform` and no brands.
+ */
+export type NativeUa = Pick<UaPreset, "userAgent" | "platform" | "mobile" | "brands" | "uaPlatform" | "hints">;
+
+/**
  * A host that sets some knobs for real, in the browser itself, such as a
  * browser extension through the DevTools protocol. Each part it has takes its
  * knob over: devknobs leaves that knob's emulation in the page out and hands
@@ -59,6 +68,14 @@ export interface NativeDriver {
    * host is handed null meanwhile, so the two never stack.
    */
   viewport?: (value: NativeViewport | null) => void;
+  /**
+   * The user agent the page's requests carry to servers, null for the
+   * browser's own. Unlike the parts above, it takes nothing from the page,
+   * whose navigator keeps its patches, and it is handed with the switch off
+   * too. A promise holds the frame's next load until it settles, so the
+   * server sees the new one.
+   */
+  ua?: (value: NativeUa | null) => void | Promise<void>;
   /**
    * A switch in the panel's settings that turns the driver off and on, shown
    * only where the host gives one. Off, the page emulates every knob as with
@@ -96,7 +113,10 @@ export interface NativeSetting {
 }
 
 /** The parts of a driver that take a knob. */
-type Part = "text" | "offline" | "media" | "viewport";
+type Part = "text" | "offline" | "media" | "viewport" | "ua";
+
+/** How long the frame waits at most for a part's promise, in ms. */
+const HAND_WAIT = 2000;
 
 const SYSTEM_MEDIA: NativeMedia = {
   scheme: "system",
@@ -132,6 +152,17 @@ export function nativeViewport(state: DevknobsState): NativeViewport | null {
   };
 }
 
+/** The browser a host sends requests as for the ua knob, null for the browser's own. */
+export function nativeUa(value: UaValue): NativeUa | null {
+  const preset = uaPreset(value.preset);
+  if (preset) {
+    const { userAgent, platform, mobile, brands, uaPlatform, hints } = preset;
+    return { userAgent, platform, mobile, brands, uaPlatform, ...(hints ? { hints } : {}) };
+  }
+  const userAgent = userAgentOf(value);
+  return userAgent === "" ? null : { userAgent, platform: "", mobile: false, brands: [], uaPlatform: "" };
+}
+
 /** The state the page's own emulation runs with: each knob the driver takes is left at system. */
 export function inPage(state: DevknobsState, driver: NativeDriver | null): DevknobsState {
   if (!driver) return state;
@@ -161,6 +192,13 @@ export function enableNative(on: boolean): void {
 
 /** What each part was last handed, so a change elsewhere hands it nothing. */
 const sent = new Map<Part, string>();
+/** A part's promise that has not settled yet, or null. */
+let pending: Promise<void> | null = null;
+
+/** What the frame's next load waits for: a part the host is still setting, or null. */
+export function handing(): Promise<void> | null {
+  return pending;
+}
 
 function hand<K extends Part>(
   driver: NativeDriver,
@@ -172,7 +210,18 @@ function hand<K extends Part>(
   const key = JSON.stringify(value);
   if (sent.get(part) === key) return;
   sent.set(part, key);
-  call(value);
+  const result: unknown = call(value);
+  if (!(result instanceof Promise)) return;
+  const settled: Promise<void> = Promise.race([
+    result.then(
+      () => {},
+      () => {},
+    ),
+    new Promise<void>((resolve) => setTimeout(resolve, HAND_WAIT)),
+  ]).then(() => {
+    if (pending === settled) pending = null;
+  });
+  pending = settled;
 }
 
 /** Hand the driver the knobs it takes, those that changed since. */
@@ -182,14 +231,25 @@ export function drive(driver: NativeDriver, state: DevknobsState): void {
   const { scheme, motion, contrast, transparency } = state;
   hand(driver, "media", { scheme, motion, contrast, transparency });
   if (driver.viewport) hand(driver, "viewport", nativeViewport(state));
+  driveUa(driver, state);
 }
 
-/** Hand the driver every default, for an unmount, and forget what it had. A driver never handed anything gets nothing. */
-export function release(driver: NativeDriver): void {
+/** Hand the driver the ua knob, which it takes with its switch off too. */
+export function driveUa(driver: NativeDriver, state: DevknobsState): void {
+  if (driver.ua) hand(driver, "ua", nativeUa(state.ua));
+}
+
+/**
+ * Hand the driver every default, for an unmount, and forget what it had. A
+ * driver never handed anything gets nothing. `ua` false keeps the ua part as
+ * it is, for the switch going off.
+ */
+export function release(driver: NativeDriver, ua = true): void {
   if (sent.size === 0) return;
   hand(driver, "text", "system");
   hand(driver, "offline", false);
   hand(driver, "media", SYSTEM_MEDIA);
   hand(driver, "viewport", null);
-  sent.clear();
+  if (ua) hand(driver, "ua", null);
+  for (const part of Array.from(sent.keys())) if (ua || part !== "ua") sent.delete(part);
 }

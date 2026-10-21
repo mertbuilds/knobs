@@ -63,7 +63,7 @@ export type { DeviceKind, DevicePreset } from "./engine/devices";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
-export type { FrameRefusal, NativeDriver, NativeMedia, NativeSetting, NativeViewport } from "./engine/native";
+export type { FrameRefusal, NativeDriver, NativeMedia, NativeSetting, NativeUa, NativeViewport } from "./engine/native";
 export type { SystemMedia } from "./engine/system";
 export type {
   GrabEntry,

@@ -16,6 +16,7 @@ import * as locale from "./locale";
 import * as media from "./media";
 import {
   drive,
+  driveUa,
   enableNative,
   framing,
   inPage,
@@ -124,6 +125,7 @@ export function applyState(next: DevknobsState): void {
   text.apply(page.text);
   // The page above drives the tab its frame is in.
   if (active && !inFrame) drive(active, state);
+  else if (native && !inFrame) driveUa(native, state);
   spacing.apply(state.spacing);
   ua.apply(state.ua);
   // A size the driver sets brings no frame up.
@@ -146,7 +148,7 @@ export function setNative(on: boolean, note?: string | null): void {
   if (note !== undefined) nativeNote = note;
   const changed = on !== nativeEnabled();
   enableNative(on);
-  if (changed && !on && native && !inFrame) release(native);
+  if (changed && !on && native && !inFrame) release(native, false);
   if (running && (changed || note !== undefined)) applyState(state);
 }
 

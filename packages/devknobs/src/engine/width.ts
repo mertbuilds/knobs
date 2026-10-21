@@ -23,7 +23,7 @@ import {
 import { drawMat } from "./mat";
 import { putMat } from "./matcolors";
 import { landSplash, spreadMat } from "./matsplash";
-import { type FrameRefusal, nativeEnabled } from "./native";
+import { type FrameRefusal, handing, nativeEnabled } from "./native";
 import { createNotice, explain } from "./notice";
 import type { Mock, Rect } from "./mock";
 import { corners, drawMock, UNDER } from "./mockdraw";
@@ -1115,8 +1115,19 @@ function open(veiled: number | null, first: boolean): void {
   // The frame's page lists its own load. Here it would be a second row for it.
   hushOnce(frameUrl);
   framed?.(true);
-  frame.src = frameUrl;
-  frame.addEventListener("load", onLoad);
+  // A host still setting what the requests carry, such as the user agent, goes first.
+  const waiting = handing();
+  if (waiting) {
+    const opened = frame;
+    void waiting.then(() => {
+      if (frame !== opened) return;
+      opened.src = frameUrl;
+      opened.addEventListener("load", onLoad);
+    });
+  } else {
+    frame.src = frameUrl;
+    frame.addEventListener("load", onLoad);
+  }
   reload.track({
     view: frameWindow,
     page: frameDocument,
