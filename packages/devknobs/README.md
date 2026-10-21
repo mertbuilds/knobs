@@ -425,7 +425,8 @@ React has to report to a devtools hook from its first render. the React
 devtools extension has one. without it, load the early script first (see
 below), which puts one in place. with neither, grab names the components it
 finds on the element and falls back to a selector. the line shows a selector
-only when it is built from a test id, a label or a stable id; each entry's
+only when it is built from a test id, a label, a stable id or another meaningful
+attribute (href, src, role, name, title, alt); each entry's
 `selector` has one for the element in any case.
 
 the copied line keeps to the app's own code: the component the element is

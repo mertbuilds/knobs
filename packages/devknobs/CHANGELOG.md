@@ -1,6 +1,6 @@
 # changelog
 
-## unreleased
+## 0.3.0
 
 ### agents
 
@@ -18,7 +18,7 @@
 
 ### grab
 
-- the copied line no longer ends in an `nth-child` selector chain. it shows a selector only when it is built from a test id, a label or a stable id. each entry's new `selector` field has the full one
+- the copied line no longer ends in an `nth-child` selector chain. it shows a selector only when it is built from a test id, a label, a stable id or another meaningful attribute (href, src, role, name, title, alt). each entry's new `selector` field has the full one
 
 ## 0.2.1
 
