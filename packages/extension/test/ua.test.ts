@@ -1,0 +1,120 @@
+import { describe, expect, test } from 'bun:test';
+import { type NativeUa, PRESETS } from 'devknobs';
+import { CLIENT_HINTS, type HeaderChange, uaCommand, uaHeaders } from '../src/ua.ts';
+
+const UA_PRESETS = PRESETS.ua;
+
+const uaOf = (id: string): NativeUa => {
+  const { brands, hints, mobile, platform, uaPlatform, userAgent } = UA_PRESETS.find(
+    (preset) => preset.id === id,
+  )!;
+  return { brands, mobile, platform, uaPlatform, userAgent, ...(hints ? { hints } : {}) };
+};
+
+const asMap = (changes: Array<HeaderChange>) =>
+  Object.fromEntries(
+    changes.map(({ header, operation, value }) => [header, operation === 'set' ? value : null]),
+  );
+
+const removed = (except: Array<string>) =>
+  Object.fromEntries(
+    CLIENT_HINTS.filter((header) => !except.includes(header)).map((header) => [header, null]),
+  );
+
+const LOW = ['sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'];
+
+describe('uaHeaders', () => {
+  test('every preset sets its user agent and touches every client hint once', () => {
+    for (const preset of UA_PRESETS) {
+      const changes = uaHeaders(uaOf(preset.id));
+      expect(asMap(changes)['user-agent']).toBe(preset.userAgent);
+      expect(changes.map(({ header }) => header).toSorted()).toEqual(
+        ['user-agent', ...CLIENT_HINTS].toSorted(),
+      );
+    }
+  });
+
+  test('Safari, Firefox and a custom string send no client hints', () => {
+    for (const id of ['iphone-safari', 'ipad-safari', 'mac-safari', 'linux-firefox']) {
+      expect(asMap(uaHeaders(uaOf(id)))).toEqual({
+        'user-agent': uaOf(id).userAgent,
+        ...removed([]),
+      });
+    }
+    const custom: NativeUa = {
+      brands: [],
+      mobile: false,
+      platform: '',
+      uaPlatform: '',
+      userAgent: 'Bot/1',
+    };
+    expect(asMap(uaHeaders(custom))).toEqual({ 'user-agent': 'Bot/1', ...removed([]) });
+  });
+
+  test('Android Chrome is a mobile Android with its brands, and no high entropy hints', () => {
+    expect(asMap(uaHeaders(uaOf('android-chrome')))).toEqual({
+      'sec-ch-ua': '"Chromium";v="154", "Not/A)Brand";v="24", "Google Chrome";v="154"',
+      'sec-ch-ua-mobile': '?1',
+      'sec-ch-ua-platform': '"Android"',
+      'user-agent': uaOf('android-chrome').userAgent,
+      ...removed(LOW),
+    });
+  });
+
+  test('desktop Chromium presets are not mobile, on their own platform', () => {
+    const cases: Array<[string, string, string]> = [
+      ['mac-chrome', '"macOS"', '"Google Chrome";v="154"'],
+      ['windows-chrome', '"Windows"', '"Google Chrome";v="154"'],
+      ['windows-edge', '"Windows"', '"Microsoft Edge";v="154"'],
+    ];
+    for (const [id, platform, own] of cases) {
+      const headers = asMap(uaHeaders(uaOf(id)));
+      expect(headers['sec-ch-ua-mobile']).toBe('?0');
+      expect(headers['sec-ch-ua-platform']).toBe(platform);
+      expect(headers['sec-ch-ua']).toEndWith(own);
+    }
+  });
+
+  test('Googlebot is a mobile Android with no brand of its own', () => {
+    const headers = asMap(uaHeaders(uaOf('googlebot')));
+    expect(headers['sec-ch-ua']).toBe('"Chromium";v="154", "Not/A)Brand";v="24"');
+    expect(headers['sec-ch-ua-mobile']).toBe('?1');
+    expect(headers['sec-ch-ua-platform']).toBe('"Android"');
+  });
+});
+
+describe('uaCommand', () => {
+  test('null clears the override', () => {
+    expect(uaCommand(null)).toEqual({
+      method: 'Emulation.setUserAgentOverride',
+      params: { userAgent: '' },
+    });
+  });
+
+  test('a browser with no client hints gets no metadata', () => {
+    expect(uaCommand(uaOf('iphone-safari')).params).toEqual({
+      platform: 'iPhone',
+      userAgent: uaOf('iphone-safari').userAgent,
+    });
+  });
+
+  test('a Chromium preset carries its hints as metadata', () => {
+    const android = uaOf('android-chrome');
+    expect(uaCommand(android).params).toEqual({
+      platform: 'Linux armv81',
+      userAgent: android.userAgent,
+      userAgentMetadata: {
+        architecture: '',
+        bitness: '',
+        brands: android.brands,
+        fullVersion: android.hints!.uaFullVersion,
+        fullVersionList: android.hints!.fullVersionList,
+        mobile: true,
+        model: 'Pixel 10',
+        platform: 'Android',
+        platformVersion: '16.0.0',
+        wow64: false,
+      },
+    });
+  });
+});

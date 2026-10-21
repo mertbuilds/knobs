@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { DevknobsStatePatch } from 'devknobs';
+import { type DevknobsStatePatch, PRESETS } from 'devknobs';
 import { chromium, type Page, type Worker } from 'playwright-core';
 import type { KnobState } from '../src/knobs.ts';
 
@@ -80,11 +80,47 @@ addEventListener('message', (event) => {
 </script>`;
 // How many times the server sent each kind's page.
 const workerLoads = new Map<string, number>();
+// The user agent and client hints of the last request of each kind under /ua/: the page as a
+// document and as a frame, a fetch, an image, and a fetch its service worker made.
+const uaSeen = new Map<string, Record<string, string>>();
+const uaWorker = `self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (event) => {
+  if (new URL(event.request.url).pathname === '/ua/via-worker') {
+    event.respondWith(fetch('/ua/worker-fetch?' + Date.now(), { cache: 'no-store' }));
+  }
+});`;
 
 const server = createServer(async (request, response) => {
   const path = request.url ?? '/';
   if (path === '/ping') {
     response.end('pong');
+    return;
+  }
+  const uaPath = /^\/ua\/([a-z.-]+)/.exec(path)?.[1];
+  if (uaPath === 'sw.js') {
+    response.setHeader('content-type', 'text/javascript');
+    response.end(uaWorker);
+    return;
+  }
+  if (uaPath) {
+    const kind =
+      uaPath === 'page' && request.headers['sec-fetch-dest'] === 'iframe' ? 'frame' : uaPath;
+    uaSeen.set(
+      kind,
+      Object.fromEntries(
+        Object.entries(request.headers)
+          .filter(([name]) => name === 'user-agent' || name.startsWith('sec-ch-ua'))
+          .map(([name, value]) => [name, String(value)]),
+      ),
+    );
+    response.setHeader('cache-control', 'no-store');
+    if (uaPath === 'page') {
+      response.setHeader('content-type', 'text/html');
+      response.end(page('<script>navigator.serviceWorker.register("/ua/sw.js")</script>'));
+      return;
+    }
+    response.end('ok');
     return;
   }
   if (path === '/devknobs/index.global.js') {
@@ -1041,6 +1077,233 @@ async function workerFrames() {
   }
 }
 
+const UA_KINDS = ['page', 'fetch', 'image', 'worker-fetch'];
+const hints = (headers: Record<string, string> | undefined) =>
+  Object.keys(headers ?? {}).filter((name) => name.startsWith('sec-ch-ua'));
+const agentOf = (id: string) => PRESETS.ua.find((preset) => preset.id === id)!.userAgent;
+
+/**
+ * The user agent sent to servers. With the ua knob on, the tab's requests (its page, a fetch, an
+ * image, its frame) and what the page's service worker fetches carry the preset's user agent and
+ * client hints, in place of Chrome's own, with no debugger and in-page too; with the debugger on
+ * the tab, its scripts and workers read the same. Another tab keeps Chrome's own, and system puts
+ * it back, rules gone.
+ */
+async function uaRequests() {
+  const own = await mkdtemp(join(tmpdir(), 'knobs-smoke-ua-'));
+  const browser = await chromium.launchPersistentContext(own, {
+    args: [
+      `--disable-extensions-except=${dist}`,
+      `--load-extension=${dist}`,
+      `--window-size=${viewport.width},${viewport.height}`,
+    ],
+    channel: 'chromium',
+    colorScheme: null,
+    headless: true,
+    viewport: null,
+  });
+  try {
+    const worker = browser.serviceWorkers()[0] ?? (await browser.waitForEvent('serviceworker'));
+    const tab = browser.pages()[0] ?? (await browser.newPage());
+    const pageUrl = `${url}ua/page`;
+    await tab.goto(pageUrl);
+    await ready(tab);
+    await tab.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    const tabId = await worker.evaluate(async () => (await chrome.tabs.query({}))[0]!.id!);
+    const attached = () =>
+      worker.evaluate(
+        (tabId) =>
+          chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', { expression: '1' }).then(
+            () => true,
+            () => false,
+          ),
+        tabId,
+      );
+    const uaRules = () =>
+      worker.evaluate(async () =>
+        (await chrome.declarativeNetRequest.getSessionRules())
+          .filter(({ action }) => action.requestHeaders !== undefined)
+          .map(({ action, condition, id }) => ({
+            agent: action.requestHeaders!.find(({ header }) => header === 'user-agent')?.value,
+            host: condition.requestDomains,
+            id,
+            tabIds: condition.tabIds,
+          })),
+      );
+    const rulesFor = async (agent: string | null) => {
+      for (let tries = 0; tries < 100; tries++) {
+        const rules = await uaRules();
+        if (agent === null ? rules.length === 0 : rules.some((rule) => rule.agent === agent)) {
+          return rules;
+        }
+        await tab.waitForTimeout(20);
+      }
+      return uaRules();
+    };
+    // A load of the page, then a fetch, an image and a fetch through its service worker.
+    const probe = async (on: Page) => {
+      uaSeen.clear();
+      await on.reload();
+      await ready(on);
+      await on.waitForFunction(() => navigator.serviceWorker.controller !== null);
+      await on.evaluate(async () => {
+        await fetch('/ua/fetch', { cache: 'no-store' });
+        await fetch('/ua/via-worker', { cache: 'no-store' });
+        await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.addEventListener('load', resolve);
+          image.addEventListener('error', resolve);
+          image.addEventListener('abort', reject);
+          image.src = `/ua/image?${Date.now()}`;
+        });
+      });
+      return Object.fromEntries(UA_KINDS.map((kind) => [kind, uaSeen.get(kind)]));
+    };
+    const iphone = agentOf('iphone-safari');
+    const android = agentOf('android-chrome');
+
+    const real = await probe(tab);
+    log('ua: system', real);
+    const chromeAgent = real['page']!['user-agent']!;
+    assert.match(chromeAgent, /Chrome\//);
+    assert.equal(real['page']!['sec-ch-ua-mobile'], '?0');
+    for (const kind of UA_KINDS) {
+      assert.equal(real[kind]?.['user-agent'], chromeAgent, `${kind} goes as Chrome`);
+    }
+
+    const iphoneSafari = async (mode: string) => {
+      await set(tab, { ua: { preset: 'iphone-safari' } });
+      const rules = await rulesFor(iphone);
+      log(`ua: rules, ${mode}`, rules);
+      assert.deepEqual(
+        rules.map(({ host, tabIds }) => ({ host, tabIds })),
+        [
+          { host: undefined, tabIds: [tabId] },
+          { host: ['127.0.0.1'], tabIds: [-1] },
+        ],
+      );
+      const seen = await probe(tab);
+      log(`ua: iphone safari, ${mode}`, seen);
+      for (const kind of UA_KINDS) {
+        assert.equal(seen[kind]?.['user-agent'], iphone, `${kind} goes as an iPhone, ${mode}`);
+        assert.deepEqual(hints(seen[kind]), [], `${kind} has no client hints, ${mode}`);
+      }
+    };
+    const androidChrome = async (mode: string) => {
+      await set(tab, { ua: { preset: 'android-chrome' } });
+      await rulesFor(android);
+      const seen = await probe(tab);
+      log(`ua: android chrome, ${mode}`, seen);
+      for (const kind of UA_KINDS) {
+        assert.equal(seen[kind]?.['user-agent'], android, `${kind} goes as Android, ${mode}`);
+        assert.equal(seen[kind]?.['sec-ch-ua-mobile'], '?1');
+        assert.equal(seen[kind]?.['sec-ch-ua-platform'], '"Android"');
+        assert.match(seen[kind]?.['sec-ch-ua'] ?? '', /"Google Chrome";v="\d+"/);
+      }
+    };
+
+    // No knob keeps the debugger: the rules alone.
+    await iphoneSafari('no debugger');
+    assert.equal(await attached(), false);
+    await androidChrome('no debugger');
+
+    // Another tab, on the same host, keeps Chrome's own.
+    const other = await browser.newPage();
+    await other.goto(`${url}ua/page`);
+    await ready(other);
+    uaSeen.clear();
+    await other.evaluate(() => fetch('/ua/fetch', { cache: 'no-store' }));
+    log('ua: other tab', uaSeen.get('fetch'));
+    assert.equal(uaSeen.get('fetch')?.['user-agent'], chromeAgent);
+    await other.close();
+
+    // The debugger on the tab, for a knob: the page's scripts and a worker of its read the same.
+    for (let tries = 0; tries < 50 && !(await attached()); tries++) {
+      await set(tab, { text: 20 });
+      await tab.waitForTimeout(100);
+    }
+    assert.equal(await attached(), true);
+    await androidChrome('real');
+    const read = () =>
+      tab.evaluate(async () => {
+        const source =
+          'postMessage([navigator.userAgent, navigator.userAgentData?.mobile ?? null])';
+        const blob = new Blob([source], { type: 'text/javascript' });
+        const dedicated = new Worker(URL.createObjectURL(blob));
+        const [workerAgent, workerMobile] = await new Promise<[string, boolean | null]>((resolve) =>
+          dedicated.addEventListener('message', (event) => resolve(event.data), { once: true }),
+        );
+        dedicated.terminate();
+        const data = (navigator as unknown as { userAgentData?: { mobile: boolean } })
+          .userAgentData;
+        return {
+          agent: navigator.userAgent,
+          mobile: data?.mobile ?? null,
+          workerAgent,
+          workerMobile,
+        };
+      });
+    const androidRead = await read();
+    log('ua: android chrome, real, read', androidRead);
+    assert.deepEqual(androidRead, {
+      agent: android,
+      mobile: true,
+      workerAgent: android,
+      workerMobile: true,
+    });
+    await iphoneSafari('real');
+    const iphoneRead = await read();
+    log('ua: iphone safari, real, read', iphoneRead);
+    assert.equal(iphoneRead.agent, iphone);
+    assert.equal(iphoneRead.workerAgent, iphone);
+
+    // In-page: the debugger leaves, the rules stay.
+    await worker.evaluate(() => chrome.storage.local.set({ native: false }));
+    for (let tries = 0; (await attached()) && tries < 100; tries++) {
+      await tab.waitForTimeout(20);
+    }
+    assert.equal(await attached(), false);
+    await iphoneSafari('in-page');
+    await androidChrome('in-page');
+
+    // A device drawn around the page: the frame's load goes as its iPhone.
+    uaSeen.delete('frame');
+    await set(tab, { device: 'iphone-18-pro', mock: true });
+    await tab.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-devknobs="viewport"]')
+          ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')
+          ?.contentWindow?.devknobs !== undefined,
+    );
+    await tab.evaluate(() => window.devknobs!.ready());
+    log('ua: frame of an iPhone 18 Pro', uaSeen.get('frame'));
+    assert.equal(uaSeen.get('frame')?.['user-agent'], iphone);
+    assert.deepEqual(hints(uaSeen.get('frame')), []);
+    // Its browser changed with the frame up: the frame loads again as the new one.
+    await set(tab, { ua: { preset: 'android-chrome' } });
+    for (let tries = 0; uaSeen.get('frame')?.['user-agent'] !== android && tries < 100; tries++) {
+      await tab.waitForTimeout(20);
+    }
+    log('ua: frame after a change', uaSeen.get('frame'));
+    assert.equal(uaSeen.get('frame')?.['user-agent'], android);
+    await set(tab, { device: 'none', dpr: 'system', height: 'full', mock: false, width: 'full' });
+    await tab.waitForFunction(() => document.querySelector('[data-devknobs="viewport"]') === null);
+
+    // System: Chrome's own again, every rule gone.
+    await set(tab, { ua: { preset: 'system' } });
+    assert.deepEqual(await rulesFor(null), []);
+    const back = await probe(tab);
+    log('ua: system again', back);
+    for (const kind of UA_KINDS) {
+      assert.deepEqual(back[kind], real[kind], `${kind} goes as Chrome again`);
+    }
+  } finally {
+    await browser.close();
+    await rm(own, { force: true, recursive: true });
+  }
+}
+
 try {
   const worker: Worker =
     context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
@@ -1459,6 +1722,7 @@ try {
   await inPageMode();
   await refusalCauses();
   await workerFrames();
+  await uaRequests();
 
   process.stdout.write('smoke passed\n');
 } finally {

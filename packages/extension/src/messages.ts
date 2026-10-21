@@ -1,4 +1,4 @@
-import type { SystemMedia } from 'devknobs';
+import type { NativeUa, SystemMedia } from 'devknobs';
 import type { KnobState } from './knobs.ts';
 import type { FrameLoad } from './refusal.ts';
 
@@ -21,14 +21,16 @@ export type Response = {
 /**
  * From the page's devknobs, through the bridge, about its frame: `why` asks
  * what the tab's debugger saw of `url`'s load, `watch` turns the debugger on to
- * see the next one, `frame` says the frame opened or went, and `bypass` has the
- * tab's loads skip service workers while it stays open. `id` pairs the answer.
+ * see the next one, `frame` says the frame opened or went, `bypass` has the
+ * tab's loads skip service workers while it stays open, and `ua` is the user
+ * agent the tab's requests carry, null for the browser's own. `id` pairs the answer.
  */
 export type Ask =
   | { type: 'why'; url: string }
   | { type: 'watch' }
   | { open: boolean; type: 'frame' }
-  | { type: 'bypass' };
+  | { type: 'bypass' }
+  | { type: 'ua'; ua: NativeUa | null };
 export type Question = Ask & { id: number };
 
 /** `native` false: the switch is off, so the debugger saw nothing. */

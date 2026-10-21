@@ -1,5 +1,5 @@
 // The page world: the devknobs panel itself, with text size, offline, the
-// prefers knobs and a plain viewport handed to the service worker, which sets them for real.
+// prefers knobs, a plain viewport and the user agent handed to the service worker, which sets them for real.
 import {
   type DevknobsStatePatch,
   type FrameRefusal,
@@ -172,6 +172,11 @@ const driver: NativeDriver = {
   text: (textSize) => {
     knobs = { ...knobs, textSize };
     send();
+  },
+  ua: async (ua) => {
+    if (top) {
+      await ask({ type: 'ua', ua });
+    }
   },
   viewport: (viewport) => {
     knobs = { ...knobs, viewport };

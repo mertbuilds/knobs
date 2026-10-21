@@ -1,4 +1,4 @@
-import type { SystemMedia } from 'devknobs';
+import type { NativeUa, SystemMedia } from 'devknobs';
 import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from './knobs.ts';
 import {
   type Answer,
@@ -10,6 +10,7 @@ import {
   type TabMessage,
 } from './messages.ts';
 import { FrameLoads } from './refusal.ts';
+import { RESOURCE_TYPES, uaCommand, uaHeaders } from './ua.ts';
 
 const PROTOCOL_VERSION = '1.3';
 const key = (tabId: number) => `tab:${tabId}`;
@@ -124,7 +125,7 @@ async function setState(tabId: number, requested: KnobState): Promise<KnobState>
       // Detaching alone leaves the font size until the next navigation.
       await send(tabId, state);
       if (!bypassing.has(tabId)) {
-        await chrome.debugger.detach({ tabId });
+        await detach(tabId);
         unwatch(tabId);
       }
     }
@@ -132,6 +133,7 @@ async function setState(tabId: number, requested: KnobState): Promise<KnobState>
   }
   if (!attached) {
     await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
+    await overrideUa(tabId);
   }
   // The knobs keep it on now.
   watchOnly.delete(tabId);
@@ -295,7 +297,10 @@ async function setFramed(tabId: number, host: string | null): Promise<void> {
     const { MODIFY_HEADERS } = chrome.declarativeNetRequest.RuleActionType;
     const { REMOVE } = chrome.declarativeNetRequest.HeaderOperation;
     const stale = (await chrome.declarativeNetRequest.getSessionRules())
-      .filter(({ condition }) => condition.tabIds?.includes(chrome.tabs.TAB_ID_NONE))
+      .filter(
+        ({ action, condition }) =>
+          condition.tabIds?.includes(chrome.tabs.TAB_ID_NONE) && !isUaRule({ action }),
+      )
       .map(({ id }) => id);
     await chrome.declarativeNetRequest.updateSessionRules({
       addRules: [...hosts].map((framedHost) => ({
@@ -355,6 +360,127 @@ async function pageLoads(tabId: number, url: string) {
   );
 }
 
+// The user agent the ua knob, or a device's browser, sends to servers, with no debugger: a rule
+// per tab sets it and its client hints on every request of the tab, and one per host on what
+// that host's service worker fetches, which belongs to no tab. The ids are any free ones, since
+// the framing rules take tab ids and host hashes: these are told apart by their request headers.
+const UA_KEY = 'ua';
+let uaTabsKept: Promise<Map<number, { host: string | null; ua: NativeUa }>> | null = null;
+
+/** Each tab's user agent and its page's host, kept through the service worker's restarts. */
+function uaTabs(): Promise<Map<number, { host: string | null; ua: NativeUa }>> {
+  uaTabsKept ??= chrome.storage.session.get(UA_KEY).then((stored) => {
+    const kept = (stored[UA_KEY] ?? {}) as Record<string, { host: string | null; ua: NativeUa }>;
+    return new Map(Object.entries(kept).map(([tabId, entry]) => [Number(tabId), entry]));
+  });
+  return uaTabsKept;
+}
+
+function isUaRule({ action }: Pick<chrome.declarativeNetRequest.Rule, 'action'>): boolean {
+  return action.requestHeaders !== undefined;
+}
+
+function uaRule(
+  ua: NativeUa,
+  condition: chrome.declarativeNetRequest.RuleCondition,
+  id: number,
+): chrome.declarativeNetRequest.Rule {
+  return {
+    action: {
+      requestHeaders: uaHeaders(ua),
+      type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+    },
+    condition: { ...condition, resourceTypes: [...RESOURCE_TYPES] },
+    id,
+  };
+}
+
+/** Put every tab's user agent rules in place of the last ones. Resolves once they are in. */
+function ruleUas(): Promise<void> {
+  const run = ruling
+    .catch(() => {})
+    .then(async () => {
+      const tabs = await uaTabs();
+      const rules = await chrome.declarativeNetRequest.getSessionRules();
+      const taken = new Set([
+        ...rules.filter((rule) => !isUaRule(rule)).map(({ id }) => id),
+        ...(await chrome.tabs.query({})).map(({ id }) => id),
+      ]);
+      let last = 0;
+      const free = () => {
+        do {
+          last += 1;
+        } while (taken.has(last));
+        return last;
+      };
+      // Two tabs on one host with different ones: the last set wins on its service worker.
+      const hosts = new Map<string, NativeUa>();
+      for (const { host, ua } of tabs.values()) {
+        if (host) {
+          hosts.set(host, ua);
+        }
+      }
+      await chrome.declarativeNetRequest.updateSessionRules({
+        addRules: [
+          ...[...tabs].map(([tabId, { ua }]) => uaRule(ua, { tabIds: [tabId] }, free())),
+          ...[...hosts].map(([host, ua]) =>
+            uaRule(
+              ua,
+              {
+                initiatorDomains: [host],
+                requestDomains: [host],
+                tabIds: [chrome.tabs.TAB_ID_NONE],
+              },
+              free(),
+            ),
+          ),
+        ],
+        removeRuleIds: rules.filter(isUaRule).map(({ id }) => id),
+      });
+    });
+  ruling = run.catch(() => {});
+  return run;
+}
+
+/** Whether our debugger is on the tab. */
+async function attachedTo(tabId: number): Promise<boolean> {
+  return !isDefault(await getState(tabId)) || watchOnly.has(tabId) || bypassing.has(tabId);
+}
+
+/** The tab's user agent on its debugger too, for its scripts and workers, or none. */
+async function overrideUa(tabId: number, clear = false) {
+  const ua = clear ? null : ((await uaTabs()).get(tabId)?.ua ?? null);
+  const { method, params } = uaCommand(ua);
+  await chrome.debugger.sendCommand({ tabId }, method, params);
+}
+
+async function detach(tabId: number) {
+  await overrideUa(tabId, true).catch(() => {
+    // The debugger already left.
+  });
+  await chrome.debugger.detach({ tabId });
+}
+
+/** The user agent the tab's requests carry, null for the browser's own, from the page at `url`. */
+async function setUa(tabId: number, ua: NativeUa | null, url: string | undefined) {
+  const tabs = await uaTabs();
+  const had = tabs.get(tabId);
+  const host = (url ? URL.parse(url)?.hostname : undefined) ?? null;
+  if (JSON.stringify(had ?? null) === JSON.stringify(ua ? { host, ua } : null)) {
+    return;
+  }
+  // Last in, so its host's service worker takes it.
+  tabs.delete(tabId);
+  if (ua) {
+    tabs.set(tabId, { host, ua });
+  }
+  void chrome.storage.session.set({ [UA_KEY]: Object.fromEntries(tabs) });
+  await ruleUas();
+  if (await attachedTo(tabId)) {
+    await overrideUa(tabId);
+  }
+}
+
 // Before the document loads, so a frame it brings up at once, from knobs stored
 // on its host, is let in on its first load. The bridge's word on load stays the fallback.
 chrome.webNavigation.onBeforeNavigate.addListener(({ frameId, tabId, url }) => {
@@ -393,8 +519,20 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   queues.delete(tabId);
   void chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [tabId] });
   void setFramed(tabId, null);
+  setUa(tabId, null, undefined).catch(() => {
+    // The debugger went with the tab.
+  });
   forgetReopen(tabId);
   bypassing.delete(tabId);
+});
+
+// A new tab's id can be one a user agent rule took: the tab's framing rule would replace it.
+chrome.tabs.onCreated.addListener(({ id }) => {
+  void chrome.declarativeNetRequest.getSessionRules().then((rules) => {
+    if (rules.some((rule) => rule.id === id && isUaRule(rule))) {
+      void ruleUas();
+    }
+  });
 });
 
 chrome.action.onClicked.addListener(({ id }) => {
@@ -414,7 +552,7 @@ async function why(tabId: number, url: string): Promise<Answer> {
     await queued(tabId, async () => {
       if (watchOnly.has(tabId) && !bypassing.has(tabId)) {
         unwatch(tabId);
-        await chrome.debugger.detach({ tabId });
+        await detach(tabId);
       }
       watchOnly.delete(tabId);
     });
@@ -430,6 +568,7 @@ function watchNext(tabId: number): Promise<Answer> {
     }
     if (isDefault(await getState(tabId)) && !watchOnly.has(tabId)) {
       await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
+      await overrideUa(tabId);
       watchOnly.add(tabId);
     }
     await watch(tabId);
@@ -440,8 +579,9 @@ function watchNext(tabId: number): Promise<Answer> {
 /** Have the tab's loads skip service workers while devknobs' frame stays open, the debugger on. */
 function bypass(tabId: number): Promise<Answer> {
   return queued(tabId, async () => {
-    if (isDefault(await getState(tabId)) && !watchOnly.has(tabId) && !bypassing.has(tabId)) {
+    if (!(await attachedTo(tabId))) {
       await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
+      await overrideUa(tabId);
     }
     bypassing.add(tabId);
     await watch(tabId);
@@ -463,7 +603,7 @@ function unbypass(tabId: number): Promise<void> {
     });
     if (isDefault(await getState(tabId)) && !watchOnly.has(tabId)) {
       unwatch(tabId);
-      await chrome.debugger.detach({ tabId });
+      await detach(tabId);
     }
   });
 }
@@ -478,6 +618,10 @@ async function answer(tabId: number, question: Question, url: string | undefined
     }
     case 'bypass': {
       return bypass(tabId);
+    }
+    case 'ua': {
+      await queued(tabId, () => setUa(tabId, question.ua, url));
+      return {};
     }
     case 'frame': {
       const host = url ? URL.parse(url)?.hostname : undefined;
@@ -520,7 +664,8 @@ chrome.runtime.onMessage.addListener(
       request.type === 'why' ||
       request.type === 'watch' ||
       request.type === 'frame' ||
-      request.type === 'bypass'
+      request.type === 'bypass' ||
+      request.type === 'ua'
     ) {
       answer(tabId, request, sender.url).then(reply, (error) =>
         reply({ error: error instanceof Error ? error.message : String(error) }),
