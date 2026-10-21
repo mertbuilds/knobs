@@ -43,8 +43,8 @@
  * with a ground, a row, a field, a block of code, goes edge to edge. What is
  * read in it, an icon or a word, starts at `--view-start` and ends
  * `--view-end` short of the far edge. `data-layout` on a view sets where
- * that start is: `rows` is past the grip's column, where a knob row's icon
- * is, and `flush` is the panel's inset. What folds out under a row sits a
+ * that start is: both `rows` and `flush` are the panel's inset, with no
+ * column kept for a knob row's grip, which stands over the row's icon. What folds out under a row sits a
  * row's pad inside it, and brings the start in by as much, so its words are
  * still at the inset. A head, a row and every piece of the kit read the two
  * properties, so a view's head starts where its content does whatever the
@@ -88,13 +88,11 @@ export const CSS = `
   --panel-width: 240px;
   /* The columns: what a row keeps clear inside its edges, an icon's width,
      the room between an icon and its word, and how far in a line of words
-     starts and ends. The grip's column is an icon wide with the pad on both
-     sides. */
+     starts and ends. */
   --col-pad: 4px;
   --col-icon: 14px;
   --col-gap: 8px;
   --col-inset: 10px;
-  --col-grip: calc(var(--col-pad) * 2 + var(--col-icon));
   /* How far in a level of a tree is from the one over it: an icon and the
      gap, so a node's chevron stands under the icon of the node it is in. */
   --col-step: calc(var(--col-icon) + var(--col-gap));
@@ -165,7 +163,7 @@ export const CSS = `
 }
 .wrap [hidden] { display: none !important; }
 /* Where a view's lines start, by the layout it names. */
-[data-layout="rows"] { --view-start: var(--col-grip); }
+[data-layout="rows"] { --view-start: var(--col-inset); }
 [data-layout="flush"] { --view-start: var(--col-inset); }
 
 button, input, textarea {
@@ -350,7 +348,7 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 }
 .search-close:hover { color: var(--fg); background: var(--track); }
 
-/* Its plus and label line up with the rows' icons and names, past the grip. */
+/* Its plus and label line up with the rows' icons and names. */
 .add {
   flex: none;
   box-sizing: border-box;
@@ -480,13 +478,12 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; align-content: start; }
 .row { position: relative; border-radius: 8px; transition: background-color 120ms ease-out; }
 .row:hover, .row.open { background: var(--card); }
-/* The grip's column, before where the rows' content starts: the grip is an
-   icon wide and stands the row's pad in from its edges, so 4 round. It is
-   the one rule that says where in the column it stands. */
+/* The grip stands over the row's icon, where the row's content starts, and
+   takes no room of its own. It is the one rule that says where it stands. */
 .lead {
   position: absolute;
   top: 4px;
-  left: var(--col-pad);
+  left: var(--view-start);
   width: var(--col-icon);
   height: 18px;
   display: grid;
@@ -494,8 +491,8 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   color: var(--faint);
   border-radius: 4px;
 }
-/* The grip shows on hover or focus, or always where there is no hover, so
-   nothing moves on hover. */
+/* The grip shows on hover or focus, or always where there is no hover, in
+   place of the icon under it, so nothing moves on hover. */
 .grip {
   z-index: 1;
   opacity: 0;
@@ -509,6 +506,11 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .row:hover .grip, .row:focus-within .grip, .row.lifted .grip { opacity: 1; }
 @media (hover: none) {
   .grip { opacity: 1; }
+}
+.line > .grip + .main > .glyph { transition: opacity 120ms ease-out; }
+.row:is(:hover, :focus-within, .lifted) > .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
+@media (hover: none) {
+  .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
 }
 /* While a row is dragged the others make way for it, and it rides above them. */
 .rows.reordering .row { transition: transform 150ms ease-out, background-color 120ms ease-out; }
@@ -949,8 +951,7 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .hint-key:empty { display: none; }
 
 /* The settings, in place of the rows: the head every view has on top, then
-   each a row as the knob rows are, its grip column empty, as their layout,
-   rows, says. Nothing here pads
+   each a row as the knob rows are, as their layout, rows, says. Nothing here pads
    the head or a row: both are the shared ones. A row has no x after it, so
    the handle's main ends with a switch, and a shortcut's with its key as a
    button that records a new one, an x before it that puts it back. A key it
@@ -959,6 +960,8 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .keys { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
 /* A title over a run of rows, over where their content starts. */
 .rows-label { padding: 8px var(--view-end) 2px var(--view-start); font-size: 10.5px; color: var(--faint); }
+/* A line under a setting's row, where its words start, past its icon. */
+.row-hint { padding: 0 var(--view-end) 4px calc(var(--view-start) + var(--col-step)); font-size: 10.5px; color: var(--faint); }
 /* An action's key, at the end of its row, as quiet as the footer shows a key. */
 .row-key { flex: none; align-self: center; font-size: 10px; line-height: 1.4; color: var(--faint); }
 .row-control { flex: none; align-self: center; margin-left: auto; }

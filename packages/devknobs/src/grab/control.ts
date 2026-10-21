@@ -2,6 +2,7 @@
 import * as engine from "../engine";
 import { isDevknobsFrame, needsFrame, post, readMessage } from "../engine/frame";
 import { frameWindow } from "../engine/frames";
+import { systemMedia } from "../engine/system";
 import { typesInField } from "../ui/keys";
 import {
   defaultGrabKey,
@@ -75,6 +76,8 @@ function holdScene(): { input: boolean; selection: boolean } {
  * its own can be the emulated one, handed down natively.
  */
 function systemScheme(): "light" | "dark" {
+  const own = systemMedia();
+  if (own) return own.scheme;
   const host = document.createElement("div");
   host.setAttribute("data-devknobs", "probe");
   host.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;pointer-events:none";

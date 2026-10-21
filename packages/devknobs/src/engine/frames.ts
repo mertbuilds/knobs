@@ -1,5 +1,6 @@
 import type { DevknobsState, ZoomValue } from "../types";
 import { needsFrame, type ZoomAction } from "./frame";
+import type { FrameRefusal } from "./native";
 import type * as Kit from "./framekit";
 import { dropEarly } from "./placeholder";
 
@@ -29,11 +30,15 @@ let before: DevknobsState | null = null;
 let latest: DevknobsState | null = null;
 let exit: (() => void) | null = null;
 let zoomTo: ((zoom: ZoomValue) => void) | null = null;
+let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
+let framed: ((open: boolean) => void) | null = null;
 
 function arrived(loaded: FrameKit): void {
   kit = loaded;
   loaded.width.onExit(exit);
   loaded.width.onZoom(zoomTo);
+  loaded.width.onRefused(askWhy);
+  loaded.width.onFramed(framed);
   for (const run of waiting.splice(0)) run(loaded);
   for (const state of [before, latest]) {
     if (!state) continue;
@@ -118,6 +123,16 @@ export function onExit(handler: (() => void) | null): void {
 export function onZoom(handler: ((zoom: ZoomValue) => void) | null): void {
   zoomTo = handler;
   kit?.width.onZoom(handler);
+}
+
+export function onRefused(handler: ((url: string) => Promise<FrameRefusal | null>) | null): void {
+  askWhy = handler;
+  kit?.width.onRefused(handler);
+}
+
+export function onFramed(handler: ((open: boolean) => void) | null): void {
+  framed = handler;
+  kit?.width.onFramed(handler);
 }
 
 /** The window inside the frame, while there is one. */

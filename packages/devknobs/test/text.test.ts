@@ -283,6 +283,14 @@ describe("text size on a page", () => {
     expect(rootSize()).toBe("18px");
   });
 
+  test("sizes an unset root against the browser's default, as a host that set it for real leaves it", () => {
+    define("getComputedStyle", () => ({ fontSize: "48px", getPropertyValue: () => "" }));
+    apply(48);
+    expect(rootSize()).toBe("48px");
+    reset();
+    expect(rootSize()).toBe("");
+  });
+
   test("writes nothing for a root size that ignores the setting", () => {
     sheets = [sheet([new CSSStyleRule("html", "10px")])];
     apply(20);

@@ -142,7 +142,17 @@ iframe {
   color: rgba(255, 255, 255, 0.85);
   background: var(--mat);
 }
-.blocked[hidden] { display: none; }
+.blocked[hidden], .blocked .why[hidden] { display: none; }
+.blocked .why {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: min(360px, 90%);
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: rgba(255, 255, 255, 0.65);
+}
 .blocked button {
   appearance: none;
   -webkit-appearance: none;

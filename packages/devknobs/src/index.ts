@@ -63,6 +63,8 @@ export type { DeviceKind, DevicePreset } from "./engine/devices";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
+export type { FrameRefusal, NativeDriver, NativeMedia, NativeSetting, NativeViewport } from "./engine/native";
+export type { SystemMedia } from "./engine/system";
 export type {
   GrabEntry,
   GrabFrame,
@@ -171,6 +173,20 @@ export function unmount(): void {
   withdraw(window, api);
   free(window, unmount);
 }
+
+/**
+ * The user's own scheme and motion, for the panel and grab, from a host whose
+ * `native` media hides them from every media query in the tab. Null goes back
+ * to those queries.
+ */
+export { setSystemMedia } from "./engine/system";
+
+/**
+ * Turn the `native` driver off or on, every knob kept: off, the page emulates
+ * them as with no driver. For a host that keeps the choice of its `setting`
+ * switch. `note` shows on that switch, such as why it went off.
+ */
+export const setNative = engine.setNative;
 
 export const getState = engine.getState;
 

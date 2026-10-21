@@ -10,6 +10,7 @@ import {
   nativeScheme,
   needsFrame,
   plainFrame,
+  post,
   readMessage,
   UNFRAMED,
 } from "../src/engine/frame";
@@ -179,6 +180,27 @@ describe("readMessage", () => {
     expect(
       from({ source: "devknobs", type: "state", state: { scheme: "loud", stray: 1 } }),
     ).toEqual({ source: "devknobs", type: "state", state: DEFAULT_STATE });
+  });
+
+  test("reads whether the driver above is on, and only a boolean", () => {
+    const state = { scheme: "dark" };
+    expect(from({ source: "devknobs", type: "state", state, native: false })).toEqual({
+      source: "devknobs",
+      type: "state",
+      state: { ...DEFAULT_STATE, scheme: "dark" },
+      native: false,
+    });
+    expect(from({ source: "devknobs", type: "state", state, native: "no" })).not.toHaveProperty("native");
+  });
+
+  test("reads where the frame's page leaves for, a web address only", () => {
+    expect(from({ source: "devknobs", type: "leave", url: "https://github.com/login" })).toEqual({
+      source: "devknobs",
+      type: "leave",
+      url: "https://github.com/login",
+    });
+    expect(from({ source: "devknobs", type: "leave", url: "javascript:alert(1)" })).toBeNull();
+    expect(from({ source: "devknobs", type: "leave", url: 7 })).toBeNull();
   });
 
   test("reads the zoom keys", () => {
@@ -361,5 +383,40 @@ describe("nativeScheme", () => {
       throw new Error("cross-origin");
     });
     expect(nativeScheme("dark")).toBe(false);
+  });
+});
+
+describe("post", () => {
+  const message = { source: "devknobs", type: "ready" } as const;
+
+  function target(location: () => unknown) {
+    const posted: [unknown, string][] = [];
+    const view = {
+      get location() {
+        return location();
+      },
+      postMessage: (data: unknown, origin: string) => posted.push([data, origin]),
+    };
+    return { posted, view: view as unknown as Window };
+  }
+
+  test("posts to a window on this origin", () => {
+    const { posted, view } = target(() => ({ origin: ORIGIN }));
+    post(view, message);
+    expect(posted).toEqual([[message, "/"]]);
+  });
+
+  test("posts nothing, and throws nothing, to a frame on another origin or holding an error page", () => {
+    const { posted, view } = target(() => ({
+      get origin() {
+        throw new Error("SecurityError");
+      },
+    }));
+    expect(() => post(view, message)).not.toThrow();
+    expect(posted).toEqual([]);
+  });
+
+  test("posts nothing with no window", () => {
+    expect(() => post(null, message)).not.toThrow();
   });
 });

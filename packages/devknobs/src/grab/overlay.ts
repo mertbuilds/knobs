@@ -1,6 +1,7 @@
 import { getState, subscribe } from "../engine";
 import { isCustomColor } from "../engine/color";
 import { baseMatchMedia } from "../engine/matchmedia";
+import { systemMedia, watchSystemMedia } from "../engine/system";
 import { middle } from "../ui/stylesformat";
 import { type BoxRing, RINGS, ringPaths, ringQuads } from "./boxmodel";
 import { sizeText } from "./boxtext";
@@ -616,7 +617,8 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
   }
 
   function still(): void {
-    reduced = reduce.matches;
+    const own = systemMedia();
+    reduced = own ? own.motion === "reduce" : reduce.matches;
     layer.toggleAttribute("data-still", reduced);
   }
 
@@ -865,11 +867,12 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
     window.removeEventListener("scroll", sync, true);
     window.removeEventListener("resize", resize);
     reduce.removeEventListener("change", still);
+    stopSystem();
     stopColor();
     host.remove();
   }
 
-  still();
+  const stopSystem = watchSystemMedia(still);
   paint();
   const stopColor = subscribe((state) => {
     color = state.grabColor;

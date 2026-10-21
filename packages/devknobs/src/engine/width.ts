@@ -23,7 +23,8 @@ import {
 import { drawMat } from "./mat";
 import { putMat } from "./matcolors";
 import { landSplash, spreadMat } from "./matsplash";
-import { createNotice } from "./notice";
+import { type FrameRefusal, nativeEnabled } from "./native";
+import { createNotice, explain } from "./notice";
 import type { Mock, Rect } from "./mock";
 import { corners, drawMock, UNDER } from "./mockdraw";
 import { drawnAt, glideFrame, gliding, landGlide, placeKey } from "./frameglide";
@@ -61,6 +62,7 @@ import {
 } from "./placeholder";
 import { warmFonts } from "./pagefonts";
 import * as reload from "./reload";
+import { keepMounted } from "./remount";
 import * as scrollkeep from "./scrollkeep";
 import { ensureStyle, removeStyle } from "./style";
 import { createTouchDot, type TouchDot } from "./touchdot";
@@ -140,6 +142,9 @@ const SANDBOX = [
 ].join(" ");
 
 let host: HTMLElement | null = null;
+/** Stops putting `host` back in the page, and the style that hides the page. */
+let stopKeeping: (() => void) | null = null;
+let stopKeepingStyle: (() => void) | null = null;
 /** The mat around the frame, readout strip included, which the frame is fitted to. */
 let letterbox: HTMLElement | null = null;
 /** The mat's paint, its grid and rulers in it, under the strip and the stage. */
@@ -187,6 +192,12 @@ let zoomTo: ((zoom: ZoomValue) => void) | null = null;
 let notice: HTMLElement | null = null;
 /** Turns every knob that keeps the frame up off. The engine hands it in. */
 let exit: (() => void) | null = null;
+/** Asks the host why the frame's page was refused. The engine hands it in. */
+let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
+/** Hears the frame open and go. The engine hands it in. */
+let framed: ((open: boolean) => void) | null = null;
+/** Counts the refusals, so an answer to an older one is dropped. */
+let refusals = 0;
 let current: ViewportValue = {
   ...UNFRAMED,
   scheme: "system",
@@ -229,7 +240,7 @@ export function frameWindow(): Window | null {
 }
 
 function share(): void {
-  if (latest) post(frameWindow(), { source: "devknobs", type: "state", state: latest });
+  if (latest) post(frameWindow(), { source: "devknobs", type: "state", state: latest, native: nativeEnabled() });
 }
 
 /** Does the frame's screen take the mouse as a finger? Not once the window has its own page back. */
@@ -260,6 +271,40 @@ export function onExit(handler: (() => void) | null): void {
   exit = handler;
 }
 
+export function onRefused(handler: ((url: string) => Promise<FrameRefusal | null>) | null): void {
+  askWhy = handler;
+}
+
+export function onFramed(handler: ((open: boolean) => void) | null): void {
+  framed = handler;
+}
+
+/** Ask the host why the page was refused, and say so under the notice. */
+function whyRefused(): void {
+  const box = notice;
+  const turn = ++refusals;
+  if (!box) return;
+  explain(box, null, loadAgain);
+  askWhy?.(frameUrl).then(
+    (refusal) => {
+      if (turn === refusals && notice === box && !box.hidden) explain(box, refusal, loadAgain);
+    },
+    () => {
+      // The host could not say: the notice stays as it is.
+    },
+  );
+}
+
+/** Load the frame's page again, after the host got ready to watch it. */
+function loadAgain(): void {
+  if (!frame) return;
+  loaded = false;
+  readyPage = null;
+  refusals += 1;
+  if (notice) notice.hidden = true;
+  frame.src = frameUrl;
+}
+
 export function onZoom(handler: ((zoom: ZoomValue) => void) | null): void {
   zoomTo = handler;
 }
@@ -284,6 +329,7 @@ function onLoad(): void {
   loadedAt = performance.now();
   const doc = frameDocument();
   if (notice) notice.hidden = doc !== null;
+  if (doc === null) whyRefused();
   locate();
   const view = frameWindow();
   if (view && doc) {
@@ -301,7 +347,13 @@ function onLoad(): void {
 
 /** A page that mounts late asks for the knobs once it listens. */
 function onMessage(event: MessageEvent): void {
-  if (readMessage(event, frameWindow(), window.location.origin)?.type !== "ready") return;
+  const message = readMessage(event, frameWindow(), window.location.origin);
+  if (message?.type === "leave") {
+    // As the tab would: the knobs of this origin wait here for the way back.
+    window.location.assign(message.url);
+    return;
+  }
+  if (message?.type !== "ready") return;
   readyPage = frameDocument();
   share();
 }
@@ -866,15 +918,39 @@ function hidePage(): void {
   covered = true;
   cover(body);
   // Popovers paint in the top layer, over the frame, wherever they sit.
-  ensureStyle(NAME).textContent =
+  const style = ensureStyle(NAME);
+  style.textContent =
     "html{overflow:hidden!important}:popover-open:not([data-devknobs]){display:none!important}";
+  stopKeepingStyle = keepMounted(style, { home: () => document.head ?? document.documentElement });
 }
 
 function showPage(): void {
   if (!covered) return;
   covered = false;
+  stopKeepingStyle?.();
+  stopKeepingStyle = null;
   uncover();
   removeStyle(NAME);
+}
+
+/**
+ * The page took the frame out, as a React root on `<body>` does as it renders,
+ * and it went back. A frame taken out lost its page, so it loads it again,
+ * and a `<body>` the page put in its place is hidden too.
+ */
+function remounted(): void {
+  if (covered) {
+    showPage();
+    hidePage();
+  }
+  if (!frame || released) return;
+  loaded = false;
+  readyPage = null;
+  hushOnce(frameUrl);
+  queueMicrotask(() => {
+    const view = frameWindow();
+    if (view && !loaded) reload.arrive(view);
+  });
 }
 
 /** The case, the page in the frame and the readout, which fade as one. */
@@ -1038,6 +1114,7 @@ function open(veiled: number | null, first: boolean): void {
   readyPage = null;
   // The frame's page lists its own load. Here it would be a second row for it.
   hushOnce(frameUrl);
+  framed?.(true);
   frame.src = frameUrl;
   frame.addEventListener("load", onLoad);
   reload.track({
@@ -1074,6 +1151,7 @@ function open(veiled: number | null, first: boolean): void {
   window.addEventListener("resize", resize);
   window.addEventListener("pagehide", keep);
   body.append(host);
+  stopKeeping = keepMounted(host, { restored: remounted });
   const now = scene();
   if (veiled !== null && now) openVeiled(now, veiled);
   // The first page takes over the blank window the frame starts with, patches
@@ -1125,6 +1203,9 @@ function release(follow: boolean): string {
 
 /** Take the frame away, and show the window's own page. */
 function teardown(): void {
+  if (frame) framed?.(false);
+  stopKeeping?.();
+  stopKeeping = null;
   host?.remove();
   host = null;
   letterbox = null;

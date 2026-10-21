@@ -14,6 +14,17 @@ import * as geo from "./geo";
 import * as header from "./header";
 import * as locale from "./locale";
 import * as media from "./media";
+import {
+  drive,
+  enableNative,
+  framing,
+  inPage,
+  type NativeDriver,
+  nativeEnabled,
+  type NativeSetting,
+  nativeViewport,
+  release,
+} from "./native";
 import * as network from "./network";
 import * as outlines from "./outlines";
 import * as overflow from "./overflow";
@@ -37,6 +48,11 @@ export interface EngineOptions {
   persist?: boolean;
   /** Knobs to apply on top of the stored state. */
   state?: DevknobsStatePatch;
+  /**
+   * A host that sets text size, offline, the prefers knobs or the viewport
+   * for real. Those knobs leave the page alone and go to it instead.
+   */
+  native?: NativeDriver;
 }
 
 export type Listener = (state: DevknobsState) => void;
@@ -44,6 +60,9 @@ export type Listener = (state: DevknobsState) => void;
 let state: DevknobsState = { ...DEFAULT_STATE };
 let persist = true;
 let running = false;
+let native: NativeDriver | null = null;
+/** Why the driver last went off or on, for the panel, null with nothing to say. */
+let nativeNote: string | null = null;
 /** Running inside the width knob's frame, where the page above drives the knobs. */
 let inFrame = false;
 let stopRelay: (() => void) | null = null;
@@ -63,22 +82,36 @@ export function subscribe(listener: Listener): () => void {
   };
 }
 
+/** The driver in force: none while its switch is off. */
+function driver(): NativeDriver | null {
+  return nativeEnabled() ? native : null;
+}
+
 export function applyState(next: DevknobsState): void {
   state = inFrame ? framed(next) : next;
+  const active = driver();
+  // What a native driver takes stays out of the page.
+  const page = inPage(state, active);
   // In a frame that gets the scheme natively, the rewrite and the patch step aside.
-  const scheme = inFrame && nativeScheme(state.scheme) ? "system" : state.scheme;
+  const scheme = inFrame && nativeScheme(page.scheme) ? "system" : page.scheme;
   // The frame is the device's screen, so its touch screen goes there.
   const touchScreen = inFrame && hasTouch(state.device);
+  // A host that sizes the tab gives its touch screen the pointer media, the
+  // touch points and the finger; the browser adds `ontouchstart` only on a load.
+  const nativeTouch = !inFrame && active?.viewport !== undefined && nativeViewport(state)?.touch === true;
   media.apply({
     scheme,
-    motion: state.motion,
-    contrast: state.contrast,
-    transparency: state.transparency,
+    motion: page.motion,
+    contrast: page.contrast,
+    transparency: page.transparency,
     touch: touchScreen,
   });
   // A ua preset reports `maxTouchPoints` for its own browser, so the touch
   // screen only does while the ua knob has none.
-  touch.apply({ on: touchScreen, points: ua.uaPreset(state.ua.preset) === undefined });
+  touch.apply({
+    on: touchScreen || nativeTouch,
+    points: !nativeTouch && ua.uaPreset(state.ua.preset) === undefined,
+  });
   touchPointer.apply(touchScreen && state.touchPointer);
   scrollbars.apply(touchScreen);
   speed.apply(state.speed);
@@ -87,17 +120,40 @@ export function applyState(next: DevknobsState): void {
   geo.apply(state.geo);
   time.apply(time.resolveTimeZone(state.timeZone, state.geo), state.clock);
   header.apply(state.clock);
-  network.apply(state.network);
-  text.apply(state.text);
+  network.apply(page.network);
+  text.apply(page.text);
+  // The page above drives the tab its frame is in.
+  if (active && !inFrame) drive(active, state);
   spacing.apply(state.spacing);
   ua.apply(state.ua);
-  width.apply(state);
+  // A size the driver sets brings no frame up.
+  const sized = inFrame ? state : framing(state, active);
+  width.apply(sized);
   // While the frame is up, the copy inside it looks at the page at that width.
-  overflow.apply(state.overflow && !needsFrame(state));
+  overflow.apply(state.overflow && !needsFrame(sized));
   outlines.apply(state.outlines);
   if (persist) save(state);
-  width.sync(state);
+  width.sync(sized);
   for (const listener of Array.from(listeners)) listener(state);
+}
+
+/**
+ * Turn the host's driver off or on, every knob kept. Off, it is handed its
+ * defaults and the page emulates its knobs as with no driver; on, it takes
+ * them back from the page. `note` says why, for the panel, and null clears it.
+ */
+export function setNative(on: boolean, note?: string | null): void {
+  if (note !== undefined) nativeNote = note;
+  const changed = on !== nativeEnabled();
+  enableNative(on);
+  if (changed && !on && native && !inFrame) release(native);
+  if (running && (changed || note !== undefined)) applyState(state);
+}
+
+/** The driver's switch for the panel: null where the host gives none. */
+export function nativeSwitch(): { setting: NativeSetting; on: boolean; note: string | null } | null {
+  if (!native?.setting) return null;
+  return { setting: native.setting, on: nativeEnabled(), note: nativeNote };
 }
 
 export function setState(patch: DevknobsStatePatch): DevknobsState {
@@ -150,8 +206,42 @@ export function reset(): void {
 /** Inside the frame, take the knobs and replays the page above sends down. */
 function onMessage(event: MessageEvent): void {
   const message = readMessage(event, window.parent, window.location.origin);
-  if (message?.type === "state") applyState(message.state);
+  if (message?.type === "state") {
+    if (message.native !== undefined) enableNative(message.native);
+    applyState(message.state);
+  }
   else if (message?.type === "replay") replayAnimations();
+}
+
+/** What the frame needs of the Navigation API, where the browser has it. */
+interface Navigate extends Event {
+  navigationType: string;
+  hashChange: boolean;
+  cancelable: boolean;
+  downloadRequest: string | null;
+  destination: { url: string };
+}
+
+/**
+ * Inside the frame, a navigation of its page to another origin, which no knob
+ * follows and which a page that refuses frames, such as a sign-in provider,
+ * would leave as an error: the window above goes there instead.
+ */
+function onNavigate(event: Event): void {
+  const navigate = event as Navigate;
+  if (navigate.navigationType === "traverse" || navigate.hashChange || navigate.downloadRequest !== null) return;
+  if (!navigate.cancelable) return;
+  const url = URL.parse(navigate.destination.url);
+  if (!url || url.origin === window.location.origin) return;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+  navigate.preventDefault();
+  post(window.parent, { source: "devknobs", type: "leave", url: url.href });
+}
+
+/** The frame's Navigation API, where the browser has one. */
+function navigation(): EventTarget | null {
+  const found: unknown = Reflect.get(window, "navigation");
+  return found instanceof EventTarget ? found : null;
 }
 
 /** Inside the frame, tell the panel above how many boxes stick out here. */
@@ -163,19 +253,26 @@ export function start(options: EngineOptions = {}): void {
   if (running) return;
   running = true;
   inFrame = isDevknobsFrame();
+  native = options.native ?? null;
   // For a page with no early script, which takes it first where there is one.
   resumeScroll();
   const stored = options.persist !== false;
   // The frame shares sessionStorage with the page above, which owns the stored
   // state. It reads it, so the first paint is right, but a save would clobber it.
   persist = stored && !inFrame;
-  if (inFrame) window.addEventListener("message", onMessage);
+  if (inFrame) {
+    window.addEventListener("message", onMessage);
+    navigation()?.addEventListener("navigate", onNavigate);
+  }
   // Before any knob, so a patch a knob puts on `fetch` wraps the log's and comes off first.
   requests.start();
   // A page that will not load in the frame offers this way out, of a pinned panel's frame too.
   width.onExit(() => setState(EXITED));
   // The letterbox zooms the frame from its own control, the wheel and the keys.
   width.onZoom((zoom) => setState({ zoom }));
+  // A host can say why a page refused the frame.
+  width.onRefused(native?.refused ?? null);
+  width.onFramed(native?.framed ?? null);
   applyState(merge(stored ? load() : { ...DEFAULT_STATE }, options.state ?? {}));
   if (!inFrame) return;
   relay(overflow.overflowCount());
@@ -188,11 +285,14 @@ export function stop(): void {
   if (!running) return;
   running = false;
   window.removeEventListener("message", onMessage);
+  navigation()?.removeEventListener("navigate", onNavigate);
   stopRelay?.();
   stopRelay = null;
   inFrame = false;
   width.onExit(null);
   width.onZoom(null);
+  width.onRefused(null);
+  width.onFramed(null);
   media.destroy();
   touch.reset();
   touchPointer.reset();
@@ -210,6 +310,10 @@ export function stop(): void {
   width.reset();
   overflow.reset();
   outlines.reset();
+  if (native) release(native);
+  native = null;
+  enableNative(true);
+  nativeNote = null;
   requests.stop();
   state = { ...DEFAULT_STATE };
 }

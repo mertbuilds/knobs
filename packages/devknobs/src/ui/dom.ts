@@ -20,9 +20,9 @@ export function button(className: string, label: string): HTMLButtonElement {
 }
 
 /**
- * Where the lines of a view start. `rows` is on the knob rows' columns, past
- * the grip's column whether a grip stands in it or not. `flush` is at the
- * panel's inset, for a view of bars, lists and text. The stylesheet has one
+ * Where the lines of a view start. `rows` is on the knob rows' columns,
+ * whose grip stands over the icon and takes no room. `flush` is at the
+ * panel's inset, for a view of bars, lists and text. Both start at the inset. The stylesheet has one
  * rule for each, which sets where a head, a row and every piece of the kit
  * in the view start.
  */
@@ -38,7 +38,7 @@ export function lay(node: HTMLElement, layout: Layout): void {
 export interface RowParts {
   /** The row's control: a button, or a plain box where the line itself does nothing. */
   main: HTMLElement;
-  /** A control of its own in the grip's column, as a knob row's grip is. */
+  /** A control of its own over the icon, as a knob row's grip is. */
   grip?: HTMLElement;
   /** The icon before the title, where the row's content starts. */
   glyph?: Element;

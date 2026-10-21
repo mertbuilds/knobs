@@ -116,6 +116,7 @@ setState({ ua: { preset: "iphone-safari" } });
 | `grabKey` | `shift+g` | the key that grabs, such as `alt+shift+g`. a key set in the panel wins |
 | `grabColor` | the stored one, `auto` at first | the color of grab's boxes: `auto`, `blue`, `green`, `pink`, `orange`, `purple`, `cyan`, or a hex of your own such as `#ff8c00` |
 | `handle` | `true` | show the handle on the window's edge while the panel is closed. a choice made in the panel's settings wins, see settings |
+| `native` | none | a host that sets knobs for real, such as a browser extension: `{ text, offline, media, viewport }`, each a function. a knob it has a function for leaves the page alone and goes to it, with each new value: `text` gets the size in px or `system`, `offline` a boolean, `media` the `scheme`, `motion`, `contrast` and `transparency`. `viewport` gets `{ width, height, dpr, mobile, touch, touchPointer }` (a side or the ratio `null` for the window's own) for a size or a device with nothing drawn around the page, in place of the frame, and `null` otherwise: a device's body or browser, a foldable, a vision filter, a zoom, the frame knob or a docked panel keep the frame as ever. unmount hands each its default. such a host hides the user's own scheme and motion from the panel as well, so it reads them where its knobs do not reach and passes them to `setSystemMedia({ scheme, motion })` (`light` or `dark`, `reduce` or `no-preference`), which the panel and grab then take in place of their media queries; `null` goes back to those. with a `setting`, `{ label, hint, change }`, the panel's settings show a switch under the handle's, on at first, that turns the driver off and on, every knob kept: off, the driver is handed its defaults and devknobs emulates its knobs in the page, as with no driver. `change(on)` hears the user's choice for the host to keep, and `setNative(on, note)` hands one back, `note` showing in place of the hint (such as why it went off) until `null`. `refused(url)` is asked each time the frame's page refuses to load, with the address the frame was given, and resolves to `{ why, details, retry }` or `null`: `why` is a line under the notice, `details` what its "copy details" button copies, and `retry`, `{ label, run, now }`, a button that runs `run` and then loads the frame again, at once with no press when `now` is true. `framed(open)` hears the frame open, before its first load, and go |
 
 state lives in `sessionStorage` under `devknobs`, so it survives reloads and
 dies with the tab. pass `mount({ persist: false })` to keep it in memory.
@@ -1196,8 +1197,12 @@ classic toolbar, with no theme color and no dynamic color.
 
 the frame loads the page a second time, so in-memory state (a half-filled form,
 a client store) is not shared between the two, and the page under the frame
-keeps running, though it skips rendering. navigations to another origin inside
-the frame are not tracked, and get the refusal notice.
+keeps running, though it skips rendering. a navigation to another origin inside
+the frame, a link, a form or a script's (a sign-in provider, say), takes the
+whole tab there instead, as it would with no frame, in browsers with the
+Navigation API (chromium); the knobs wait on this origin for the way back. one
+that only a server's redirect sends to another origin, and one in a browser
+without that api, gets the refusal notice, whose button closes the frame.
 
 these cannot be faked from inside a page, so use the browser devtools for
 them:

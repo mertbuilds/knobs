@@ -10,7 +10,8 @@ import { createRefusal, type Tips } from "./tooltip";
 
 /**
  * The settings view, which slides in over the rows: whether the handle shows
- * while the panel is closed, and each binding's key, recorded from the next
+ * while the panel is closed, the host's switch for its native driver where it
+ * gives one, and each binding's key, recorded from the next
  * keys pressed. A key a binding cannot take is refused, and the chip says why.
  */
 
@@ -50,6 +51,10 @@ export interface SettingsContext {
   handleShown(): boolean;
   /** Let the knobs show the handle, which an agent may have hidden. */
   showHandle(): void;
+  /** The words of the host's switch for its native driver, null with none. */
+  native: { label: string; hint: string } | null;
+  /** The user turned the native driver off or on. */
+  setNative(on: boolean): void;
   /** Whether the search is open. */
   searching(): boolean;
   leaveSearch(): void;
@@ -64,6 +69,8 @@ export interface Settings {
   drawKeys(now: Keys): void;
   /** Show whether the handle shows while the panel is closed. */
   drawHandle(shown: boolean): void;
+  /** Show whether the native driver is on, and why it last went off or on in place of its hint. */
+  drawNative(on: boolean, note: string | null): void;
   /** Take a key for the binding that records, if one does, and say whether it did. */
   recordingKey(event: KeyboardEvent): boolean;
   stopRecording(): void;
@@ -104,8 +111,28 @@ export function createSettings(context: SettingsContext): Settings {
       title: "show handle",
       ends: [handleSwitch],
     }).box,
-    rowsLabel("shortcuts"),
   );
+  const native = context.native;
+  const nativeSwitch = button("switch row-control", "");
+  const nativeHint = el("div", "row-hint", native?.hint ?? "");
+  if (native) {
+    nativeSwitch.setAttribute("role", "switch");
+    nativeSwitch.setAttribute("aria-label", native.label);
+    nativeHint.id = "devknobs-native-hint";
+    nativeSwitch.setAttribute("aria-describedby", nativeHint.id);
+    const row = rowBox({
+      main: el("div", "main"),
+      glyph: icon("bug"),
+      title: native.label,
+      ends: [nativeSwitch],
+    }).box;
+    row.append(nativeHint);
+    keysView.append(row);
+    nativeSwitch.addEventListener("click", () =>
+      context.setNative(nativeSwitch.getAttribute("aria-checked") !== "true"),
+    );
+  }
+  keysView.append(rowsLabel("shortcuts"));
   const keyViews = new Map<
     Binding,
     { set: HTMLButtonElement; back: HTMLButtonElement }
@@ -266,6 +293,13 @@ export function createSettings(context: SettingsContext): Settings {
     drawKeys,
     drawHandle(shown: boolean): void {
       mark(handleSwitch, shown, "aria-checked");
+    },
+    drawNative(on: boolean, note: string | null): void {
+      mark(nativeSwitch, on, "aria-checked");
+      const hint = note ?? native?.hint ?? "";
+      if (nativeHint.textContent === hint) return;
+      nativeHint.textContent = hint;
+      if (note) said.textContent = note;
     },
     recordingKey(event: KeyboardEvent): boolean {
       if (recording === null) return false;
