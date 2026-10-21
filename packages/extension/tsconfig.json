@@ -1,0 +1,11 @@
+{
+  "extends": "@knobs/config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable"],
+    // devknobs' declarations import without extensions, which only a bundler's resolution follows.
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["bun", "chrome"]
+  },
+  "include": ["src", "test", "scripts"]
+}
