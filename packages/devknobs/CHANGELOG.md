@@ -13,7 +13,7 @@
 - text size sizes a root the page leaves unset against the browser's own default, so a default other than 16px, such as one a host set for real and left behind, is not counted twice
 - `setSystemMedia({ scheme, motion })` gives the panel and grab the user's own scheme and motion when such a host hides them from every media query in the tab. until it is called nothing changes
 - `native.refused(url)` lets the host say why the frame's page was refused: a line under the notice, a "copy details" button and a button to look again. without it the notice is as before
-- `native.framed(open)` hears the frame open, before its first load, and go, and a `retry` with `now: true` runs and loads the frame again at once, with no press
+- `native.framed(open)` hears the frame open, before its first load, and go; a promise it returns as the frame opens holds that load until it settles, and a `retry` with `now: true` runs and loads the frame again at once, with no press
 - the width knob's frame, the panel and the style that hides the page under the frame go back where a page's script takes them out, as a React root on `<body>` does as it starts (x.com), or puts a new `<body>` in, which left the page blank with no frame. the frame loads its page again then. a page that keeps taking them out gets them back less often, with one warning in the console
 
 ## 0.3.0

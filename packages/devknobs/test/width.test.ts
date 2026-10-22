@@ -806,7 +806,9 @@ describe("the frame over the page", () => {
 
   test("tells the host the frame opened and went, and loads the page again at once where the host says so", async () => {
     const heard: boolean[] = [];
-    onFramed((open) => heard.push(open));
+    onFramed((open) => {
+      heard.push(open);
+    });
     let runs = 0;
     onRefused(async () =>
       runs === 0
@@ -828,6 +830,17 @@ describe("the frame over the page", () => {
     expect(named("why").children[0]?.textContent).toBe("still refused");
     reset();
     expect(heard).toEqual([true, false]);
+  });
+
+  test("holds the frame's first load until the host has let it in", async () => {
+    let letIn = () => {};
+    onFramed((open) => (open ? new Promise<void>((resolve) => (letIn = resolve)) : undefined));
+    apply(VIEWPORT);
+    await Bun.sleep(1);
+    expect(Reflect.get(frameElement(), "src")).toBeUndefined();
+    letIn();
+    await Bun.sleep(1);
+    expect(Reflect.get(frameElement(), "src")).toBe(PAGE);
   });
 
   test("lies on the mat color picked, and takes a new one in place", () => {

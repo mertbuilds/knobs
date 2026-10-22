@@ -31,7 +31,7 @@ let latest: DevknobsState | null = null;
 let exit: (() => void) | null = null;
 let zoomTo: ((zoom: ZoomValue) => void) | null = null;
 let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
-let framed: ((open: boolean) => void) | null = null;
+let framed: ((open: boolean) => void | Promise<void>) | null = null;
 
 function arrived(loaded: FrameKit): void {
   kit = loaded;
@@ -130,7 +130,7 @@ export function onRefused(handler: ((url: string) => Promise<FrameRefusal | null
   kit?.width.onRefused(handler);
 }
 
-export function onFramed(handler: ((open: boolean) => void) | null): void {
+export function onFramed(handler: ((open: boolean) => void | Promise<void>) | null): void {
   framed = handler;
   kit?.width.onFramed(handler);
 }

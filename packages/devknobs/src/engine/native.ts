@@ -90,8 +90,12 @@ export interface NativeDriver {
    * too. Null adds nothing.
    */
   refused?: (url: string) => Promise<FrameRefusal | null>;
-  /** Told as the frame that loads the page opens, before its first load, and as it goes. */
-  framed?: (open: boolean) => void;
+  /**
+   * Told as the frame that loads the page opens, before its first load, and as
+   * it goes. A promise on the way in holds the frame's first load until it
+   * settles, so the host can let it in first.
+   */
+  framed?: (open: boolean) => void | Promise<void>;
 }
 
 /** Why the frame's page was refused, as the host knows it. */
@@ -210,18 +214,22 @@ function hand<K extends Part>(
   const key = JSON.stringify(value);
   if (sent.get(part) === key) return;
   sent.set(part, key);
-  const result: unknown = call(value);
-  if (!(result instanceof Promise)) return;
-  const settled: Promise<void> = Promise.race([
+  const settled = settles(call(value))?.then(() => {
+    if (pending === settled) pending = null;
+  });
+  if (settled) pending = settled;
+}
+
+/** What a host's answer holds the frame's load for: until it settles, at most `HAND_WAIT`, or null for none. */
+export function settles(result: unknown): Promise<void> | null {
+  if (!(result instanceof Promise)) return null;
+  return Promise.race([
     result.then(
       () => {},
       () => {},
     ),
     new Promise<void>((resolve) => setTimeout(resolve, HAND_WAIT)),
-  ]).then(() => {
-    if (pending === settled) pending = null;
-  });
-  pending = settled;
+  ]);
 }
 
 /** Hand the driver the knobs it takes, those that changed since. */

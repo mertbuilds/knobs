@@ -23,7 +23,7 @@ import {
 import { drawMat } from "./mat";
 import { putMat } from "./matcolors";
 import { landSplash, spreadMat } from "./matsplash";
-import { type FrameRefusal, handing, nativeEnabled } from "./native";
+import { type FrameRefusal, handing, nativeEnabled, settles } from "./native";
 import { createNotice, explain } from "./notice";
 import type { Mock, Rect } from "./mock";
 import { corners, drawMock, UNDER } from "./mockdraw";
@@ -195,7 +195,7 @@ let exit: (() => void) | null = null;
 /** Asks the host why the frame's page was refused. The engine hands it in. */
 let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
 /** Hears the frame open and go. The engine hands it in. */
-let framed: ((open: boolean) => void) | null = null;
+let framed: ((open: boolean) => void | Promise<void>) | null = null;
 /** Counts the refusals, so an answer to an older one is dropped. */
 let refusals = 0;
 let current: ViewportValue = {
@@ -275,7 +275,7 @@ export function onRefused(handler: ((url: string) => Promise<FrameRefusal | null
   askWhy = handler;
 }
 
-export function onFramed(handler: ((open: boolean) => void) | null): void {
+export function onFramed(handler: ((open: boolean) => void | Promise<void>) | null): void {
   framed = handler;
 }
 
@@ -1115,9 +1115,10 @@ function open(veiled: number | null, first: boolean): void {
   readyPage = null;
   // The frame's page lists its own load. Here it would be a second row for it.
   hushOnce(frameUrl);
-  framed?.(true);
-  // A host still setting what the requests carry, such as the user agent, goes first.
-  const waiting = handing();
+  // A host still letting the frame in, or setting what the requests carry, such as the user agent, goes first.
+  const opening = settles(framed?.(true));
+  const handed = handing();
+  const waiting = opening && handed ? Promise.all([opening, handed]) : (opening ?? handed);
   if (waiting) {
     const opened = frame;
     void waiting.then(() => {
