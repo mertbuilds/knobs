@@ -47,3 +47,5 @@ jobs:
       - run: pnpm --filter @knobs/ui exec playwright install chromium --with-deps
       # Storybook stories and devknobs' bun tests.
       - run: pnpm test
+      # The extension loaded into the same Chromium (playwright-core 1.62.1), on local pages only.
+      - run: pnpm --filter devknobs build && pnpm --filter @knobs/extension build && pnpm --filter @knobs/extension smoke
