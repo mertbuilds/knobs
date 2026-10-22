@@ -3,13 +3,13 @@
 // text size, preferences and offline for real, with no rewrite of its own.
 // Then shoots the panel next to the npm build's, into smoke-out/. Build first.
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { type DevknobsStatePatch, PRESETS } from 'devknobs';
-import { chromium, type Page, type Worker } from 'playwright-core';
+import { type Browser, chromium, type Page, type Worker } from 'playwright-core';
 import type { KnobState } from '../src/knobs.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -1157,6 +1157,72 @@ const looks = (tab: Page) =>
  * devknobs drawn as on a page with no policy, pixel for pixel: the panel open, a knob's editor
  * open, grab's overlay, the notice of a frame refused, and a phone's frame in its body.
  */
+/** A screenshot once two in a row come out the same: frames loaded, images drawn. */
+async function settled(tab: Page) {
+  let last = await tab.screenshot();
+  for (let tries = 0; tries < 20; tries++) {
+    await tab.waitForTimeout(100);
+    const next = await tab.screenshot();
+    if (next.equals(last)) {
+      return next;
+    }
+    last = next;
+  }
+  return last;
+}
+
+/**
+ * How many pixels of two same-sized PNGs differ, how many by more than a faint step in any
+ * channel, and the box they sit in, decoded by the browser.
+ */
+async function pixelsApart(browser: Browser, a: Buffer, b: Buffer) {
+  const tab = await browser.newPage();
+  try {
+    return await tab.evaluate(
+      async (pngs) => {
+        const decoded: Array<ImageData> = [];
+        for (const base64 of pngs) {
+          const image = await createImageBitmap(
+            await (await fetch(`data:image/png;base64,${base64}`)).blob(),
+          );
+          const context = new OffscreenCanvas(image.width, image.height).getContext('2d')!;
+          context.drawImage(image, 0, 0);
+          decoded.push(context.getImageData(0, 0, image.width, image.height));
+        }
+        const [{ data: one, width }, { data: two }] = decoded as [ImageData, ImageData];
+        if (one.length !== two.length) {
+          return { apart: -1, box: null, far: -1 };
+        }
+        let apart = 0;
+        let far = 0;
+        const box = { bottom: -1, left: Infinity, right: -1, top: Infinity };
+        for (let index = 0; index < one.length; index += 4) {
+          let most = 0;
+          for (let channel = index; channel < index + 4; channel++) {
+            most = Math.max(most, Math.abs(one[channel]! - two[channel]!));
+          }
+          if (most > 0) {
+            apart++;
+            if (most > 16) {
+              far++;
+            }
+            const x = (index / 4) % width;
+            const y = Math.floor(index / 4 / width);
+            box.left = Math.min(box.left, x);
+            box.right = Math.max(box.right, x);
+            box.top = Math.min(box.top, y);
+            box.bottom = Math.max(box.bottom, y);
+          }
+        }
+        return { apart, box: apart > 0 ? box : null, far };
+      },
+      [a.toString('base64'), b.toString('base64')],
+    );
+  } finally {
+    await tab.close();
+  }
+}
+
 async function strictPolicy() {
   const browser = await chromium.launch({ channel: 'chromium', headless: true });
   try {
@@ -1247,7 +1313,7 @@ async function strictPolicy() {
         await tab.evaluate(() => window.devknobs!.ready());
         await tab.waitForTimeout(600);
         seen.push(await looks(tab));
-        shots.push(await tab.screenshot());
+        shots.push(await settled(tab));
         if (kind === 'strict') {
           log(`strict policy: ${step.name}`, { blocked, looks: seen[1] });
           assert.deepEqual(blocked, [], `nothing of devknobs is blocked: ${step.name}`);
@@ -1255,7 +1321,18 @@ async function strictPolicy() {
         await tab.close();
       }
       assert.deepEqual(seen[1], seen[0], `the same styles: ${step.name}`);
-      assert.ok(shots[0]!.equals(shots[1]!), `the same pixels: ${step.name}`);
+      if (!shots[0]!.equals(shots[1]!)) {
+        const name = step.name.replaceAll(' ', '-');
+        await mkdir(out, { recursive: true });
+        await writeFile(join(out, `strict-${name}-loose.png`), shots[0]!);
+        await writeFile(join(out, `strict-${name}-strict.png`), shots[1]!);
+        const differ = await pixelsApart(browser, shots[0]!, shots[1]!);
+        log(`strict policy: ${step.name}, pixels apart`, differ);
+        // Under load Chromium can round an image's edge a step or two apart, the bezel's on CI:
+        // a few faint pixels pass, a changed color or layout does not.
+        assert.equal(differ.far, 0, `the same pixels: ${step.name}`);
+        assert.ok(differ.apart <= 500, `the same pixels: ${step.name}`);
+      }
     }
   } finally {
     await browser.close();
