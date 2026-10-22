@@ -7,6 +7,7 @@ import {
   framed,
   isDevknobsFrame,
   knobFrame,
+  leaveFor,
   nativeScheme,
   needsFrame,
   plainFrame,
@@ -323,6 +324,25 @@ describe("readMessage", () => {
     expect(from({ source: "devknobs", type: "state", state: "dark" })).toBeNull();
     expect(from({ source: "devknobs", type: "key", action: "open" })).toBeNull();
     expect(from({ source: "devknobs", type: "key" })).toBeNull();
+  });
+});
+
+describe("leaveFor", () => {
+  test("sends the window above where the frame's page sets off for another origin, but not a form's post", () => {
+    const go = {
+      navigationType: "push",
+      hashChange: false,
+      cancelable: true,
+      downloadRequest: null,
+      formData: null,
+      destination: { url: "https://github.com/login" },
+    };
+    expect(leaveFor(go, ORIGIN)).toBe("https://github.com/login");
+    expect(leaveFor({ ...go, destination: { url: `${ORIGIN}/next` } }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, navigationType: "traverse" }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, cancelable: false }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, destination: { url: "mailto:a@b.c" } }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, formData: new FormData() }, ORIGIN)).toBeNull();
   });
 });
 

@@ -251,6 +251,30 @@ export function readMessage(
   return null;
 }
 
+/** What the frame needs of a Navigation API `navigate` event, where the browser has it. */
+export interface FrameNavigation {
+  navigationType: string;
+  hashChange: boolean;
+  cancelable: boolean;
+  downloadRequest: string | null;
+  formData: FormData | null;
+  destination: { url: string };
+}
+
+/**
+ * Where the window above goes in place of the frame's page, which sets off for
+ * another origin, or null where the frame goes itself. A form's post keeps its
+ * body in the frame: the window above could only follow it with a get.
+ */
+export function leaveFor(navigate: FrameNavigation, origin: string): string | null {
+  if (navigate.navigationType === "traverse" || navigate.hashChange || navigate.downloadRequest !== null) return null;
+  if (!navigate.cancelable || navigate.formData !== null) return null;
+  const url = URL.parse(navigate.destination.url);
+  if (!url || url.origin === origin) return null;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  return url.href;
+}
+
 /**
  * Post to a window on this origin. A window on any other origin never sees it,
  * nor does a frame that holds the browser's error page for a refused load:

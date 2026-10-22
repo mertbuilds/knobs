@@ -3,8 +3,10 @@ import * as requests from "../requests";
 import { hasTouch } from "./devices";
 import {
   EXITED,
+  type FrameNavigation,
   framed,
   isDevknobsFrame,
+  leaveFor,
   nativeScheme,
   needsFrame,
   post,
@@ -215,29 +217,17 @@ function onMessage(event: MessageEvent): void {
   else if (message?.type === "replay") replayAnimations();
 }
 
-/** What the frame needs of the Navigation API, where the browser has it. */
-interface Navigate extends Event {
-  navigationType: string;
-  hashChange: boolean;
-  cancelable: boolean;
-  downloadRequest: string | null;
-  destination: { url: string };
-}
-
 /**
  * Inside the frame, a navigation of its page to another origin, which no knob
  * follows and which a page that refuses frames, such as a sign-in provider,
  * would leave as an error: the window above goes there instead.
  */
 function onNavigate(event: Event): void {
-  const navigate = event as Navigate;
-  if (navigate.navigationType === "traverse" || navigate.hashChange || navigate.downloadRequest !== null) return;
-  if (!navigate.cancelable) return;
-  const url = URL.parse(navigate.destination.url);
-  if (!url || url.origin === window.location.origin) return;
-  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+  const navigate = event as Event & FrameNavigation;
+  const url = leaveFor(navigate, window.location.origin);
+  if (!url) return;
   navigate.preventDefault();
-  post(window.parent, { source: "devknobs", type: "leave", url: url.href });
+  post(window.parent, { source: "devknobs", type: "leave", url });
 }
 
 /** The frame's Navigation API, where the browser has one. */
