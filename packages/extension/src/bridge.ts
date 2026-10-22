@@ -4,6 +4,7 @@ import {
   type Answer,
   type PageMessage,
   type Question,
+  readPageMessage,
   type Request,
   type Response,
   type TabMessage,
@@ -23,8 +24,15 @@ document.addEventListener(TO_BRIDGE, (event) => {
   if (typeof detail !== 'string') {
     return;
   }
-  const request = JSON.parse(detail) as Request | Question;
-  if (request.type === 'get') {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(detail);
+  } catch {
+    return;
+  }
+  // Any script of the page can send this event: only what devknobs sends goes on.
+  const request = readPageMessage(parsed);
+  if (!request) {
     return;
   }
   if (request.type !== 'set' && request.type !== 'native') {

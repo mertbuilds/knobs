@@ -62,19 +62,21 @@ function ask(question: Ask): Promise<Answer> {
   });
 }
 
-// The frame now up: the service worker's word that its framing rule for service workers is set,
+// The frame now up: the service worker's word that its framing rules are set,
 // whether it was loaded again for that, and whether its loads skip service workers.
 let ruled: Promise<Answer> = Promise.resolve({});
 let reloaded = false;
 let bypassed = false;
 
-function framed(open: boolean) {
+/** The frame opened or went. Its first load waits for the rules that let it in. */
+async function framed(open: boolean): Promise<void> {
   if (!top) {
     return;
   }
   reloaded = false;
   bypassed = false;
   ruled = ask({ open, type: 'frame' });
+  await ruled;
 }
 
 /** Load the frame again with the tab's loads skipping service workers, which takes the debugger. */

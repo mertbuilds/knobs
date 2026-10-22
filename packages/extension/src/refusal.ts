@@ -59,8 +59,7 @@ function header(headers: Headers | undefined, name: string): string | null {
   if (!headers) {
     return null;
   }
-  const found = Object.keys(headers).find((key) => key.toLowerCase() === name);
-  return found === undefined ? null : headers[found]!;
+  return Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1] ?? null;
 }
 
 /** The `frame-ancestors` part of a Content-Security-Policy, or null. */
@@ -129,8 +128,9 @@ export class FrameLoads {
           this.sent(load, headers);
         } else if (typeof params.requestId === 'string') {
           this.early.set(params.requestId, headers);
-          if (this.early.size > 50) {
-            this.early.delete(this.early.keys().next().value!);
+          const [oldest] = this.early.keys();
+          if (this.early.size > 50 && oldest !== undefined) {
+            this.early.delete(oldest);
           }
         }
         break;

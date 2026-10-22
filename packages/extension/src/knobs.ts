@@ -78,6 +78,9 @@ function mediaFeatures(state: KnobState) {
   return features;
 }
 
+// A tab with no size yet, such as one in a minimized window, scales nothing.
+const fit = (have: number, want: number | null) => (want && have > 0 ? have / want : 1);
+
 /**
  * The size, ratio and touch screen of a viewport, or the commands that put the
  * tab's own back. One bigger than the tab is scaled down to fit, as the frame
@@ -91,11 +94,7 @@ function viewportCommands(viewport: NativeViewport | null, tab: TabSize): Array<
       { method: 'Emulation.setEmitTouchEventsForMouse', params: { enabled: false } },
     ];
   }
-  const scale = Math.min(
-    1,
-    viewport.width ? tab.width / viewport.width : 1,
-    viewport.height ? tab.height / viewport.height : 1,
-  );
+  const scale = Math.min(1, fit(tab.width, viewport.width), fit(tab.height, viewport.height));
   const width = viewport.width ?? Math.round(tab.width / scale);
   const height = viewport.height ?? Math.round(tab.height / scale);
   // A device's screen is its viewport, as DevTools has it; a plain size keeps the real screen.

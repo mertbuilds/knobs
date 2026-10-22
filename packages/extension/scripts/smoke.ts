@@ -202,6 +202,14 @@ self.addEventListener('fetch', (event) => {
     response.setHeader('x-frame-options', 'DENY');
     response.setHeader('content-security-policy', "frame-ancestors 'none'");
   }
+  // A frame of the page's own that its policy sandboxes, with no script: one that runs says so above.
+  if (path === '/sandboxed') {
+    response.setHeader('content-security-policy', "sandbox; script-src 'none'");
+    response.end(
+      `<!doctype html><h1>sandboxed</h1><script>parent.document.title = 'sandbox broken';</script>`,
+    );
+    return;
+  }
   response.end(
     path === '/npm'
       ? page('<script src="/devknobs/index.global.js"></script>')
@@ -754,13 +762,18 @@ async function refusalCauses() {
       >;
     };
     // The framing rule stays off this tab, so its own frame is refused.
-    const dropRule = async () => {
-      await tab.waitForTimeout(200);
-      await worker.evaluate(
-        (tabId) => chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [tabId] }),
-        tabId,
-      );
-    };
+    const dropRule = () =>
+      worker.evaluate((tabId) => {
+        const rules = chrome.declarativeNetRequest;
+        const update = rules.updateSessionRules.bind(rules);
+        Object.assign(rules, {
+          updateSessionRules: (options: chrome.declarativeNetRequest.UpdateRuleOptions) =>
+            update({
+              ...options,
+              addRules: options.addRules?.filter((rule) => rule.id !== tabId),
+            }),
+        });
+      }, tabId);
     const unframe = async () => {
       await set(tab, { frame: false, width: 'full' });
       await tab.evaluate(() => window.devknobs!.ready());
@@ -1811,30 +1824,31 @@ try {
   log('fetched deny headers', fetchedHeaders);
   assert.deepEqual(fetchedHeaders, ['DENY', "frame-ancestors 'none'"]);
 
+  // The frames' rules of each tab, not the service workers'.
   const sessionRules = () =>
     worker.evaluate(async () =>
-      (await chrome.declarativeNetRequest.getSessionRules()).map(({ condition, id }) => ({
-        host: condition.requestDomains,
-        id,
-        tabIds: condition.tabIds,
-      })),
+      (await chrome.declarativeNetRequest.getSessionRules())
+        .filter(({ condition }) => !condition.tabIds?.includes(chrome.tabs.TAB_ID_NONE))
+        .map(({ condition, id }) => ({
+          host: condition.requestDomains,
+          id,
+          tabIds: condition.tabIds,
+        })),
     );
-  // Another tab, on another host: its rule is its own, and a frame of a host that is not its own keeps the headers.
+  const settledRules = async (count: number) => {
+    for (let tries = 0; (await sessionRules()).length !== count && tries < 50; tries++) {
+      await tab.waitForTimeout(20);
+    }
+    return sessionRules();
+  };
+  assert.deepEqual(await settledRules(0), [], 'no rule while no frame of devknobs is open');
+  // Another tab, on another host. With no frame of devknobs open, its own frames keep their headers.
   const other = await context.newPage();
   await other.goto(otherOrigin);
   await ready(other);
   const otherId = await worker.evaluate(
     async (tabId) => (await chrome.tabs.query({})).find((tab) => tab.id !== tabId)!.id!,
     tabId,
-  );
-  const rules = await sessionRules();
-  log('session rules', rules);
-  assert.deepEqual(
-    rules.toSorted((a, b) => a.id - b.id),
-    [
-      { host: ['127.0.0.1'], id: tabId, tabIds: [tabId] },
-      { host: ['localhost'], id: otherId, tabIds: [otherId] },
-    ].toSorted((a, b) => a.id - b.id),
   );
   const frameOf = async (src: string) => {
     await other.evaluate(
@@ -1843,29 +1857,35 @@ try {
           document.querySelector('#probe')?.remove();
           const frame = document.createElement('iframe');
           frame.id = 'probe';
+          frame.name = 'probe';
           frame.addEventListener('load', resolve, { once: true });
           frame.src = src;
           document.body.append(frame);
         }),
       src,
     );
-    const frame = other.frames().find((frame) => frame.parentFrame() !== null);
+    const frame = other.frames().find((frame) => frame.name() === 'probe');
     return frame?.evaluate(() => document.querySelector('h1')?.textContent?.trim());
   };
+  const unframedOwn = await frameOf(`${otherOrigin}deny`);
+  await frameOf(`${otherOrigin}sandboxed`);
+  const sandboxed = await other.title();
+  log('other tab frames, no devknobs frame', { sandboxed, unframedOwn });
+  assert.notEqual(unframedOwn, 'devknobs smoke', 'a frame of its own host keeps its headers');
+  assert.equal(sandboxed, 'smoke', "a frame's sandbox stays");
+  // Its frame of devknobs open: the rule is its own, and a frame of a host that is not its own keeps the headers.
+  await set(other, { frame: true, width: 400 });
+  await other.evaluate(() => window.devknobs!.ready());
+  const rules = await settledRules(1);
+  log('session rules', rules);
+  assert.deepEqual(rules, [{ host: ['localhost'], id: otherId, tabIds: [otherId] }]);
   const ownHost = await frameOf(`${otherOrigin}deny`);
   const foreignHost = await frameOf(`${url}deny`);
-  log('other tab frames', { foreignHost, ownHost });
+  log('other tab frames, devknobs frame open', { foreignHost, ownHost });
   assert.equal(ownHost, 'devknobs smoke');
   assert.notEqual(foreignHost, 'devknobs smoke', 'a frame of another host keeps its headers');
   await other.close();
-  for (let tries = 0; (await sessionRules()).length > 1 && tries < 50; tries++) {
-    await tab.waitForTimeout(20);
-  }
-  assert.deepEqual(
-    (await sessionRules()).map(({ id }) => id),
-    [tabId],
-    'closing a tab drops its rule',
-  );
+  assert.deepEqual(await settledRules(0), [], 'closing a tab drops its rule');
 
   // Both shots under the same system scheme, at the same size.
   // A fresh tab: one the debugger was on can keep a stale strip where Chrome's bar was.

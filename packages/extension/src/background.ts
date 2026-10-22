@@ -4,7 +4,8 @@ import {
   type Answer,
   detachMessage,
   type Question,
-  type Request,
+  readSystemChange,
+  readTabRequest,
   type Response,
   type SystemMessage,
   type TabMessage,
@@ -70,6 +71,8 @@ const watchOnly = new Set<number>();
 const SETTLE_MS = 300;
 // Tabs whose loads skip service workers while devknobs' frame is open, which takes the debugger.
 const bypassing = new Set<number>();
+// Tabs our debugger is on. getTargets cannot tell, since DevTools or another client also counts as attached.
+const ours = new Set<number>();
 
 /** Have the debugger, attached to the tab, report its frames' loads. */
 async function watch(tabId: number) {
@@ -116,32 +119,63 @@ async function setState(tabId: number, requested: KnobState): Promise<KnobState>
   if (sameState(current, state)) {
     return requested;
   }
-  // A stored state that is not the default means our debugger is on the tab: onDetach clears it.
-  // getTargets cannot tell, since DevTools or another client also counts as attached.
-  const attached = !isDefault(current) || watchOnly.has(tabId) || bypassing.has(tabId);
   if (isDefault(state)) {
     await forget(tabId);
-    if (attached) {
-      // Detaching alone leaves the font size until the next navigation.
-      await send(tabId, state);
-      if (!bypassing.has(tabId)) {
-        await detach(tabId);
-        unwatch(tabId);
+    if (ours.has(tabId)) {
+      try {
+        // Detaching alone leaves the font size until the next navigation.
+        await send(tabId, state);
+      } finally {
+        if (!bypassing.has(tabId)) {
+          unwatch(tabId);
+          await detach(tabId);
+        }
       }
     }
     return requested;
   }
-  if (!attached) {
+  return withDebugger(tabId, async () => {
+    // The knobs keep it on now.
+    watchOnly.delete(tabId);
+    await watch(tabId);
+    await send(tabId, state);
+    states.set(tabId, state);
+    await chrome.storage.session.set({ [key(tabId)]: state });
+    return state;
+  });
+}
+
+/**
+ * Run `work` with our debugger on the tab, putting it on first if it is not. Should any of it
+ * fail, the tab goes back to its own settings and the debugger leaves, so the next change starts clean.
+ */
+async function withDebugger<T>(tabId: number, work: () => Promise<T>): Promise<T> {
+  const fresh = !ours.has(tabId);
+  if (fresh) {
     await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
-    await overrideUa(tabId);
+    ours.add(tabId);
   }
-  // The knobs keep it on now.
-  watchOnly.delete(tabId);
-  await watch(tabId);
-  await send(tabId, state);
-  states.set(tabId, state);
-  await chrome.storage.session.set({ [key(tabId)]: state });
-  return state;
+  try {
+    if (fresh) {
+      await overrideUa(tabId);
+    }
+    return await work();
+  } catch (error) {
+    const had = await getState(tabId);
+    await forget(tabId);
+    unwatch(tabId);
+    bypassing.delete(tabId);
+    await send(tabId, DEFAULT_STATE).catch(() => {
+      // Whatever the debugger cannot clear goes with the next load.
+    });
+    await detach(tabId).catch(() => {
+      // The debugger already left.
+    });
+    if (!isDefault(had)) {
+      tell(tabId, { type: 'detached' });
+    }
+    throw error;
+  }
 }
 
 function tell(tabId: number, message: TabMessage) {
@@ -187,6 +221,7 @@ async function readSystem(): Promise<SystemMedia | undefined> {
  * switch off for every tab, and the panel keeps its knobs in the page.
  */
 function detached(tabId: number, reason: `${chrome.debugger.DetachReason}`) {
+  ours.delete(tabId);
   // Default at once, so a change on its way in does not think the debugger is still on.
   states.set(tabId, { ...DEFAULT_STATE });
   unwatch(tabId);
@@ -223,41 +258,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // The width knob's frame loads the tab's own page, which X-Frame-Options or a
-// frame-ancestors policy would refuse. Only this tab's frames of its own host
-// lose those headers, and the CSP goes whole: a rule cannot edit part of a header.
-// The rule id is the tab id, so a page load in the tab replaces its rule.
-async function allowFrames(tabId: number, url: string | undefined) {
-  const { MODIFY_HEADERS } = chrome.declarativeNetRequest.RuleActionType;
-  const { REMOVE } = chrome.declarativeNetRequest.HeaderOperation;
-  const host = url ? URL.parse(url)?.hostname : undefined;
-  await chrome.declarativeNetRequest.updateSessionRules({
-    addRules: host
-      ? [
-          {
-            action: {
-              responseHeaders: [
-                { header: 'x-frame-options', operation: REMOVE },
-                { header: 'content-security-policy', operation: REMOVE },
-              ],
-              type: MODIFY_HEADERS,
-            },
-            condition: {
-              initiatorDomains: [host],
-              requestDomains: [host],
-              resourceTypes: [chrome.declarativeNetRequest.ResourceType.SUB_FRAME],
-              tabIds: [tabId],
-            },
-            id: tabId,
-          },
-        ]
-      : [],
-    removeRuleIds: [tabId],
-  });
-}
-
-// A service worker's own fetch of the frame's page is no frame load of the tab's, so the rule
-// above misses it. While a tab has devknobs' frame open on a host, what that host's service
-// worker fetches from it loses the same headers. One rule per host, its id from the host.
+// frame-ancestors policy would refuse. While devknobs' frame is open in a tab, that
+// tab's frames of its own host lose those headers, and the CSP goes whole: a rule
+// cannot edit part of a header, nor tell devknobs' frame from the page's own. The
+// rule id is the tab id. A service worker's own fetch of the frame's page is no frame
+// load of the tab's, so that rule misses it: what that host's service worker fetches
+// from it loses the same headers too. One rule per host, its id from the host.
 const FRAMED_KEY = 'framed';
 let framedTabs: Promise<Map<number, string>> | null = null;
 let ruling: Promise<void> = Promise.resolve();
@@ -269,6 +275,32 @@ function workerRuleId(host: string): number {
     hash = (hash * 31 + char.charCodeAt(0)) % 2_147_483_647;
   }
   return hash + 1;
+}
+
+/** A rule that takes the headers refusing a frame off `type` loads of `host`, from `host`, in `tabId`. */
+function unframing(
+  host: string,
+  tabId: number,
+  type: chrome.declarativeNetRequest.ResourceType,
+  id: number,
+): chrome.declarativeNetRequest.Rule {
+  const { REMOVE } = chrome.declarativeNetRequest.HeaderOperation;
+  return {
+    action: {
+      responseHeaders: [
+        { header: 'x-frame-options', operation: REMOVE },
+        { header: 'content-security-policy', operation: REMOVE },
+      ],
+      type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+    },
+    condition: {
+      initiatorDomains: [host],
+      requestDomains: [host],
+      resourceTypes: [type],
+      tabIds: [tabId],
+    },
+    id,
+  };
 }
 
 /** Each tab's host with devknobs' frame open, kept through the service worker's restarts. */
@@ -294,8 +326,7 @@ async function setFramed(tabId: number, host: string | null): Promise<void> {
   const hosts = new Set(tabs.values());
   void chrome.storage.session.set({ [FRAMED_KEY]: Object.fromEntries(tabs) });
   ruling = ruling.then(async () => {
-    const { MODIFY_HEADERS } = chrome.declarativeNetRequest.RuleActionType;
-    const { REMOVE } = chrome.declarativeNetRequest.HeaderOperation;
+    const { SUB_FRAME, XMLHTTPREQUEST } = chrome.declarativeNetRequest.ResourceType;
     const stale = (await chrome.declarativeNetRequest.getSessionRules())
       .filter(
         ({ action, condition }) =>
@@ -303,23 +334,13 @@ async function setFramed(tabId: number, host: string | null): Promise<void> {
       )
       .map(({ id }) => id);
     await chrome.declarativeNetRequest.updateSessionRules({
-      addRules: [...hosts].map((framedHost) => ({
-        action: {
-          responseHeaders: [
-            { header: 'x-frame-options', operation: REMOVE },
-            { header: 'content-security-policy', operation: REMOVE },
-          ],
-          type: MODIFY_HEADERS,
-        },
-        condition: {
-          initiatorDomains: [framedHost],
-          requestDomains: [framedHost],
-          resourceTypes: [chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST],
-          tabIds: [chrome.tabs.TAB_ID_NONE],
-        },
-        id: workerRuleId(framedHost),
-      })),
-      removeRuleIds: stale,
+      addRules: [
+        ...(host ? [unframing(host, tabId, SUB_FRAME, tabId)] : []),
+        ...[...hosts].map((framedHost) =>
+          unframing(framedHost, chrome.tabs.TAB_ID_NONE, XMLHTTPREQUEST, workerRuleId(framedHost)),
+        ),
+      ],
+      removeRuleIds: [tabId, ...stale],
     });
   });
   return ruling;
@@ -442,11 +463,6 @@ function ruleUas(): Promise<void> {
   return run;
 }
 
-/** Whether our debugger is on the tab. */
-async function attachedTo(tabId: number): Promise<boolean> {
-  return !isDefault(await getState(tabId)) || watchOnly.has(tabId) || bypassing.has(tabId);
-}
-
 /** The tab's user agent on its debugger too, for its scripts and workers, or none. */
 async function overrideUa(tabId: number, clear = false) {
   const ua = clear ? null : ((await uaTabs()).get(tabId)?.ua ?? null);
@@ -455,6 +471,9 @@ async function overrideUa(tabId: number, clear = false) {
 }
 
 async function detach(tabId: number) {
+  if (!ours.delete(tabId)) {
+    return;
+  }
   await overrideUa(tabId, true).catch(() => {
     // The debugger already left.
   });
@@ -476,24 +495,15 @@ async function setUa(tabId: number, ua: NativeUa | null, url: string | undefined
   }
   void chrome.storage.session.set({ [UA_KEY]: Object.fromEntries(tabs) });
   await ruleUas();
-  if (await attachedTo(tabId)) {
+  if (ours.has(tabId)) {
     await overrideUa(tabId);
   }
 }
 
-// Before the document loads, so a frame it brings up at once, from knobs stored
-// on its host, is let in on its first load. The bridge's word on load stays the fallback.
+// The frame goes with the page it was on: its rules go too, until the next page opens one.
 chrome.webNavigation.onBeforeNavigate.addListener(({ frameId, tabId, url }) => {
   if (frameId === 0) {
-    void allowFrames(tabId, url);
     void pageLoads(tabId, url);
-  }
-});
-// Again once the page is there: a redirect to another host, such as www to the bare one,
-// would leave the rule on the host it left.
-chrome.webNavigation.onCommitted.addListener(({ frameId, tabId, url }) => {
-  if (frameId === 0) {
-    void allowFrames(tabId, url);
   }
 });
 
@@ -517,7 +527,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   void forget(tabId);
   loads.delete(tabId);
   queues.delete(tabId);
-  void chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [tabId] });
   void setFramed(tabId, null);
   setUa(tabId, null, undefined).catch(() => {
     // The debugger went with the tab.
@@ -566,12 +575,13 @@ function watchNext(tabId: number): Promise<Answer> {
     if (!(await nativeOn())) {
       return { native: false };
     }
-    if (isDefault(await getState(tabId)) && !watchOnly.has(tabId)) {
-      await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
-      await overrideUa(tabId);
-      watchOnly.add(tabId);
-    }
-    await watch(tabId);
+    const only = !ours.has(tabId);
+    await withDebugger(tabId, async () => {
+      if (only) {
+        watchOnly.add(tabId);
+      }
+      await watch(tabId);
+    });
     return { native: true };
   });
 }
@@ -579,14 +589,12 @@ function watchNext(tabId: number): Promise<Answer> {
 /** Have the tab's loads skip service workers while devknobs' frame stays open, the debugger on. */
 function bypass(tabId: number): Promise<Answer> {
   return queued(tabId, async () => {
-    if (!(await attachedTo(tabId))) {
-      await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
-      await overrideUa(tabId);
-    }
-    bypassing.add(tabId);
-    await watch(tabId);
-    await chrome.debugger.sendCommand({ tabId }, 'Network.setBypassServiceWorker', {
-      bypass: true,
+    await withDebugger(tabId, async () => {
+      bypassing.add(tabId);
+      await watch(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Network.setBypassServiceWorker', {
+        bypass: true,
+      });
     });
     return { native: await nativeOn() };
   });
@@ -637,27 +645,25 @@ async function answer(tabId: number, question: Question, url: string | undefined
 }
 
 chrome.runtime.onMessage.addListener(
-  (
-    request: Request | Question | SystemMessage,
-    sender,
-    reply: (response: Response | Answer) => void,
-  ) => {
-    if (request.type === 'system') {
-      const { media } = request;
-      void chrome.tabs.query({}).then((tabs) => {
-        for (const { id } of tabs) {
-          if (id !== undefined) {
-            tell(id, { media, type: 'system' });
-          }
-        }
-      });
-      return false;
-    }
-    if (request.type === 'read-system') {
-      return false;
-    }
+  (message: unknown, sender, reply: (response: Response | Answer) => void) => {
     const tabId = sender.tab?.id;
-    if (tabId === undefined || sender.frameId !== 0) {
+    if (tabId === undefined) {
+      // The offscreen document's word that the user's own scheme or motion changed.
+      const media = readSystemChange(message);
+      if (media && sender.url === chrome.runtime.getURL('offscreen.html')) {
+        void chrome.tabs.query({}).then((tabs) => {
+          for (const { id } of tabs) {
+            if (id !== undefined) {
+              tell(id, { media, type: 'system' });
+            }
+          }
+        });
+      }
+      return false;
+    }
+    // A tab acts on itself alone: its id and host come from the sender, never the message.
+    const request = readTabRequest(message);
+    if (!request || sender.frameId !== 0) {
       return false;
     }
     if (
@@ -671,9 +677,6 @@ chrome.runtime.onMessage.addListener(
         reply({ error: error instanceof Error ? error.message : String(error) }),
       );
       return true;
-    }
-    if (request.type === 'get') {
-      void allowFrames(tabId, sender.url);
     }
     if (request.type === 'native') {
       // Before the knobs the panel hands over next, which this decides the fate of.

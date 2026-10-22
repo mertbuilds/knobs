@@ -1,4 +1,4 @@
-import type { NativeUa, SystemMedia } from 'devknobs';
+import type { NativeUa, NativeViewport, SystemMedia, UaBrand, UaHints } from 'devknobs';
 import type { KnobState } from './knobs.ts';
 import type { FrameLoad } from './refusal.ts';
 
@@ -32,6 +32,9 @@ export type Ask =
   | { type: 'bypass' }
   | { type: 'ua'; ua: NativeUa | null };
 export type Question = Ask & { id: number };
+
+/** What a page sends, through the bridge: the bridge asks for the tab's knobs itself. */
+export type PageRequest = Exclude<Request, { type: 'get' }> | Question;
 
 /** `native` false: the switch is off, so the debugger saw nothing. */
 export type Answer = { error?: string; native?: boolean; record?: FrameLoad | null };
@@ -79,3 +82,197 @@ export function detachMessage(reason: `${chrome.debugger.DetachReason}`): TabMes
  */
 export const TO_BRIDGE = 'devknobs-extension:native';
 export const TO_PAGE = 'devknobs-extension:tab';
+
+// What a tab sends is the page's to forge: each message is read field by field, and anything
+// else is dropped. devknobs' own bounds hold the numbers in.
+const TEXT_MIN = 6;
+const TEXT_MAX = 72;
+const SIZE_MIN = 120;
+const SIZE_MAX = 8192;
+const DPR_MIN = 0.25;
+const DPR_MAX = 5;
+
+type Fields = Record<string, unknown>;
+
+const isFields = (value: unknown): value is Fields =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function oneOf<T extends string>(value: unknown, options: ReadonlyArray<T>): T | null {
+  return options.find((option) => option === value) ?? null;
+}
+
+function bounded(value: unknown, min: number, max: number): number | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, value))
+    : null;
+}
+
+/** A side or ratio the tab takes: within devknobs' bounds, or null for the window's own. */
+function side(value: unknown, min: number, max: number): number | null | undefined {
+  return value === null ? null : (bounded(value, min, max) ?? undefined);
+}
+
+function readViewport(value: unknown): NativeViewport | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!isFields(value)) {
+    return undefined;
+  }
+  const width = side(value.width, SIZE_MIN, SIZE_MAX);
+  const height = side(value.height, SIZE_MIN, SIZE_MAX);
+  const dpr = side(value.dpr, DPR_MIN, DPR_MAX);
+  const { mobile, touch, touchPointer } = value;
+  if (
+    width === undefined ||
+    height === undefined ||
+    dpr === undefined ||
+    typeof mobile !== 'boolean' ||
+    typeof touch !== 'boolean' ||
+    typeof touchPointer !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return { dpr, height, mobile, touch, touchPointer, width };
+}
+
+/** A tab's knobs as its page sent them, or null for anything else. */
+export function readState(value: unknown): KnobState | null {
+  if (!isFields(value)) {
+    return null;
+  }
+  const scheme = oneOf(value.scheme, ['system', 'light', 'dark'] as const);
+  const motion = oneOf(value.motion, ['system', 'reduce'] as const);
+  const contrast = oneOf(value.contrast, ['system', 'more'] as const);
+  const transparency = oneOf(value.transparency, ['system', 'reduce'] as const);
+  const textSize =
+    value.textSize === 'system' ? 'system' : bounded(value.textSize, TEXT_MIN, TEXT_MAX);
+  const viewport = readViewport(value.viewport);
+  const { offline } = value;
+  if (
+    !scheme ||
+    !motion ||
+    !contrast ||
+    !transparency ||
+    textSize === null ||
+    viewport === undefined ||
+    typeof offline !== 'boolean'
+  ) {
+    return null;
+  }
+  return { contrast, motion, offline, scheme, textSize, transparency, viewport };
+}
+
+const isText = (value: unknown): value is string => typeof value === 'string';
+
+function readBrands(value: unknown): Array<UaBrand> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const brands = value.flatMap((brand: unknown) =>
+    isFields(brand) && isText(brand.brand) && isText(brand.version)
+      ? [{ brand: brand.brand, version: brand.version }]
+      : [],
+  );
+  return brands.length === value.length ? brands : null;
+}
+
+function readHints(value: unknown): UaHints | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isFields(value)) {
+    return null;
+  }
+  const { architecture, bitness, model, platformVersion, uaFullVersion } = value;
+  const fullVersionList = readBrands(value.fullVersionList);
+  return isText(architecture) &&
+    isText(bitness) &&
+    isText(model) &&
+    isText(platformVersion) &&
+    isText(uaFullVersion) &&
+    fullVersionList
+    ? { architecture, bitness, fullVersionList, model, platformVersion, uaFullVersion }
+    : null;
+}
+
+/** The user agent a page asks its tab's requests to carry, or undefined for anything else. */
+export function readUa(value: unknown): NativeUa | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!isFields(value)) {
+    return undefined;
+  }
+  const { mobile, platform, uaPlatform, userAgent } = value;
+  const brands = readBrands(value.brands);
+  const hints = readHints(value.hints);
+  if (
+    !isText(userAgent) ||
+    !isText(platform) ||
+    !isText(uaPlatform) ||
+    typeof mobile !== 'boolean' ||
+    !brands ||
+    hints === null
+  ) {
+    return undefined;
+  }
+  return { brands, mobile, platform, uaPlatform, userAgent, ...(hints ? { hints } : {}) };
+}
+
+/** What a tab's page may send the service worker, through the bridge, or null for anything else. */
+export function readPageMessage(value: unknown): PageRequest | null {
+  if (!isFields(value)) {
+    return null;
+  }
+  switch (value.type) {
+    case 'set': {
+      const state = readState(value.state);
+      return state ? { state, type: 'set' } : null;
+    }
+    case 'native': {
+      return typeof value.on === 'boolean' ? { on: value.on, type: 'native' } : null;
+    }
+    default: {
+      break;
+    }
+  }
+  const { id } = value;
+  if (typeof id !== 'number' || !Number.isSafeInteger(id)) {
+    return null;
+  }
+  switch (value.type) {
+    case 'why': {
+      return isText(value.url) ? { id, type: 'why', url: value.url } : null;
+    }
+    case 'watch':
+    case 'bypass': {
+      return { id, type: value.type };
+    }
+    case 'frame': {
+      return typeof value.open === 'boolean' ? { id, open: value.open, type: 'frame' } : null;
+    }
+    case 'ua': {
+      const ua = readUa(value.ua);
+      return ua === undefined ? null : { id, type: 'ua', ua };
+    }
+    default: {
+      return null;
+    }
+  }
+}
+
+/** What a tab's bridge may send the service worker, or null for anything else. */
+export function readTabRequest(value: unknown): Request | Question | null {
+  return isFields(value) && value.type === 'get' ? { type: 'get' } : readPageMessage(value);
+}
+
+/** The user's own scheme and motion, from the offscreen document's word of a change, or null. */
+export function readSystemChange(value: unknown): SystemMedia | null {
+  if (!isFields(value) || value.type !== 'system' || !isFields(value.media)) {
+    return null;
+  }
+  const scheme = oneOf(value.media.scheme, ['light', 'dark'] as const);
+  const motion = oneOf(value.media.motion, ['reduce', 'no-preference'] as const);
+  return scheme && motion ? { motion, scheme } : null;
+}

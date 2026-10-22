@@ -17,8 +17,9 @@ dark.addEventListener('change', changed);
 reduce.addEventListener('change', changed);
 
 chrome.runtime.onMessage.addListener(
-  (message: SystemMessage, _sender, reply: (media: SystemMedia) => void) => {
-    if (message.type === 'read-system') {
+  (message: SystemMessage, sender, reply: (media: SystemMedia) => void) => {
+    // The service worker's question alone: a tab's content script reaches this document too.
+    if (message.type === 'read-system' && !sender.tab) {
       reply(read());
     }
     return false;

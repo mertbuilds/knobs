@@ -216,6 +216,15 @@ describe('viewport', () => {
     });
   });
 
+  test('a tab with no size yet scales nothing', () => {
+    expect(
+      params(
+        commands(with_({ viewport: PHONE }), { height: 0, width: 0 }),
+        'Emulation.setDeviceMetricsOverride',
+      ),
+    ).toMatchObject({ height: 874, scale: 1, width: 402 });
+  });
+
   test('none clears the override', () => {
     expect(params(commands(DEFAULT_STATE, TAB), 'Emulation.clearDeviceMetricsOverride')).toEqual(
       {},
