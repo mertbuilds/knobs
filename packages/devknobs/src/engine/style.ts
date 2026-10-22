@@ -11,18 +11,16 @@ export interface OwnStyle {
 
 type Root = Document | ShadowRoot;
 
-/** The named sheets on a document, shared by every copy of devknobs that styles it. */
-const NAMED = Symbol.for("devknobs.styles");
 /** Marks a constructed sheet as devknobs' own. */
 const OWN = Symbol.for("devknobs.own");
+/**
+ * A named sheet's name and its text, kept on the sheet itself, so every copy of
+ * devknobs that styles a document finds it, the page above its frame's included.
+ */
+const NAME = Symbol.for("devknobs.name");
+const TEXT = Symbol.for("devknobs.text");
 
-function named(doc: Document): Map<string, OwnStyle> {
-  const had: unknown = Reflect.get(doc, NAMED);
-  if (had instanceof Map) return had as Map<string, OwnStyle>;
-  const made = new Map<string, OwnStyle>();
-  Reflect.set(doc, NAMED, made);
-  return made;
-}
+const wrapped = new WeakMap<CSSStyleSheet, OwnStyle>();
 
 function isDocument(root: Root): root is Document {
   return root.nodeType === 9;
@@ -50,25 +48,34 @@ export function isOwnSheet(sheet: CSSStyleSheet): boolean {
   return Reflect.get(sheet, OWN) === true;
 }
 
-function adopt(root: Root, Sheet: typeof CSSStyleSheet, gone: () => void): OwnStyle {
-  const sheet = new Sheet();
-  Reflect.set(sheet, OWN, true);
-  root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
-  let text: string | null = "";
-  return {
+/** The one handle on `sheet`, adopted by `root`, for this copy of devknobs. */
+function wrap(root: Root, sheet: CSSStyleSheet): OwnStyle {
+  const had = wrapped.get(sheet);
+  if (had) return had;
+  const style: OwnStyle = {
     get textContent() {
-      return text;
+      const text: unknown = Reflect.get(sheet, TEXT);
+      return typeof text === "string" ? text : "";
     },
     set textContent(value) {
-      text = value;
+      Reflect.set(sheet, TEXT, value ?? "");
       sheet.replaceSync(value ?? "");
     },
     sheet,
     remove() {
       root.adoptedStyleSheets = root.adoptedStyleSheets.filter((other) => other !== sheet);
-      gone();
     },
   };
+  wrapped.set(sheet, style);
+  return style;
+}
+
+function adopt(root: Root, Sheet: typeof CSSStyleSheet, name?: string): OwnStyle {
+  const sheet = new Sheet();
+  Reflect.set(sheet, OWN, true);
+  if (name !== undefined) Reflect.set(sheet, NAME, name);
+  root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+  return wrap(root, sheet);
 }
 
 /**
@@ -79,7 +86,7 @@ function adopt(root: Root, Sheet: typeof CSSStyleSheet, gone: () => void): OwnSt
 export function addStyle(root: Root, css: string): OwnStyle {
   const Sheet = constructable(root);
   if (Sheet) {
-    const style = adopt(root, Sheet, () => {});
+    const style = adopt(root, Sheet);
     style.textContent = css;
     return style;
   }
@@ -92,7 +99,8 @@ export function addStyle(root: Root, css: string): OwnStyle {
 
 /** The sheet devknobs keeps on the page under `name`, if it has one. */
 export function findStyle(name: string, doc: Document = document): OwnStyle | null {
-  return named(doc).get(name) ?? doc.querySelector<HTMLStyleElement>(`style[data-devknobs="${name}"]`);
+  const sheet = "adoptedStyleSheets" in doc ? doc.adoptedStyleSheets.find((own) => Reflect.get(own, NAME) === name) : undefined;
+  return sheet ? wrap(doc, sheet) : doc.querySelector<HTMLStyleElement>(`style[data-devknobs="${name}"]`);
 }
 
 /** Every node devknobs adds to the page carries `data-devknobs`. */
@@ -100,12 +108,7 @@ export function ensureStyle(name: string, doc: Document = document): OwnStyle {
   const existing = findStyle(name, doc);
   if (existing) return existing;
   const Sheet = constructable(doc);
-  if (Sheet) {
-    const sheets = named(doc);
-    const style = adopt(doc, Sheet, () => sheets.delete(name));
-    sheets.set(name, style);
-    return style;
-  }
+  if (Sheet) return adopt(doc, Sheet, name);
   const style = doc.createElement("style");
   style.setAttribute("data-devknobs", name);
   (doc.head ?? doc.documentElement).appendChild(style);
