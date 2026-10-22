@@ -395,6 +395,19 @@ async function nativeViewport() {
     const real = await look();
     log('native: real window', real);
     assert.equal(real.frame, false);
+    // What this Chromium's page reports once touch is emulated and then turned off, with no
+    // reload: on Linux, hover and pointer stay those of no mouse until the page loads again.
+    const probe = await native.newPage();
+    await probe.goto(`${url}mobile`);
+    const probeSession = await native.newCDPSession(probe);
+    await probeSession.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+    await probeSession.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+    const untouched = await probe.evaluate(() => ({
+      coarse: matchMedia('(pointer: coarse)').matches,
+      hoverNone: matchMedia('(hover: none)').matches,
+    }));
+    await probe.close();
+    log('native: host after touch is off', untouched);
     // Kept through every change below: nothing reloads the page.
     await tab.evaluate(() => {
       (window as unknown as { kept: number }).kept = 7;
@@ -426,6 +439,7 @@ async function nativeViewport() {
     log('native: plain 390', plain);
     assert.deepEqual(plain, {
       ...real,
+      ...untouched,
       innerWidth: 390,
       kept: 7,
     });
@@ -475,7 +489,7 @@ async function nativeViewport() {
     }
     const after = await look();
     log('native: after reset', after);
-    assert.deepEqual(after, { ...real, kept: 7 });
+    assert.deepEqual(after, { ...real, ...untouched, kept: 7 });
     assert.equal(await attached(), false);
   } finally {
     await native.close();
