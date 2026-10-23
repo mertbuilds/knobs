@@ -193,8 +193,6 @@ for (const layout of LAYOUTS) {
         for (const [name, nodes] of Object.entries(LINES)) {
           expect([name, root.join(" "), left(...body, ...root, ...nodes)]).toEqual([name, root.join(" "), at]);
         }
-        // A bar in parts starts there by its margin, as it has no words.
-        expect(boxLeft(...body, ...root, "split")).toBe(at);
       }
     });
 
@@ -279,7 +277,6 @@ for (const layout of LAYOUTS) {
       for (const name of ["entryHead, the room of a line's chevron", "emptyLine", "noteLine", "noteButton", "rowsLabel", "pairs", "codeBlock, its text"]) {
         expect([name, right(...body, ...(LINES[name] ?? []))]).toEqual([name, INSET]);
       }
-      expect(boxRight(...body, "split")).toBe(INSET);
       const action = boxRight(...head, "view-actions", "button row-button view-action");
       expect(action).toBe(PAD / 2);
       expect(boxRight(...body, "row", "line", "button row-button clear")).toBe(action);

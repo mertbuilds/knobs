@@ -114,12 +114,12 @@ function extensionKind(url: string): string {
 }
 
 /**
- * The kind of thing a request is for, in a short word: `fetch` and `xhr` for
+ * The kind of thing a request is for, in a short word: `fetch`, `xhr` and `eventsource` for
  * a script's, `doc` for the page itself, and for what the page loads on its
  * own what its type, its address or its loader says it is.
  */
 export function kindLabel(entry: RequestEntry): string {
-  if (entry.kind === "fetch" || entry.kind === "xhr") return entry.kind;
+  if (entry.kind === "fetch" || entry.kind === "xhr" || entry.kind === "eventsource") return entry.kind;
   if (entry.kind === "navigation") return "doc";
   return (
     typeKind(entry.contentType) ||
@@ -278,7 +278,7 @@ export const CHIPS: readonly { id: Chip; label: string }[] = [
 
 /** A request a script made, a light row of one included. */
 function scripted(entry: RequestEntry): boolean {
-  if (entry.kind === "fetch" || entry.kind === "xhr") return true;
+  if (entry.kind === "fetch" || entry.kind === "xhr" || entry.kind === "eventsource") return true;
   return entry.initiatorType === "fetch" || entry.initiatorType === "xmlhttprequest";
 }
 
@@ -369,12 +369,22 @@ function compact(json: string): string {
  * come back changed, and the screen would say other than the copied text.
  */
 export function bodyText(record: BodyRecord, type = ""): string {
-  if (record.kind !== "text" || record.truncated || !isJson(record.type || type)) return record.text;
+  const parsed = bodyJson(record, type);
+  return parsed ? JSON.stringify(parsed.value, null, 2) : record.text;
+}
+
+/**
+ * A body's json, where it is all there, reads as json and comes back the same
+ * from what it reads as, for the same reasons `bodyText` has. Null for any
+ * other body.
+ */
+export function bodyJson(record: BodyRecord, type = ""): { value: unknown } | null {
+  if (record.kind !== "text" || record.truncated || !isJson(record.type || type)) return null;
   try {
     const value: unknown = JSON.parse(record.text);
-    return JSON.stringify(value) === compact(record.text) ? JSON.stringify(value, null, 2) : record.text;
+    return JSON.stringify(value) === compact(record.text) ? { value } : null;
   } catch {
-    return record.text;
+    return null;
   }
 }
 

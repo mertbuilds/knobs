@@ -24,6 +24,7 @@ export const ROW_PITCH = 26;
 /** An element, as far as the requests view builds and drives one. */
 export class FakeNode {
   className = "";
+  id = "";
   type = "";
   title = "";
   value = "";

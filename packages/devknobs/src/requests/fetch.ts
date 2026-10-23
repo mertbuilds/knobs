@@ -81,8 +81,9 @@ function see(input: unknown, init: unknown): Seen {
   // A body in the init takes the place of the request's own.
   const own = from && (sent === undefined || sent === null) ? carried(from, method, type) : null;
   const body = describeBody(sent, type) ?? own;
+  const referrerPolicy = String(field(init, "referrerPolicy") ?? from?.referrerPolicy ?? "");
   return {
-    request: { method, url: absolute(from ? from.url : String(input)), headers, body },
+    request: { method, url: absolute(from ? from.url : String(input)), headers, body, referrerPolicy },
     signal: field(init, "signal") ?? from?.signal,
   };
 }

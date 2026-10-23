@@ -1,5 +1,5 @@
 import { blank, type Clock } from "./record";
-import type { RequestEntry, RequestSizes, RequestSource } from "./types";
+import type { RequestEntry, RequestPhases, RequestSizes, RequestSource } from "./types";
 
 /**
  * How far before the browser's own start of a request the patch may have
@@ -44,6 +44,25 @@ export function sizesOf(entry: PerformanceEntry, origin: string): RequestSizes {
   return { transfer, encoded, decoded, hidden };
 }
 
+/** The phases of a timing entry, as Resource Timing gives them. */
+export function phasesOf(entry: PerformanceEntry): RequestPhases {
+  return {
+    startTime: entry.startTime,
+    workerStart: number(entry, "workerStart"),
+    redirectStart: number(entry, "redirectStart"),
+    redirectEnd: number(entry, "redirectEnd"),
+    fetchStart: number(entry, "fetchStart"),
+    domainLookupStart: number(entry, "domainLookupStart"),
+    domainLookupEnd: number(entry, "domainLookupEnd"),
+    connectStart: number(entry, "connectStart"),
+    secureConnectionStart: number(entry, "secureConnectionStart"),
+    connectEnd: number(entry, "connectEnd"),
+    requestStart: number(entry, "requestStart"),
+    responseStart: number(entry, "responseStart"),
+    responseEnd: number(entry, "responseEnd") || entry.startTime + entry.duration,
+  };
+}
+
 /** The status, where the browser gives one. */
 function statusOf(entry: PerformanceEntry): number | null {
   return number(entry, "responseStatus") || null;
@@ -75,17 +94,21 @@ export function lightEntry(
       end: row.timing.start + duration,
       duration,
     },
+    phases: phasesOf(entry),
     initiatorType: text(entry, "initiatorType") || entry.entryType,
     protocol: text(entry, "nextHopProtocol"),
   };
 }
 
-const KINDS: Record<string, RequestEntry["kind"]> = { fetch: "fetch", xmlhttprequest: "xhr" };
+/** The api a full row was made by, by what Resource Timing says loaded it. Chromium says `other` for an `EventSource`. */
+const KINDS: Record<string, RequestEntry["kind"]> = { fetch: "fetch", xmlhttprequest: "xhr", other: "eventsource" };
 
 /**
  * The full row the browser timed with `entry`, if any: the same address, made
  * by the same api, noted just before the browser started it, and not timed
- * yet. With several, the nearest in time.
+ * yet. With several, the nearest in time. An `EventSource` that connects again
+ * is noted only once it is open, a round trip after the browser started it, so
+ * its row may start anywhere up to the end of the entry.
  */
 export function matchFull(
   rows: readonly RequestEntry[],
@@ -95,11 +118,13 @@ export function matchFull(
   const kind = KINDS[text(entry, "initiatorType")];
   if (!kind) return null;
   const url = bare(entry.name);
+  const end = number(entry, "responseEnd") || entry.startTime + entry.duration;
   let best: RequestEntry | null = null;
   for (const row of rows) {
     if (row.kind !== kind || row.source !== source || row.sizes !== null) continue;
     const gap = entry.startTime - row.timing.at;
-    if (gap < -MATCH_AFTER || gap > MATCH_BEFORE || bare(row.url) !== url) continue;
+    const reopened = kind === "eventsource" && gap <= MATCH_AFTER && row.timing.at <= end + MATCH_AFTER;
+    if ((!reopened && (gap < -MATCH_AFTER || gap > MATCH_BEFORE)) || bare(row.url) !== url) continue;
     if (!best || Math.abs(gap) < Math.abs(entry.startTime - best.timing.at)) best = row;
   }
   return best;
@@ -111,6 +136,7 @@ export function mergeTiming(row: RequestEntry, entry: PerformanceEntry, origin: 
   const duration = Math.max(0, end - row.timing.at);
   return {
     sizes: sizesOf(entry, origin),
+    phases: phasesOf(entry),
     protocol: text(entry, "nextHopProtocol"),
     initiatorType: text(entry, "initiatorType"),
     status: row.status || statusOf(entry),

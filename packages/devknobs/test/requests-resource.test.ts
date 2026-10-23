@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { hush, hushOnce, quietFetch } from "../src/requests/quiet";
 import { share } from "../src/requests/shared";
-import { FakeObserver, FakeXHR, fakePage, leavePage, type Page, record, settle, timed } from "./requests-fakes";
+import { FakeEventSource, FakeObserver, FakeXHR, fakePage, leavePage, type Page, record, settle, timed } from "./requests-fakes";
 
 let page: Page;
 
@@ -98,6 +98,65 @@ describe("a request the browser timed too", () => {
       timing: { at: 100, end: 1_700_000_000_161.5, duration: 61.5 },
       responseBody: { kind: "binary" },
     });
+  });
+
+  test("and the phases Resource Timing gives, a hidden one as 0", async () => {
+    page.clock.tick(100);
+    await fetch("/api/a");
+    await settle();
+    FakeObserver.emit(
+      timed("http://app.test/api/a", 102, {
+        initiatorType: "fetch",
+        fetchStart: 102,
+        domainLookupStart: 103,
+        domainLookupEnd: 104,
+        connectStart: 104,
+        secureConnectionStart: 105,
+        connectEnd: 108,
+        requestStart: 108.5,
+      }),
+    );
+    expect(page.row().phases).toEqual({
+      startTime: 102,
+      workerStart: 0,
+      redirectStart: 0,
+      redirectEnd: 0,
+      fetchStart: 102,
+      domainLookupStart: 103,
+      domainLookupEnd: 104,
+      connectStart: 104,
+      secureConnectionStart: 105,
+      connectEnd: 108,
+      requestStart: 108.5,
+      responseStart: 114,
+      responseEnd: 122,
+    });
+  });
+
+  test("an EventSource's connection, which Chromium says `other` made", () => {
+    new EventSource("/api/events");
+    FakeObserver.emit(timed("http://app.test/api/events", 2, { initiatorType: "other" }));
+    expect(page.row()).toMatchObject({ kind: "eventsource", sizes: { decoded: 4000 } });
+  });
+
+  test("an EventSource's connection made again, noted once open, a round trip after its timing starts", () => {
+    new EventSource("/api/events");
+    const made = () => FakeEventSource.made.at(-1);
+    made()?.open();
+    page.clock.tick(3000);
+    made()?.drop();
+    FakeObserver.emit(timed("http://app.test/api/events", 1, { initiatorType: "other" }));
+    page.clock.tick(3000);
+    const started = page.clock.now();
+    page.clock.tick(40);
+    made()?.open();
+    page.clock.tick(3000);
+    made()?.drop();
+    FakeObserver.emit(timed("http://app.test/api/events", started, { initiatorType: "other", responseEnd: started + 3040 }));
+    expect(page.rows().map((row) => [row.kind, row.sizes?.decoded])).toEqual([
+      ["eventsource", 4000],
+      ["eventsource", 4000],
+    ]);
   });
 
   test("an XMLHttpRequest's row too", () => {

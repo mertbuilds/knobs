@@ -650,6 +650,8 @@ describe("a view's chrome", () => {
     ".tip",
     ".hint-key",
     ".key-set",
+    // A json value's hanging indent.
+    ".json-leaf",
     // A text box of a view.
     ".field-area",
     // A declaration's hanging indent and swatch, and the cells of the box's diagram.

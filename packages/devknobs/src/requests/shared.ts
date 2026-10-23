@@ -2,7 +2,7 @@ import type { RequestStore } from "./store";
 import type { RequestEntry } from "./types";
 
 /** The shape of what the copies of devknobs on a page share. A copy that finds another starts over. */
-export const SHARED_VERSION = 1;
+export const SHARED_VERSION = 2;
 
 /**
  * The one recorder on a page. The early script and the full one are two

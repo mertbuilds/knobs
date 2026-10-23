@@ -4,6 +4,8 @@ export interface Patch {
   key: string;
   original: unknown;
   value: unknown;
+  /** Whether `target` had the function as its own, or took it from its prototype. */
+  own: boolean;
 }
 
 /**
@@ -33,9 +35,10 @@ export function install<T extends object>(
 ): void {
   const original: unknown = Reflect.get(target, key);
   if (typeof original !== "function") return;
+  const own = Object.hasOwn(target, key);
   const value = make(original as T);
   disguise(value, original);
-  if (Reflect.set(target, key, value)) patches.push({ target, key, original, value });
+  if (Reflect.set(target, key, value)) patches.push({ target, key, original, value, own });
 }
 
 /**
@@ -44,8 +47,10 @@ export function install<T extends object>(
  * straight through from then on.
  */
 export function restore(patches: Patch[]): void {
-  for (const { target, key, original, value } of patches.reverse()) {
-    if (Reflect.get(target, key) === value) Reflect.set(target, key, original);
+  for (const { target, key, original, value, own } of patches.reverse()) {
+    if (Reflect.get(target, key) !== value) continue;
+    if (own) Reflect.set(target, key, original);
+    else Reflect.deleteProperty(target, key);
   }
   patches.length = 0;
 }

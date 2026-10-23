@@ -1313,9 +1313,13 @@ describe("a request's row", () => {
     expect(parts.length).toBeGreaterThan(20);
     const lined = parts.filter((rule) => /border(?!-radius)|outline|box-shadow/.test(rule.body));
     expect(lined.map((rule) => rule.selector)).toEqual([]);
-    // None has a ground: the bar's, a row's hover and a block of code's are the kit's.
+    // None has a ground: a row's hover and a block of code's are the kit's. What is drawn is
+    // content: the bars of the Timing tab, and the ground a preview's image and html stand on.
     const grounded = parts.filter((rule) => /background/.test(rule.body.replace(/transition:[^;]*;/g, "")));
-    expect(grounded.map((rule) => rule.selector)).toEqual([]);
+    expect(grounded.map((rule) => rule.selector).filter((selector) => !/^\.req-span\b/.test(selector))).toEqual([
+      ".req-picture",
+      ".req-html",
+    ]);
     const heavy = parts.filter((rule) => /font-weight|padding|border-radius/.test(rule.body));
     expect(heavy.map((rule) => rule.selector).filter((selector) => /method|status|mark|get|post|ok/.test(selector))).toEqual([]);
   });
@@ -1407,7 +1411,7 @@ describe("the requests, at every width the panel takes", () => {
 
   test("a request in full is one column as wide as the body, and its values wrap anywhere", () => {
     expect(body(".req-detail")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
-    expect(body(".req-body, .req-headers")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+    expect(body(".req-body, .req-response")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
     // The path breaks anywhere and keeps to two lines of 18.
     expect(body(".req-url")).toMatch(/word-break:\s*break-all/);
     expect(body(".req-url")).toMatch(/max-height:\s*36px;\s*overflow:\s*hidden/);
@@ -1473,6 +1477,40 @@ describe("the request tones", () => {
         const color = scheme.get(name) ?? "";
         expect(contrast(color, scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
         expect(contrast(color, scheme.get("--card") ?? "")).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test("the code colors are set for both schemes, and read as body text on the ground and on a card", () => {
+    const code = ["--code-key", "--code-str", "--code-num", "--code-kw", "--code-attr", "--code-com"];
+    for (const scheme of [light, dark]) {
+      for (const name of code) {
+        const color = scheme.get(name) ?? "";
+        expect([name, color]).toEqual([name, expect.stringMatching(/^#[0-9a-f]{6}$/)]);
+        for (const ground of ["--bg", "--card"]) {
+          expect([name, ground, contrast(color, scheme.get(ground) ?? "") >= 4.5]).toEqual([name, ground, true]);
+        }
+      }
+    }
+    // A response's text and its line numbers are on the panel's ground, where both read.
+    for (const scheme of [light, dark]) {
+      for (const name of ["--fg", "--faint"]) {
+        expect(contrast(scheme.get(name) ?? "", scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  test("the text of Preview, Initiator, Timing and EventStream is in the text's color or the quiet one, which read on the ground", () => {
+    const parts = rules(CSS).filter((rule) => /\.req-(where|shot|natural|chain|link|timing|when|dur|phase|ms|events?|cell|cookie)\b/.test(rule.selector));
+    expect(parts.length).toBeGreaterThan(8);
+    for (const rule of parts) {
+      for (const match of rule.body.matchAll(/(?:^|[;\s])color:\s*([^;]+)/g)) {
+        expect([rule.selector, match[1]?.trim()]).toEqual([rule.selector, expect.stringMatching(/^(var\(--faint\)|var\(--fg\)|inherit)$/)]);
+      }
+    }
+    for (const scheme of [light, dark]) {
+      for (const name of ["--fg", "--faint"]) {
+        expect(contrast(scheme.get(name) ?? "", scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
       }
     }
   });
