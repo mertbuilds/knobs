@@ -70,6 +70,8 @@ describe("the elements view", () => {
   let tree: DomTreeContext | null;
   let asked: Element[];
   let app: FakeElement & { nodeType: number };
+  let paneBody: FakeNode;
+  let destroyed: number;
 
   const page: StylesPage = {
     inspect: (target) => {
@@ -96,6 +98,7 @@ describe("the elements view", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     revealed = [];
+    destroyed = 0;
     asked = [];
     tree = null;
     FakeObserver.made = [];
@@ -126,7 +129,9 @@ describe("the elements view", () => {
       node: new FakeNode("div") as unknown as HTMLElement,
       reveal: (node) => revealed.push(node),
       selected: () => null,
-      destroy: () => undefined,
+      destroy: () => {
+        destroyed++;
+      },
     };
     view = createElementsView(
       { tips, title: () => undefined, outline: () => undefined },
@@ -138,8 +143,9 @@ describe("the elements view", () => {
         },
       },
     );
-    const body = new FakeNode("div");
-    body.append(fake(view.node));
+    paneBody = new FakeNode("div");
+    paneBody.className = "view-body";
+    paneBody.append(fake(view.node));
     return fake(view.node);
   }
 
@@ -151,13 +157,27 @@ describe("the elements view", () => {
     expect((styles.children[0] as FakeNode).className).toBe("crumbs");
   });
 
-  test("an element shown is revealed in the tree, and is $0", () => {
+  test("an element shown is revealed in the tree, and is $0 until the view goes", () => {
     start();
     view?.show(as(app));
     expect(revealed).toEqual([as(app)]);
     expect(Reflect.get(app.ownerDocument.defaultView as object, DOLLAR)).toBe(as(app));
     view?.show(null);
     expect(revealed).toEqual([as(app), null]);
+    view?.show(as(app));
+    view?.destroy();
+    view = null;
+    expect(destroyed).toBe(1);
+    expect(DOLLAR in (app.ownerDocument.defaultView as object)).toBe(false);
+  });
+
+  test("a new element starts the view's body from its top, not the tree over the styles", () => {
+    const node = start();
+    paneBody.scrollTop = 80;
+    node.scrollTop = 40;
+    view?.show(as(app));
+    expect(paneBody.scrollTop).toBe(0);
+    expect(node.scrollTop).toBe(40);
   });
 
   test("a line selected in the tree shows its element's styles and is $0, and is not revealed again", () => {

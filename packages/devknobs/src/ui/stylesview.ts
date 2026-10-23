@@ -843,7 +843,8 @@ export function createStylesView(context: StylesContext, page: StylesPage = PAGE
     context.mode?.set(next);
     modes?.set(next);
     // The other mode is another list, and starts from its top.
-    if (node.parentElement) node.parentElement.scrollTop = 0;
+    const body = node.closest(".view-body");
+    if (body) body.scrollTop = 0;
     draw();
   }
 
@@ -862,7 +863,8 @@ export function createStylesView(context: StylesContext, page: StylesPage = PAGE
     }
     watch(element);
     // The view's body scrolls, and a new element starts from its top.
-    if (node.parentElement) node.parentElement.scrollTop = 0;
+    const body = node.closest(".view-body");
+    if (body) body.scrollTop = 0;
     refresh();
   }
 
