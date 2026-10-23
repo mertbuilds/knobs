@@ -95,7 +95,7 @@ a link, form or script in the frame that goes to another origin (a sign-in provi
 
 ## pages that run devknobs themselves
 
-the extension's panel wins. it mounts before any of the page's scripts, as the page's host, so when the page mounts its own devknobs later, that copy puts up no panel of its own: its hotkey, grab key, grab on or off, open and grab color go to the extension's panel instead, and `window.devknobs` stays the extension's. when the page unmounts its copy, such as a component that goes on a route change, the extension's panel stays. the page's early script, if it has one, sees the extension's copy and patches nothing. an older devknobs (0.3.0 and before) does not know about the extension and takes the page; the extension takes it back, up to three times per page load, then leaves it to the page with a warning in the console.
+the extension's panel wins. it mounts before any of the page's scripts, as the page's host, so when the page mounts its own devknobs later, that copy puts up no panel of its own: its hotkey, grab key, grab on or off, open and grab color go to the extension's panel instead, and `window.devknobs` stays the extension's. the page's own calls to its copy, such as `setState` or `ready` imported from the package, go to the extension's panel too. when the page unmounts its copy, such as a component that goes on a route change, the extension's panel stays. the page's early script, if it has one, sees the extension's copy and patches nothing. an older devknobs (0.3.0 and before) does not know about the extension and takes the page; the extension takes it back, up to three times per page load, then leaves it to the page with a warning in the console.
 
 ## permissions
 

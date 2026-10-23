@@ -19,6 +19,8 @@ export interface Host {
   release: () => void;
   /** Take what a copy the page mounts asks for, from its mount options. */
   adopt: (options: object) => void;
+  /** The host's api, where a copy that defers to it sends its own calls. Older hosts leave none. */
+  api?: object;
 }
 
 function isHost(value: unknown): value is Host {
@@ -33,13 +35,18 @@ function isHost(value: unknown): value is Host {
 /**
  * Take the page for `release`. Another copy that holds it lets go first. With
  * `adopt`, the copy holds it as the host: copies the page mounts later hand
- * their options to `adopt`.
+ * their options to `adopt`, and their calls to `api`.
  */
-export function claim(scope: object, release: () => void, adopt?: (options: object) => void): void {
+export function claim(
+  scope: object,
+  release: () => void,
+  adopt?: (options: object) => void,
+  api?: object,
+): void {
   const previous: unknown = Reflect.get(scope, OWNER);
   if (typeof previous === "function" && previous !== release) previous();
   Reflect.set(scope, OWNER, release);
-  if (adopt) Reflect.set(scope, HOST, { release, adopt } satisfies Host);
+  if (adopt) Reflect.set(scope, HOST, { release, adopt, api } satisfies Host);
   else Reflect.deleteProperty(scope, HOST);
 }
 

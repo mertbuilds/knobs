@@ -169,11 +169,16 @@ window.pageUnmount = unmount;
   }
   // A copy of devknobs that knows no hosts, as 0.3.0 claims the page: it lets the one
   // that holds it go, then puts its own api and panel up, and takes them away on release.
-  if (path === '/own-old') {
+  // With `n`, it claims the page again after each release, as a page that keeps mounting
+  // its copy does, up to `n` claims in all.
+  const ownOld = /^\/own-old(?:\?n=(\d+))?$/.exec(path);
+  if (ownOld) {
     response.setHeader('content-type', 'text/html');
     response.end(
       page(`<script>
-addEventListener('load', () => setTimeout(() => {
+const claims = ${Number(ownOld[1] ?? 1)};
+window.oldClaims = 0;
+const take = () => {
   const OWNER = Symbol.for('devknobs.owner');
   const api = { old: true };
   const host = document.createElement('div');
@@ -185,14 +190,17 @@ addEventListener('load', () => setTimeout(() => {
     if (window.devknobs === api) delete window.devknobs;
     if (window[OWNER] === release) delete window[OWNER];
     window.oldReleased = (window.oldReleased ?? 0) + 1;
+    if (window.oldClaims < claims) setTimeout(take, 100);
   };
   const previous = window[OWNER];
   if (typeof previous === 'function' && previous !== release) previous();
   window[OWNER] = release;
   window.devknobs = api;
   document.body.append(host);
+  window.oldClaims++;
   window.oldMounted = true;
-}, 300));
+};
+addEventListener('load', () => setTimeout(take, 300));
 </script>`),
     );
     return;
@@ -1386,6 +1394,7 @@ async function strictPolicy() {
 
 declare global {
   interface Window {
+    oldClaims?: number;
     oldMounted?: boolean;
     oldReleased?: number;
     pageMounted?: boolean;
@@ -1405,8 +1414,10 @@ const panels = (tab: Page) =>
 
 /**
  * A page that mounts devknobs itself: the extension's copy holds the page as its host, so the
- * page's copy puts up no panel of its own and hands it its hotkey and grab's color. Its
- * unmount leaves the panel. A copy that knows no hosts takes the page, and the host takes it back.
+ * page's copy puts up no panel of its own and hands it its hotkey and grab's color, and the
+ * page's calls to its own copy move the extension's knobs. Its unmount leaves the panel. A copy
+ * that knows no hosts takes the page, and the host takes it back, three times at most, its
+ * settings' switch as it was.
  */
 async function pageOwnCopy() {
   const tab = await context.newPage();
@@ -1422,6 +1433,23 @@ async function pageOwnCopy() {
   };
   log('page with its own devknobs', own);
   assert.deepEqual(own, { grabColor: 'green', panels: [{ extension: true, id: '' }] });
+  // The page's own module api, the same copy its script mounted, goes to the extension's.
+  const forwarded = await tab.evaluate(async () => {
+    // The page's url for the module build, which TypeScript cannot resolve from here.
+    const at = '/devknobs/index.js';
+    const own: typeof import('devknobs') = await import(at);
+    const before = window.devknobs!.getState().scheme;
+    own.setState({ scheme: 'dark' });
+    const ready = await own.ready().then(
+      () => 'resolved',
+      (error: unknown) => `rejected: ${String(error)}`,
+    );
+    const after = window.devknobs!.getState().scheme;
+    own.setState({ scheme: before });
+    return { after, ready, same: own.getState().scheme === window.devknobs!.getState().scheme };
+  });
+  log("the page's module api", forwarded);
+  assert.deepEqual(forwarded, { after: 'dark', ready: 'resolved', same: true });
   await tab.evaluate(() => window.devknobs!.setState({ panel: { open: false } }));
   await tab.evaluate(() => window.devknobs!.ready());
   await tab.keyboard.press('Shift+J');
@@ -1446,6 +1474,79 @@ async function pageOwnCopy() {
   };
   log('page with a copy that knows no hosts', old);
   assert.deepEqual(old, { api: 'function', panels: [{ extension: true, id: '' }], released: 1 });
+
+  // A copy that claims the page again each time: three take-backs, then it keeps the page.
+  const warnings: Array<string> = [];
+  tab.on('console', (message) => {
+    if (message.text().startsWith('devknobs:')) {
+      warnings.push(message.text());
+    }
+  });
+  await tab.goto(`${url}own-old?n=4`);
+  await tab.waitForFunction(() => window.oldClaims === 4);
+  await tab.waitForTimeout(500);
+  const kept = {
+    api: await tab.evaluate(() => (window.devknobs as unknown as { old?: boolean }).old),
+    panels: await panels(tab),
+    released: await tab.evaluate(() => window.oldReleased),
+    warnings: warnings.length,
+  };
+  log('page with a copy that keeps claiming', kept);
+  assert.deepEqual(kept, {
+    api: true,
+    panels: [{ extension: false, id: 'old' }],
+    released: 3,
+    warnings: 1,
+  });
+
+  // In-page from the settings' switch: a take-back keeps the switch off, the size emulated.
+  await tab.goto(url);
+  await ready(tab);
+  await openPanel(tab);
+  const switchOf = () =>
+    tab.evaluate(() =>
+      document
+        .querySelector('[data-devknobs="panel"]')
+        ?.shadowRoot?.querySelector('[aria-describedby="devknobs-native-hint"]')
+        ?.getAttribute('aria-checked'),
+    );
+  const flip = () =>
+    tab.evaluate(() =>
+      document
+        .querySelector('[data-devknobs="panel"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[aria-describedby="devknobs-native-hint"]')!
+        .click(),
+    );
+  await flip();
+  await tab.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-devknobs="panel"]')
+        ?.shadowRoot?.querySelector('[aria-describedby="devknobs-native-hint"]')
+        ?.getAttribute('aria-checked') === 'false',
+  );
+  await set(tab, { text: 48 });
+  await tab.waitForFunction(() => document.documentElement.style.fontSize === '48px');
+  await tab.goto(`${url}own-old`);
+  await ready(tab);
+  await tab.waitForFunction(() => window.oldReleased === 1);
+  await tab.waitForFunction(async () => {
+    await window.devknobs?.ready?.();
+    return getComputedStyle(document.documentElement).fontSize === '48px';
+  });
+  await tab.waitForTimeout(300);
+  const inPage = {
+    fontSize: await tab.evaluate(() => getComputedStyle(document.documentElement).fontSize),
+    inline: await tab.evaluate(() => document.documentElement.style.fontSize),
+    switch: await switchOf(),
+  };
+  log('in-page, after a take-back', inPage);
+  assert.deepEqual(inPage, { fontSize: '48px', inline: '48px', switch: 'false' });
+  // Back as it was for whatever runs next.
+  await openPanel(tab);
+  await flip();
+  await set(tab, { text: 'system' });
+  await tab.evaluate(() => window.devknobs!.ready());
   assert.deepEqual(errors, []);
   await tab.close();
 }

@@ -1,6 +1,6 @@
 import * as engine from "./engine";
 import { checkPatch } from "./engine/check";
-import { describe } from "./engine/describe";
+import { describe as describeKnobs, type KnobDescription } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
 import { GEO_PRESETS } from "./engine/geo";
@@ -11,7 +11,7 @@ import { createGrab, type GrabControl } from "./grab/control";
 import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
 import type { GrabOptions, GrabResult } from "./grab/types";
 import { pageChoices } from "./host";
-import { claim, expose, free, hostOf, owned, superseded, withdraw } from "./instance";
+import { claim, expose, free, type Host, hostOf, owned, superseded, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
 import type { DevknobsState, DevknobsStatePatch, GrabColorValue } from "./types";
 import { createKeys, type LiveKeys } from "./ui/bindings";
@@ -125,6 +125,8 @@ let inspectControl: InspectControl | null = null;
 let keys: LiveKeys | null = null;
 /** The options of the mount in force, with what a host took from the page's on top. Null unmounted. */
 let mounted: MountOptions | null = null;
+/** The host this copy's mount deferred to. Its calls go there while that host holds the page. */
+let hostedBy: Host | null = null;
 
 /** How often a host takes the page back from copies that know no hosts, before it lets them have it. */
 const RETAKES = 3;
@@ -143,12 +145,14 @@ export function mount(options: MountOptions = {}): void {
   if (panel || stopKeys) return;
   const host = options.host ? null : hostOf(window);
   if (host) {
+    hostedBy = host;
     host.adopt(options);
     return;
   }
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
-  claim(window, unmount, options.host ? adopt : undefined);
+  if (options.host) claim(window, unmount, adopt, api);
+  else claim(window, unmount);
   expose(window, api);
   engine.start(options);
   mounted = options;
@@ -218,8 +222,11 @@ function adopt(options: object): void {
 
 /** Remove the panel and undo every knob. A copy that was taken over has done so already. */
 export function unmount(): void {
+  hostedBy = null;
   if (superseded(window, unmount)) return;
   detach();
+  // A host keeps its switch's choice through a take-back: off stays off.
+  const native = mounted?.host ? engine.nativeSwitch() : null;
   engine.stop();
   withdraw(window, api);
   free(window, unmount);
@@ -227,10 +234,10 @@ export function unmount(): void {
   mounted = null;
   // A host taken over by a copy that knows no hosts, such as an older one the
   // page loads, takes the page back once that copy is in.
-  if (was?.host) queueMicrotask(() => retake(was));
+  if (was?.host) queueMicrotask(() => retake(was, native));
 }
 
-function retake(options: MountOptions): void {
+function retake(options: MountOptions, native: { on: boolean; note: string | null } | null): void {
   if (mounted || !owned(window) || hostOf(window)) return;
   if (retaken++ >= RETAKES) {
     if (retaken === RETAKES + 1) {
@@ -238,7 +245,21 @@ function retake(options: MountOptions): void {
     }
     return;
   }
+  // Before the mount, so the driver is never handed the knobs the page emulates.
+  if (native && !native.on) engine.setNative(false, native.note);
   mount(options);
+}
+
+/**
+ * The host's own `name`, while this copy's mount deferred to a host that still
+ * holds the page, so the page's calls move the host's knobs. Null otherwise.
+ */
+function hosted<K extends keyof DevknobsApi>(name: K): DevknobsApi[K] | null {
+  if (!hostedBy) return null;
+  const host = hostOf(window);
+  if (!host?.api || host.release !== hostedBy.release) return null;
+  const found: unknown = Reflect.get(host.api, name);
+  return typeof found === "function" ? (found as DevknobsApi[K]) : null;
 }
 
 /**
@@ -255,7 +276,9 @@ export { setSystemMedia } from "./engine/system";
  */
 export const setNative = engine.setNative;
 
-export const getState = engine.getState;
+export function getState(): DevknobsState {
+  return (hosted("getState") ?? engine.getState)();
+}
 
 /**
  * Apply a patch of knobs. A knob or a field the state does not have, or a
@@ -263,14 +286,27 @@ export const getState = engine.getState;
  * whole of `getState()` goes back in.
  */
 export function setState(patch: DevknobsStatePatch): DevknobsState {
+  const host = hosted("setState");
+  if (host) return host(patch);
   checkPatch(patch);
   return engine.setState(patch);
 }
 
-export const reset = engine.reset;
-export const replay = engine.replay;
-export const ready = engine.ready;
-export { describe };
+export function reset(): void {
+  (hosted("reset") ?? engine.reset)();
+}
+
+export function replay(): void {
+  (hosted("replay") ?? engine.replay)();
+}
+
+export function ready(): Promise<DevknobsState> {
+  return (hosted("ready") ?? engine.ready)();
+}
+
+export function describe(): KnobDescription[] {
+  return (hosted("describe") ?? describeKnobs)();
+}
 
 /**
  * Copy what an agent needs to find the elements in the code: their html, the
@@ -284,6 +320,8 @@ export async function grab(
   elements?: Element | Iterable<Element | null | undefined> | null,
   options?: GrabOptions,
 ): Promise<GrabResult | null> {
+  const host = hosted("grab");
+  if (host) return host(elements, options);
   const loaded = await import("./grab");
   return loaded.grab(elements, options);
 }
