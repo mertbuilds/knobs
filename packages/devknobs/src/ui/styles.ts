@@ -1208,18 +1208,6 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
-/* A tiny bar in parts, each as wide as its share: the track is the ground and
-   the parts are in the text's color. */
-.split {
-  display: flex;
-  gap: 2px;
-  height: 4px;
-  margin: 4px var(--view-end) 4px var(--view-start);
-  overflow: hidden;
-  background: var(--track);
-  border-radius: 2px;
-}
-.split-part { flex: 0 0 0; min-width: 1px; background: var(--fg); }
 /* A row of tabs, as the browsers' tools have them over a request: words
    alone, quiet, and the one that is on in the text's color on a card. A bar
    wider than the view scrolls sideways, with no bar of its own. */
@@ -1309,7 +1297,9 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .json-head { display: flex; align-items: baseline; width: 100%; white-space: pre; text-align: left; }
 .json-head > .sect-turn { align-self: center; }
 .json-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
-.json-kids, .json-leaf { padding-left: var(--col-icon); }
+.json-kids { padding-left: var(--col-icon); }
+/* A long value wraps two steps in from where its line starts, as the browsers' preview has it. */
+.json-leaf { padding-left: calc(var(--col-icon) + 2ch); text-indent: -2ch; }
 /* What folds out under a view's row, one thing under another, padded as a
    row's editor is: 4 in from the row's edges, so what it holds is 4 round. */
 .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 2px var(--col-pad) 6px; }
@@ -1663,7 +1653,52 @@ s.css-decl, s.css-decl .css-var, s.css-decl .css-name { color: var(--faint); tex
 .req-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0 var(--view-end) 0 var(--view-start); font-family: var(--mono); font-size: 11px; }
 .req-frame { display: flex; align-items: baseline; gap: 8px; }
 .req-fn { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.req-where { flex: 0 1 auto; min-width: 32px; overflow: hidden; text-overflow: ellipsis; color: var(--faint); }
+.req-where { flex: 0 1 auto; min-width: 32px; margin-left: auto; overflow: hidden; text-overflow: ellipsis; color: var(--faint); text-decoration: underline; text-underline-offset: 2px; }
+/* Preview: an image as itself on a card, its size under it, and html drawn in a frame on white, as a page is. */
+.req-shot { display: grid; justify-items: start; gap: 4px; padding: 0 var(--view-end) 0 var(--view-start); }
+.req-picture { display: block; max-width: 100%; max-height: 320px; object-fit: contain; background: var(--card); border-radius: 4px; }
+.req-natural { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.req-html { all: unset; display: block; width: 100%; height: 320px; background: #ffffff; border-radius: 8px; color-scheme: light; }
+/* The initiator chain: an address a line, each a step in from what loaded it, the request itself in the text's color. */
+.req-chain { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0 var(--view-end) 0 var(--view-start); font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.req-link { color: var(--faint); }
+.req-link.self { color: inherit; }
+/* Timing: when, then a phase a line with its bar on a track of the whole and its time, and the total under them. */
+.req-timing { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.req-when { padding: 0 var(--view-end) 0 var(--view-start); font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.req-dur { flex: none; padding-right: var(--col-pad); font-size: 10px; letter-spacing: 0.04em; color: var(--faint); }
+.req-phases {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(32px, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 0 var(--view-end) 0 var(--view-start);
+  font-size: 11px;
+}
+.req-total { padding-left: calc(var(--view-start) + var(--col-step)); }
+.req-ms { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.req-track { position: relative; height: 8px; }
+.req-span { position: absolute; top: 0; bottom: 0; min-width: 1px; border-radius: 1px; background: var(--faint); }
+.req-span.dns { background: var(--req-patch); }
+.req-span.connect { background: var(--req-put); }
+.req-span.ssl { background: var(--req-post); }
+.req-span.wait { background: var(--ok); }
+.req-span.download { background: var(--req-get); }
+/* Cookies: a cookie under another, each its fields in the table's words. */
+.req-cookie + .req-cookie { margin-top: 6px; }
+/* EventStream: a message a line under a head that names the columns, its data in mono and wrapping anywhere. */
+.req-events {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 0 var(--view-end) 0 var(--view-start);
+  font-size: 11px;
+}
+.req-events.ids { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+.req-event { display: contents; }
+.req-event-head > .req-cell { font-size: 10.5px; color: var(--faint); }
+.req-event > .req-cell:nth-last-child(2) { font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.req-event > .req-cell:last-child { font-variant-numeric: tabular-nums; color: var(--faint); }
 
 /* The lists of the storage view, a row under a row as the panel's rows are. */
 .st-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }

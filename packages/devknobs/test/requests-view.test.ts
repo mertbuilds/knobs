@@ -13,7 +13,7 @@ import { comboText, defaultKeys, keyAction, type KeyLike, parseCombo } from "../
 import { GONE_NOTE, HIDES_NOTE } from "../src/ui/requestdetail";
 import { BRANDS } from "../src/ui/icons";
 import { clockTime, copyText, LIGHT_WHY } from "../src/ui/requestformat";
-import { NO_RESPONSE_DATA, PROVISIONAL } from "../src/ui/requestparts";
+import { FETCH_STREAM, NO_RESPONSE_DATA, PROVISIONAL, TIMING_MISSING } from "../src/ui/requestparts";
 import {
   COPIED_SHOWS,
   createRequests,
@@ -1178,7 +1178,7 @@ describe("the detail", () => {
     expect(segs(at).on).toEqual(["Response"]);
     at.pane.escape();
     at.rows()[0]?.click();
-    expect(segs(at)).toEqual({ shown: ["Headers", "Initiator", "Timing"], on: ["Headers"] });
+    expect(segs(at)).toEqual({ shown: ["Headers", "Preview", "Initiator", "Timing"], on: ["Headers"] });
   });
 
   test("picking a tab starts it at its top", () => {
@@ -1412,12 +1412,12 @@ describe("the detail", () => {
     expect(region(at).find("tok-str").map((each) => each.textContent)).toEqual(['"/x"']);
   });
 
-  test("a light row says what the browser gives, shows General, Initiator and Timing, and opens on Headers", () => {
+  test("a light row says what the browser gives, shows General, Preview, Initiator and Timing, and opens on Headers", () => {
     const at = scene();
     at.store.put(image());
     at.requests.toggle();
     at.rows()[0]?.click();
-    expect(segs(at)).toEqual({ shown: ["Headers", "Initiator", "Timing"], on: ["Headers"] });
+    expect(segs(at)).toEqual({ shown: ["Headers", "Preview", "Initiator", "Timing"], on: ["Headers"] });
     expect(region(at).nodes()[0]?.textContent).toBe(LIGHT_WHY);
     expect(groups(at)).toEqual(["General"]);
     expect(listed(groupOf(at, "General").one("pairs"))).toEqual([
@@ -1425,59 +1425,157 @@ describe("the detail", () => {
       ["Status Code", "●200 OK"],
     ]);
     pick(at, "Initiator");
-    expect(listed(region(at).one("pairs"))).toEqual([["loaded by", "img"]]);
+    expect(groups(at)).toEqual(["Request initiator chain"]);
+    expect(region(at).find("req-link").map((link) => link.textContent)).toEqual(["http://cdn.test/img/logo.png"]);
+    expect(listed(region(at).one("pairs"))).toEqual([["Initiator", "an <img> element"]]);
     pick(at, "Timing");
-    expect(groups(at)).toEqual(["Timing", "Request"]);
-    expect(groupOf(at, "Request").textContent).toContain("hidden by the server");
-    expect(listed(groupOf(at, "Timing").one("pairs")).map(([label]) => label)).toEqual([
-      "started at",
-      "waiting",
-      "download",
-      "total",
-    ]);
+    expect(groups(at)).toEqual(["Request"]);
+    expect(groupOf(at, "Request").textContent).toContain("hidden: the server sends no Timing-Allow-Origin");
   });
 
-  test("Timing: the two parts in a bar, the lines, and what the request is", () => {
+  test("Timing: when it was queued, what the page saw in its phases with a bar each, the total, and what the request is", () => {
     const at = scene();
-    const entry = at.add(10);
+    at.add(10);
     at.requests.toggle();
     at.rows()[0]?.click();
     pick(at, "Timing");
-    expect(listed(groupOf(at, "Timing").one("pairs"))).toEqual([
-      ["started at", clockTime(new Date(entry.timing.start))],
-      ["waiting", "5ms"],
-      ["download", "15ms"],
-      ["total", "20ms"],
+    expect(region(at).one("req-when").textContent).toBe("Queued at 10.00 ms");
+    expect(groups(at)).toEqual(["Request/Response", "Request"]);
+    const phases = groupOf(at, "Request/Response");
+    expect(phases.one("req-dur").textContent).toBe("DURATION");
+    expect(phases.find("req-phase").map((each) => each.textContent)).toEqual(["Waiting for server response", "Content Download"]);
+    expect(phases.find("req-ms").map((each) => each.textContent)).toEqual(["5.00 ms", "15.00 ms"]);
+    expect(phases.find("req-span").map((bar) => [bar.className, bar.style.left, bar.style.width])).toEqual([
+      ["req-span wait", "0.00%", "25.00%"],
+      ["req-span download", "25.00%", "75.00%"],
     ]);
-    // The one bar: waiting, then download, each as wide as its share.
-    const bar = groupOf(at, "Timing").one("split");
-    expect(bar.getAttribute("aria-label")).toBe("waiting 5ms, download 15ms");
-    expect(bar.nodes().map((part) => part.style.flexGrow)).toEqual(["0.25", "0.75"]);
+    const total = region(at).one("req-total");
+    expect([total.one("req-phase").textContent, total.one("req-ms").textContent]).toEqual(["Total", "20.00 ms"]);
+    expect(region(at).textContent).toContain(TIMING_MISSING);
     expect(listed(groupOf(at, "Request").one("pairs"))).toEqual([
-      ["type", "application/json"],
-      ["size", "1.5 KB over the wire, 21 bytes of body"],
-      ["protocol", "h2"],
-      ["kind", "fetch"],
+      ["Type", "fetch"],
+      ["Size", "1.5 kB transferred over network, resource size: 21 B"],
+      ["Protocol", "h2"],
     ]);
     expect(region(at).textContent).not.toContain("Bearer abc");
   });
 
-  test("Cookies shows the cookies sent and set, and EventStream an event stream", () => {
+  test("Timing from Resource Timing: Queued at, Started at and each section, and a caution while it runs", () => {
     const at = scene();
-    at.add(10, { requestHeaders: [["Cookie", "a=1"]] });
-    at.add(20, { contentType: "text/event-stream", responseBody: { kind: "stream", text: "", size: null, truncated: false, type: "text/event-stream" } });
+    const phases = {
+      startTime: 12,
+      workerStart: 0,
+      redirectStart: 0,
+      redirectEnd: 0,
+      fetchStart: 12,
+      domainLookupStart: 13,
+      domainLookupEnd: 14,
+      connectStart: 14,
+      secureConnectionStart: 0,
+      connectEnd: 16,
+      requestStart: 16,
+      responseStart: 20,
+      responseEnd: 30,
+    };
+    at.add(10, { phases });
+    at.add(40, { state: "pending", timing: { start: LOADED + 40, at: 40, response: null, end: null, duration: null } });
     at.requests.toggle();
     at.rows()[1]?.click();
-    pick(at, "Cookies");
-    expect(listed(region(at).one("pairs"))).toEqual([
-      ["Cookie", "a=1"],
-      ["set-cookie", "sid=1"],
+    pick(at, "Timing");
+    expect(region(at).one("req-when").nodes().map((line) => line.textContent)).toEqual(["Queued at 10.00 ms", "Started at 12.00 ms"]);
+    expect(groups(at)).toEqual(["Resource Scheduling", "Connection Start", "Request/Response", "Request"]);
+    expect(groupOf(at, "Connection Start").find("req-phase").map((each) => each.textContent)).toEqual([
+      "Stalled",
+      "DNS Lookup",
+      "Initial connection",
     ]);
     at.pane.escape();
     at.rows()[0]?.click();
-    expect(segs(at).shown).toContain("EventStream");
+    expect(region(at).textContent).toContain("CAUTION: request is not finished yet!");
+  });
+
+  test("Preview: json as a tree, an image as itself with its size, html drawn with no scripts", () => {
+    const at = scene();
+    at.add(10);
+    at.add(20, {
+      method: "GET",
+      contentType: "image/png",
+      url: "http://app.test/logo.png",
+      responseBody: { kind: "binary", text: "", size: 70, truncated: false, type: "image/png" },
+    });
+    at.add(30, {
+      contentType: "text/html",
+      responseBody: { kind: "text", text: "<p>hi</p>", size: 9, truncated: false, type: "text/html" },
+    });
+    at.requests.toggle();
+    at.rows()[2]?.click();
+    pick(at, "Preview");
+    expect(region(at).one("json-head").textContent).toBe('{id: 7, name: "Ada"}');
+    at.pane.escape();
+    at.rows()[1]?.click();
+    const picture = region(at).one("req-picture");
+    expect(Reflect.get(picture, "src")).toBe("http://app.test/logo.png");
+    Reflect.set(picture, "naturalWidth", 16);
+    Reflect.set(picture, "naturalHeight", 8);
+    picture.fire("load");
+    expect(region(at).one("req-natural").textContent).toBe("16 × 8");
+    expect(region(at).textContent).toContain("21 bytes, image/png");
+    at.pane.escape();
+    at.rows()[0]?.click();
+    const frame = region(at).one("req-html");
+    expect(frame.tag).toBe("iframe");
+    expect(frame.getAttribute("sandbox")).toBe("");
+    expect(frame.getAttribute("srcdoc")).toBe("<p>hi</p>");
+  });
+
+  test("Cookies: Request Cookies and Response Cookies, a cookie's fields in the table's words", () => {
+    const at = scene();
+    at.add(10, { requestHeaders: [["Cookie", "a=1"]] });
+    at.requests.toggle();
+    at.rows()[0]?.click();
+    pick(at, "Cookies");
+    expect(groups(at)).toEqual(["Request Cookies", "Response Cookies"]);
+    expect(listed(groupOf(at, "Request Cookies").one("pairs"))).toEqual([
+      ["Name", "a"],
+      ["Value", "1"],
+      ["Size", "3"],
+    ]);
+    expect(listed(groupOf(at, "Response Cookies").one("pairs"))).toEqual([
+      ["Name", "sid"],
+      ["Value", "1"],
+      ["Expires / Max-Age", "Session"],
+      ["Size", "5"],
+    ]);
+  });
+
+  test("EventStream: an EventSource's messages as Id, Type, Data and Time; a stream read with fetch says why it has none", () => {
+    const at = scene();
+    const stream = { kind: "stream" as const, text: "", size: null, truncated: false, type: "text/event-stream" };
+    at.add(10, { contentType: "text/event-stream", responseBody: stream });
+    at.add(20, {
+      kind: "eventsource",
+      method: "GET",
+      contentType: "text/event-stream",
+      requestBody: null,
+      responseBody: null,
+      messages: [
+        { type: "tick", data: '{"tick":1}', id: "", time: LOADED + 100 },
+        { type: "done", data: '{"done":true}', id: "", time: LOADED + 200 },
+      ],
+    });
+    at.requests.toggle();
+    at.rows()[1]?.click();
     pick(at, "EventStream");
-    expect(region(at).textContent).toBe("not read: a stream");
+    expect(region(at).textContent).toBe(FETCH_STREAM);
+    at.pane.escape();
+    at.rows()[0]?.click();
+    expect(segs(at).on).toEqual(["EventStream"]);
+    const lines = region(at).find("req-event").map((line) => line.nodes().map((cell) => cell.textContent));
+    expect(lines).toEqual([
+      ["Type", "Data", "Time"],
+      ["tick", '{"tick":1}', clockTime(new Date(LOADED + 100))],
+      ["done", '{"done":true}', clockTime(new Date(LOADED + 200))],
+    ]);
   });
 
   test("the initiator is a frame a line, the frames that are not the page's own as one line that opens", async () => {
@@ -1495,7 +1593,8 @@ describe("the detail", () => {
     pick(at, "Initiator");
     const stack = region(at).one("req-stack");
     const frames = () => stack.nodes().map((row) => row.nodes().map((cell) => cell.textContent));
-    expect(frames()).toEqual([["save", "app.js:10:5"], ["2 more"], ["onClick", "app.js:22:3"]]);
+    expect(groups(at)).toEqual(["Request call stack", "Request initiator chain"]);
+    expect(frames()).toEqual([["save", "app.js:10:5"], ["Show 2 ignore-listed frames"], ["onClick", "app.js:22:3"]]);
     const where = stack.find("req-where")[0];
     expect(where?.title).toBe("http://app.test/src/app.js:10:5");
     where?.click();
@@ -1622,7 +1721,7 @@ describe("the detail", () => {
     at.rows()[0]?.click();
     expect(segs(at)).toEqual({ shown: ["Headers", "Preview", "Response", "Initiator", "Timing"], on: ["Headers"] });
     pick(at, "Timing");
-    const timing = groupOf(at, "Timing");
+    const request = groupOf(at, "Request");
     at.store.update(entry.id, {
       state: "ok",
       status: 200,
@@ -1632,8 +1731,8 @@ describe("the detail", () => {
     });
     at.timer.run();
     expect(segs(at)).toEqual({ shown: [...ALL_TABS.filter((tab) => tab !== "Payload")], on: ["Timing"] });
-    // Its timing is the same, so that part is the node it was.
-    expect(groupOf(at, "Timing")).toBe(timing);
+    // What it is did not change, so that part is the node it was.
+    expect(groupOf(at, "Request")).toBe(request);
   });
 });
 

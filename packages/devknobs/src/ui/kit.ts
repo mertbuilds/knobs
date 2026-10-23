@@ -13,7 +13,7 @@
  *   entryHead({ name: "key", value: "value" }); entryFold({ index, name, value, end, open });
  *   sectionFold({ label, glyph, ends, open }); branch([node, node]); noteButton("3 hidden", run);
  *   emptyAction("select an element", run);
- *   group({ label, ends }); pairs(lines); codeBlock({ text, lines }); splitBar(shares, label);
+ *   group({ label, ends }); pairs(lines); codeBlock({ text, lines });
  *   tabBar({ options, label, onChange }); section({ label, count, ends, open }); actButton("Raw", run);
  *   codeView({ text, lang }); jsonTree(value);
  *   stack([noteLine("..."), codeBlock({ text }).node, pairs(lines).node, controls([{ label, run }]).node]);
@@ -459,23 +459,6 @@ export function codeBlock(options: CodeOptions): Code {
     wrap = toggle;
   }
   return { node, wrap };
-}
-
-/**
- * A tiny bar split into parts, each as wide as its share of the whole: the
- * track is the ground and the parts are in the text's color. `label` says
- * what it shows, for assistive tech.
- */
-export function splitBar(shares: readonly number[], label: string): HTMLElement {
-  const node = el("div", "split");
-  node.setAttribute("role", "img");
-  node.setAttribute("aria-label", label);
-  for (const share of shares) {
-    const part = el("span", "split-part");
-    part.style.flexGrow = String(share);
-    node.append(part);
-  }
-  return node;
 }
 
 /** What a switch on a line of its own is built from. */

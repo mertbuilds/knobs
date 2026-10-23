@@ -114,12 +114,12 @@ function extensionKind(url: string): string {
 }
 
 /**
- * The kind of thing a request is for, in a short word: `fetch` and `xhr` for
+ * The kind of thing a request is for, in a short word: `fetch`, `xhr` and `eventsource` for
  * a script's, `doc` for the page itself, and for what the page loads on its
  * own what its type, its address or its loader says it is.
  */
 export function kindLabel(entry: RequestEntry): string {
-  if (entry.kind === "fetch" || entry.kind === "xhr") return entry.kind;
+  if (entry.kind === "fetch" || entry.kind === "xhr" || entry.kind === "eventsource") return entry.kind;
   if (entry.kind === "navigation") return "doc";
   return (
     typeKind(entry.contentType) ||
@@ -278,7 +278,7 @@ export const CHIPS: readonly { id: Chip; label: string }[] = [
 
 /** A request a script made, a light row of one included. */
 function scripted(entry: RequestEntry): boolean {
-  if (entry.kind === "fetch" || entry.kind === "xhr") return true;
+  if (entry.kind === "fetch" || entry.kind === "xhr" || entry.kind === "eventsource") return true;
   return entry.initiatorType === "fetch" || entry.initiatorType === "xmlhttprequest";
 }
 

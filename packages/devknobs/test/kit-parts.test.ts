@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { codeBlock, group, LONG_LINE, pairs, splitBar } from "../src/ui/kit";
+import { codeBlock, group, LONG_LINE, pairs } from "../src/ui/kit";
 import { CSS } from "../src/ui/styles";
 import { rules } from "./kit-dom";
 import { fake, fakeDocument, leaveDocument } from "./requests-dom";
@@ -99,25 +99,12 @@ describe("codeBlock", () => {
   });
 });
 
-describe("splitBar", () => {
-  test("is a picture with a name, a part a share, each as wide as its share", () => {
-    const node = fake(splitBar([0.65, 0.35], "waiting 80ms, download 43ms"));
-    expect(node.className).toBe("split");
-    expect(node.getAttribute("role")).toBe("img");
-    expect(node.getAttribute("aria-label")).toBe("waiting 80ms, download 43ms");
-    expect(node.nodes().map((part) => [part.className, part.style.flexGrow])).toEqual([
-      ["split-part", "0.65"],
-      ["split-part", "0.35"],
-    ]);
-  });
-});
-
 describe("the rules of the kit's content parts", () => {
   /** A line around a part, which none has at rest. */
   const LINED = /border(?!-radius)|outline|box-shadow|font-weight/;
 
   test("no part has a line around it or a heavier text, and each is one column no wider than its view", () => {
-    const own = rules(CSS).filter((rule) => /^\.(group|pairs?|pair-|code|split)\b/.test(rule.selector));
+    const own = rules(CSS).filter((rule) => /^\.(group|pairs?|pair-|code)\b/.test(rule.selector));
     expect(own.length).toBeGreaterThan(10);
     for (const rule of own) expect([rule.selector, LINED.test(rule.body)]).toEqual([rule.selector, false]);
     for (const selector of [".group", ".code"]) {
@@ -144,11 +131,5 @@ describe("the rules of the kit's content parts", () => {
     expect(body(".code-text")).toMatch(/font-family:\s*var\(--mono\)/);
     expect(body(".code-text.nowrap")).toMatch(/white-space:\s*pre;/);
     expect(body(".code-text.nowrap")).toMatch(/overflow-x:\s*auto/);
-  });
-
-  test("the bar is the track's ground with its parts in the text's color, and nothing else", () => {
-    expect(body(".split")).toMatch(/background:\s*var\(--track\)/);
-    expect(body(".split-part")).toMatch(/background:\s*var\(--fg\)/);
-    expect(`${body(".split")}${body(".split-part")}`).not.toMatch(/--(hot|ok|req-)/);
   });
 });

@@ -1,25 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { BODY_CAP, type BodyRecord, type RequestEntry } from "../src/requests/types";
+import { BODY_CAP, type BodyRecord, type RequestEntry, type RequestPhases } from "../src/requests/types";
 import {
+  barOf,
   BINARY,
   bodyShape,
   boundaryOf,
-  cookieLines,
+  cookieFields,
   cutNote,
   decodeForm,
   encodedLines,
   FAILED_RESPONSE,
   generalLines,
+  initiatorChain,
+  initiatorWords,
   multipartFields,
+  NO_PREVIEW,
   NO_RESPONSE_DATA,
   noResponse,
-  otherLines,
+  parseCookieHeader,
+  parseSetCookie,
   PATH_CHARS,
   pathRoom,
   payloadOf,
+  preciseDuration,
+  previewOf,
   queryLines,
   queryString,
   rawHeaders,
+  requestCookies,
+  requestLines,
+  responseCookies,
   stackFile,
   stackLines,
   startTab,
@@ -27,9 +37,12 @@ import {
   summary,
   TABS,
   tabsOf,
-  timingLines,
-  timingParts,
+  TIMING_HIDDEN,
+  TIMING_MISSING,
+  timingTable,
+  typeWord,
   urlParts,
+  WAITING_RESPONSE,
 } from "../src/ui/requestparts";
 import { fetched, image } from "./requests-entries";
 
@@ -153,9 +166,10 @@ describe("the tabs", () => {
     expect(tabsOf(fetched({ contentType: "text/event-stream; charset=utf-8" }))).toContain("EventStream");
   });
 
-  test("a light row shows what it can: Headers, Initiator and Timing", () => {
-    expect(tabsOf(image())).toEqual(["Headers", "Initiator", "Timing"]);
-    expect(tabsOf(image({ initiatorType: "" }))).toEqual(["Headers", "Timing"]);
+  test("a light row shows what it can: Headers, Initiator and Timing, and Preview for an image", () => {
+    expect(tabsOf(image())).toEqual(["Headers", "Preview", "Initiator", "Timing"]);
+    expect(tabsOf(image({ initiatorType: "" }))).toEqual(["Headers", "Preview", "Timing"]);
+    expect(tabsOf(image({ url: "http://cdn.test/app.css", initiatorType: "link" }))).toEqual(["Headers", "Initiator", "Timing"]);
   });
 
   test("the tab picked last opens again where the request has it, and Headers where it has not", () => {
@@ -218,13 +232,6 @@ describe("General and the headers", () => {
   test("Raw is the headers a `name: value` a line, as they were read", () => {
     expect(rawHeaders(fetched().requestHeaders)).toBe("content-type: application/json\nAuthorization: Bearer abc\nX-Api-Key: k1");
     expect(rawHeaders([])).toBe("");
-  });
-
-  test("the cookies are the request's Cookie and the answer's Set-Cookie", () => {
-    expect(cookieLines(fetched({ requestHeaders: [["Cookie", "a=1"], ["accept", "*/*"]] }))).toEqual([
-      ["Cookie", "a=1"],
-      ["set-cookie", "sid=1"],
-    ]);
   });
 });
 
@@ -419,74 +426,266 @@ describe("how a body shows", () => {
   });
 });
 
-describe("the rest", () => {
-  test("a fetch: what it is, how big, and what made it", () => {
-    expect(otherLines(fetched())).toEqual([
-      ["type", "application/json"],
-      ["size", "1.5 KB over the wire, 21 bytes of body"],
-      ["protocol", "h2"],
-      ["kind", "fetch"],
+describe("the Request section of Timing", () => {
+  test("a fetch: the Type, Size and Protocol columns of the browsers' list, in their tooltips' words", () => {
+    expect(requestLines(fetched())).toEqual([
+      ["Type", "fetch"],
+      ["Size", "1.5 kB transferred over network, resource size: 21 B"],
+      ["Protocol", "h2"],
     ]);
   });
 
-  test("a light row says what loaded it, and that its size is hidden", () => {
-    expect(otherLines(image())).toEqual([
-      ["size", "hidden by the server"],
-      ["protocol", "h2"],
-      ["kind", "img, loaded by img"],
+  test("a light row: its type, and that its size is hidden", () => {
+    expect(requestLines(image())).toEqual([
+      ["Type", "image"],
+      ["Size", "hidden: the server sends no Timing-Allow-Origin"],
+      ["Protocol", "h2"],
     ]);
+    expect(requestLines(image({ contentType: "image/png" }))[0]).toEqual(["Type", "png"]);
+    expect(requestLines(image({ contentType: "image/png" }))[1]).toEqual(["Content-Type", "image/png"]);
   });
 
-  test("says that it is the frame's", () => {
-    const lines = otherLines(fetched({ source: "frame", sizes: null, protocol: "" }));
-    expect(lines.at(-1)).toEqual(["from", "the device frame"]);
-    expect(lines.map(([label]) => label)).not.toContain("size");
+  test("a body that came from the cache, and a row of the frame", () => {
+    const cached = requestLines(fetched({ sizes: { transfer: 0, encoded: 500, decoded: 500, hidden: false } }));
+    expect(cached[1]).toEqual(["Size", "(cache), resource size: 500 B"]);
+    const lines = requestLines(fetched({ source: "frame", sizes: null, protocol: "" }));
+    expect(lines.at(-1)).toEqual(["Frame", "the device frame"]);
+    expect(lines.map(([label]) => label)).not.toContain("Size");
+  });
+
+  test("the Type column's words", () => {
+    expect(typeWord(fetched({ kind: "xhr" }))).toBe("xhr");
+    expect(typeWord(fetched({ kind: "eventsource" }))).toBe("eventsource");
+    expect(typeWord(image({ kind: "navigation" }))).toBe("document");
+    expect(typeWord(image({ url: "http://cdn.test/a.js", initiatorType: "script" }))).toBe("script");
+    expect(typeWord(image({ url: "http://cdn.test/a.css" }))).toBe("stylesheet");
+    expect(typeWord(image({ contentType: "image/svg+xml" }))).toBe("svg+xml");
   });
 });
 
 describe("the timing", () => {
-  test("is split at the answer's headers: waiting to them, download from them", () => {
-    const parts = timingParts({ start: 0, at: 0, response: 80, end: 100, duration: 100 });
-    expect(parts).toEqual({ waiting: 80, download: 20, total: 100, shares: [0.8, 0.2] });
-    expect(timingLines({ start: 0, at: 0, response: 80, end: 100, duration: 100 }, "14:03:07.120")).toEqual([
-      ["started at", "14:03:07.120"],
-      ["waiting", "80ms"],
-      ["download", "20ms"],
-      ["total", "100ms"],
+  /** A request that took every phase, as Resource Timing tells one on a new connection. */
+  const PHASES: RequestPhases = {
+    startTime: 122,
+    workerStart: 0,
+    redirectStart: 0,
+    redirectEnd: 0,
+    fetchStart: 122,
+    domainLookupStart: 123,
+    domainLookupEnd: 125,
+    connectStart: 125,
+    secureConnectionStart: 127,
+    connectEnd: 131,
+    requestStart: 131.5,
+    responseStart: 200,
+    responseEnd: 243.4,
+  };
+  const names = (table: ReturnType<typeof timingTable>) =>
+    table.sections.map((each) => [each.name, each.phases.map((one) => [one.label, one.start, one.end])]);
+
+  test("every phase, in the browsers' sections and words, from the call to the last byte", () => {
+    const table = timingTable(fetched({ phases: PHASES }));
+    expect(names(table)).toEqual([
+      ["Resource Scheduling", [["Queueing", 120, 122]]],
+      [
+        "Connection Start",
+        [
+          ["Stalled", 122, 123],
+          ["DNS Lookup", 123, 125],
+          ["Initial connection", 125, 131],
+          ["SSL", 127, 131],
+        ],
+      ],
+      [
+        "Request/Response",
+        [
+          ["Waiting for server response", 131.5, 200],
+          ["Content Download", 200, 243.4],
+        ],
+      ],
+    ]);
+    expect(table).toMatchObject({ queuedAt: 120, startedAt: 122, from: 120, to: 243.4, total: 123.4, pending: false, note: "" });
+  });
+
+  test("a connection used again has no DNS Lookup and no Initial connection: it stalls to the request", () => {
+    const phases = { ...PHASES, domainLookupStart: 122, domainLookupEnd: 122, connectStart: 122, connectEnd: 122, secureConnectionStart: 0 };
+    expect(names(timingTable(fetched({ phases })))[1]).toEqual(["Connection Start", [["Stalled", 122, 131.5]]]);
+  });
+
+  test("a server on another origin that keeps its phases: what the page saw, and why", () => {
+    const hidden = { ...PHASES, domainLookupStart: 0, domainLookupEnd: 0, connectStart: 0, secureConnectionStart: 0, connectEnd: 0, requestStart: 0, responseStart: 0 };
+    const table = timingTable(fetched({ phases: hidden }));
+    expect(names(table)).toEqual([
+      ["Resource Scheduling", [["Queueing", 120, 122]]],
+      [
+        "Request/Response",
+        [
+          ["Waiting for server response", 122, 200],
+          ["Content Download", 200, 243.4],
+        ],
+      ],
+    ]);
+    expect(table.note).toBe(TIMING_HIDDEN);
+    const light = timingTable(image({ phases: { ...hidden, startTime: 40, fetchStart: 40, responseEnd: 85 } }));
+    expect(light.sections).toEqual([]);
+    expect(light).toMatchObject({ queuedAt: 40, startedAt: 40, total: 45, note: TIMING_HIDDEN });
+  });
+
+  test("a script's request the browser did not time: what the page saw, and why", () => {
+    const table = timingTable(fetched());
+    expect(names(table)).toEqual([
+      [
+        "Request/Response",
+        [
+          ["Waiting for server response", 120, 200],
+          ["Content Download", 200, 243.4],
+        ],
+      ],
+    ]);
+    expect(table.startedAt).toBeNull();
+    expect(table.note).toBe(TIMING_MISSING);
+  });
+
+  test("while it runs: what is known so far, and the browsers' caution", () => {
+    const table = timingTable(fetched(PENDING));
+    expect(table.sections).toEqual([]);
+    expect(table).toMatchObject({ pending: true, total: null, note: "" });
+    const answered = timingTable(fetched({ state: "pending", timing: { ...fetched().timing, duration: null, end: null } }));
+    expect(names(answered)).toEqual([["Request/Response", [["Waiting for server response", 120, 200]]]]);
+  });
+
+  test("a bar is where its phase is on the track of the whole", () => {
+    const table = timingTable(fetched({ phases: PHASES }));
+    expect(barOf(table, { start: 120, end: 122 })).toEqual({ left: 0, width: 2 / 123.4 });
+    expect(barOf(table, { start: 200, end: 243.4 }).left).toBeCloseTo(80 / 123.4, 10);
+    expect(barOf({ from: 5, to: 5 }, { start: 5, end: 5 })).toEqual({ left: 0, width: 0 });
+  });
+
+  test("a span as the Timing tab writes it", () => {
+    expect(preciseDuration(0.5)).toBe("500 µs");
+    expect(preciseDuration(2)).toBe("2.00 ms");
+    expect(preciseDuration(123.456)).toBe("123.46 ms");
+    expect(preciseDuration(1234)).toBe("1.23 s");
+  });
+});
+
+describe("the cookies", () => {
+  test("a Cookie header is a cookie a `name=value`, sized as written", () => {
+    expect(parseCookieHeader("a=1; b=two=2; c").map((each) => [each.name, each.value, each.size])).toEqual([
+      ["a", "1", 3],
+      ["b", "two=2", 7],
+      ["", "c", 1],
     ]);
   });
 
-  test("the bar's shares add up to the whole, whatever the two are", () => {
-    const { shares } = timingParts(fetched().timing);
-    expect(shares?.[0]).toBeCloseTo(80 / 123.4, 10);
-    expect((shares?.[0] ?? 0) + (shares?.[1] ?? 0)).toBeCloseTo(1, 10);
-    // Headers that read as later than the end fill the bar, and no more.
-    expect(timingParts({ start: 0, at: 0, response: 150, end: 100, duration: 100 })).toEqual({
-      waiting: 100,
-      download: 0,
-      total: 100,
-      shares: [1, 0],
+  test("a Set-Cookie line has its attributes, Max-Age counted from the answer", () => {
+    const line = "sid=1; Path=/; Domain=app.test; Max-Age=60; HttpOnly; Secure; SameSite=Lax; Partitioned";
+    expect(parseSetCookie(line, Date.UTC(2026, 0, 1))).toEqual({
+      name: "sid",
+      value: "1",
+      domain: "app.test",
+      path: "/",
+      expires: "2026-01-01T00:01:00.000Z",
+      size: line.length,
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+      partitioned: true,
+    });
+    expect(parseSetCookie("id=a; Expires=Wed, 21 Oct 2026 07:28:00 GMT", 0).expires).toBe("2026-10-21T07:28:00.000Z");
+    expect(parseSetCookie("id=a; Max-Age=0; Expires=Wed, 21 Oct 2026 07:28:00 GMT", 0).expires).toBe("1970-01-01T00:00:00.000Z");
+    expect(parseSetCookie("id=a", 0).expires).toBe("Session");
+  });
+
+  test("a request's cookies are the ones it set itself, and its answer's the Set-Cookie it let the page see", () => {
+    expect(requestCookies(fetched())).toEqual([]);
+    expect(requestCookies(fetched({ requestHeaders: [["Cookie", "a=1; b=2"]] })).map((each) => each.name)).toEqual(["a", "b"]);
+    expect(responseCookies(fetched()).map((each) => [each.name, each.value, each.expires])).toEqual([["sid", "1", "Session"]]);
+  });
+
+  test("a cookie's fields are the browsers' columns, the ones known of it", () => {
+    expect(cookieFields(parseCookieHeader("a=1")[0] ?? parseSetCookie("", 0))).toEqual([
+      ["Name", "a"],
+      ["Value", "1"],
+      ["Size", "3"],
+    ]);
+    expect(cookieFields(parseSetCookie("sid=1; Path=/; Secure; SameSite=Strict", 0)).map(([label]) => label)).toEqual([
+      "Name",
+      "Value",
+      "Path",
+      "Expires / Max-Age",
+      "Size",
+      "Secure",
+      "SameSite",
+    ]);
+  });
+});
+
+describe("the preview", () => {
+  test("json is a tree of what it reads as, a value with `\\r\\n` kept as it is", () => {
+    expect(previewOf(fetched())).toEqual({ kind: "json", value: { id: 7, name: "Ada" } });
+    const text = '{"a":"x\\r\\ny"}';
+    expect(previewOf(fetched({ responseBody: { kind: "text", text, size: text.length, truncated: false, type: "application/json" } }))).toEqual({
+      kind: "json",
+      value: { a: "x\r\ny" },
     });
   });
 
-  test("a light row has what Resource Timing gave, split the same way", () => {
-    expect(timingParts(image().timing)).toEqual({ waiting: 30, download: 15, total: 45, shares: [30 / 45, 15 / 45] });
+  test("json that does not read, or was cut, is text", () => {
+    const broken = { kind: "text" as const, text: "{oops", size: 5, truncated: false, type: "application/json" };
+    expect(previewOf(fetched({ responseBody: broken }))).toEqual({ kind: "code", text: "{oops", lang: "json" });
+    expect(previewOf(fetched({ responseBody: { ...broken, text: '{"a":1}', truncated: true } })).kind).toBe("code");
   });
 
-  test("while it runs there is no bar, and the lines say what is known", () => {
-    expect(timingParts(PENDING.timing).shares).toBeNull();
-    expect(timingLines(PENDING.timing, "now")).toEqual([
-      ["started at", "now"],
-      ["total", "still going"],
+  test("html is drawn, other text is as it is", () => {
+    const page = { kind: "text" as const, text: "<p>hi</p>", size: 9, truncated: false, type: "text/html; charset=utf-8" };
+    expect(previewOf(fetched({ responseBody: page, contentType: page.type }))).toEqual({ kind: "html", html: "<p>hi</p>" });
+    const plain = { ...page, text: "line", type: "text/plain" };
+    expect(previewOf(fetched({ responseBody: plain, contentType: plain.type }))).toEqual({ kind: "code", text: "line", lang: "text" });
+  });
+
+  test("an image shows from its address, a script's and one the page loaded", () => {
+    const png = { kind: "binary" as const, text: "", size: 70, truncated: false, type: "image/png" };
+    expect(previewOf(fetched({ method: "GET", responseBody: png, contentType: "image/png" }))).toEqual({
+      kind: "image",
+      url: "http://app.test/api/users?page=2",
+    });
+    expect(previewOf(image())).toEqual({ kind: "image", url: "http://cdn.test/img/logo.png" });
+    // One sent with a body is not asked for again.
+    expect(previewOf(fetched({ responseBody: png, contentType: "image/png" }))).toEqual({ kind: "line", text: NO_PREVIEW });
+  });
+
+  test("with nothing to show, the browsers' words", () => {
+    expect(previewOf(fetched(PENDING))).toEqual({ kind: "line", text: WAITING_RESPONSE });
+    expect(previewOf(fetched({ responseBody: null }))).toEqual({ kind: "line", text: NO_RESPONSE_DATA });
+    const bytes = { kind: "binary" as const, text: "", size: 10, truncated: false, type: "application/octet-stream" };
+    expect(previewOf(fetched({ responseBody: bytes, contentType: bytes.type }))).toEqual({ kind: "line", text: NO_PREVIEW });
+  });
+});
+
+describe("the initiator chain", () => {
+  test("the page, the script that made the request, and the request", () => {
+    expect(initiatorChain(fetched(), "http://app.test/")).toEqual([
+      { url: "http://app.test/", depth: 0, self: false },
+      { url: "http://app.test/app.js", depth: 1, self: false },
+      { url: "http://app.test/api/users?page=2", depth: 2, self: true },
     ]);
-    const answered = { start: 0, at: 0, response: 40, end: null, duration: null };
-    expect(timingParts(answered).shares).toBeNull();
-    expect(timingLines(answered, "now")).toEqual([
-      ["started at", "now"],
-      ["waiting", "40ms"],
-      ["total", "still going"],
+  });
+
+  test("a light row: the page and the request; the page itself: itself", () => {
+    expect(initiatorChain(image(), "http://app.test/")).toEqual([
+      { url: "http://app.test/", depth: 0, self: false },
+      { url: "http://cdn.test/img/logo.png", depth: 1, self: true },
     ]);
-    expect(timingParts({ start: 0, at: 0, response: 0, end: 0, duration: 0 }).shares).toBeNull();
+    expect(initiatorChain(image({ kind: "navigation", url: "http://app.test/" }), "http://app.test/")).toEqual([
+      { url: "http://app.test/", depth: 0, self: true },
+    ]);
+  });
+
+  test("the initiator Resource Timing names, in words", () => {
+    expect(initiatorWords("img")).toBe("an <img> element");
+    expect(initiatorWords("other")).toBe("Other");
+    expect(initiatorWords("something-new")).toBe("something-new");
   });
 });
 

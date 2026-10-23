@@ -1,10 +1,10 @@
 import { NativeDate } from "../engine/clock";
+import { hushOnce } from "../requests/quiet";
 import type { BodyRecord, HeaderList, RequestEntry } from "../requests/types";
 import { button, el } from "./dom";
 import { glyph, icon } from "./icons";
 import {
   actButton,
-  codeBlock,
   codeView,
   group,
   jsonTree,
@@ -12,28 +12,39 @@ import {
   pairs,
   rowButton,
   section,
-  splitBar,
   tabBar,
   toolbar,
 } from "./kit";
-import { bodyText, clockTime, durationLabel, hasText, type Lead, LIGHT_WHY, middle, STATUS_TONES } from "./requestformat";
+import { bodyText, bytesLabel, clockTime, hasText, type Lead, LIGHT_WHY, middle, STATUS_TONES } from "./requestformat";
 import {
+  barOf,
   bodyShape,
-  cookieLines,
+  type Cookie,
+  cookieFields,
   cutNote,
   decodeForm,
   encodedLines,
+  FAILED_RESPONSE,
+  FETCH_STREAM,
   type Frame,
   generalLines,
+  initiatorChain,
+  initiatorWords,
   isTab,
+  NO_MESSAGES,
   noResponse,
-  otherLines,
+  NOT_FINISHED,
   pathRoom,
   payloadOf,
+  preciseDuration,
+  previewOf,
   PROVISIONAL,
   queryLines,
   queryString,
   rawHeaders,
+  requestCookies,
+  requestLines,
+  responseCookies,
   stackFile,
   stackLines,
   startTab,
@@ -41,8 +52,7 @@ import {
   type Tab,
   TABS,
   tabsOf,
-  timingLines,
-  timingParts,
+  timingTable,
 } from "./requestparts";
 import { langOf } from "./syntax";
 
@@ -91,6 +101,8 @@ export interface DetailContext {
   own?: string;
   /** The page's own referrer policy, where it sets one. Read from the page where left out. */
   policy?: string;
+  /** The page's address, which heads the initiator chain. Read from the page where left out. */
+  page?: string;
 }
 
 export interface Detail {
@@ -140,6 +152,7 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
   const own = context.own ?? stackFile(new Error().stack);
   const memory = context.memory ?? detailMemory();
   const policy = context.policy ?? pagePolicy();
+  const page = context.page ?? (typeof location === "undefined" ? "" : location.href);
   let now = entry;
 
   const verb = el("span", "req-verb");
@@ -371,7 +384,12 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
     return box;
   }
 
-  /** A stack, a frame a line, as the detail showed it before Initiator had its own. */
+  /**
+   * A stack, a frame a line, as the browsers' Request call stack has it: the
+   * function, then where it is, which a press copies. Frames of
+   * `node_modules` and of devknobs are ignore-listed, a run of them one line
+   * that shows them.
+   */
   function stack(text: string): HTMLElement {
     const box = el("div", "req-stack");
     const frameLine = (frame: Frame): HTMLElement => {
@@ -390,7 +408,8 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
       if (each.kind === "frame") box.append(frameLine(each.frame));
       else {
         // The frames that are not the page's own show once they are asked for.
-        const more = button("chip req-skipped", `${each.frames.length} more`);
+        const count = each.frames.length;
+        const more = button("chip req-skipped", `Show ${count} ignore-listed frame${count === 1 ? "" : "s"}`);
         const row = el("div", "req-frame");
         row.append(more);
         more.addEventListener("click", () => {
@@ -404,6 +423,141 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
   }
 
   const light = (at: RequestEntry): HTMLElement | null => (at.detail === "light" ? noteLine(LIGHT_WHY) : null);
+
+  /** An image as the browsers' Preview shows it: itself, loaded from its address, and its size under it. */
+  function image(url: string): HTMLElement {
+    const box = el("div", "req-shot");
+    const picture = document.createElement("img");
+    picture.className = "req-picture";
+    picture.alt = "";
+    const size = el("div", "req-natural");
+    picture.addEventListener("load", () => put(size, `${picture.naturalWidth} × ${picture.naturalHeight}`));
+    picture.addEventListener("error", () => put(size, FAILED_RESPONSE));
+    // Loaded again for the preview, which is devknobs' own load and not the page's.
+    hushOnce(url);
+    picture.src = url;
+    box.append(picture, size);
+    return box;
+  }
+
+  /** Html as the browsers' Preview draws it: in a frame that runs none of its scripts. */
+  function html(text: string): HTMLElement {
+    const frame = document.createElement("iframe");
+    frame.className = "req-html";
+    frame.setAttribute("sandbox", "");
+    frame.setAttribute("title", "the response, drawn");
+    frame.setAttribute("srcdoc", text);
+    return frame;
+  }
+
+  function preview(at: RequestEntry): HTMLElement {
+    const shape = previewOf(at);
+    if (shape.kind === "json") return jsonTree(shape.value);
+    if (shape.kind === "image") return image(shape.url);
+    if (shape.kind === "html") return html(shape.html);
+    if (shape.kind === "fields") return pairs(shape.lines).node;
+    if (shape.kind === "code") return codeView({ text: shape.text, lang: shape.lang });
+    return noteLine(shape.text);
+  }
+
+  /** What an image preview says under its size: how big it is, and its type. */
+  function imageFacts(at: RequestEntry): HTMLElement | null {
+    if (previewOf(at).kind !== "image") return null;
+    const facts: string[] = [];
+    if (at.sizes && !at.sizes.hidden && at.sizes.decoded > 0) facts.push(bytesLabel(at.sizes.decoded));
+    const type = at.contentType || at.responseBody?.type || "";
+    if (type) facts.push(type.split(";", 1)[0] ?? type);
+    return facts.length === 0 ? null : noteLine(facts.join(", "));
+  }
+
+  /** Where the request came from, a link a line, each a step in from the one that loaded it. */
+  function chain(at: RequestEntry): HTMLElement {
+    const box = part("Request initiator chain");
+    const tree = el("div", "req-chain");
+    for (const link of initiatorChain(at, page, own)) {
+      const line = el("div", `req-link${link.self ? " self" : ""}`, link.url);
+      line.style.paddingLeft = `${link.depth * 2}ch`;
+      tree.append(line);
+    }
+    box.body.append(tree);
+    if (at.initiator === "" && at.initiatorType !== "") box.body.append(pairs([["Initiator", initiatorWords(at.initiatorType)]]).node);
+    return box.node;
+  }
+
+  /** The Timing tab: when it was queued and started, its phases in their sections with a bar each, and the whole. */
+  function timing(at: RequestEntry): HTMLElement {
+    const table = timingTable(at);
+    const box = el("div", "req-timing");
+    const when = el("div", "req-when");
+    when.append(el("div", "", `Queued at ${preciseDuration(table.queuedAt)}`));
+    if (table.startedAt !== null) when.append(el("div", "", `Started at ${preciseDuration(table.startedAt)}`));
+    box.append(when);
+    if (table.pending) box.append(noteLine(NOT_FINISHED));
+    const row = (label: string, ms: number | null, bar: HTMLElement | null): HTMLElement[] => [
+      el("span", "req-phase", label),
+      bar ?? el("span", "req-track"),
+      el("span", "req-ms", ms === null ? "" : preciseDuration(ms)),
+    ];
+    for (const each of table.sections) {
+      const sect = part(each.name, undefined, [el("span", "req-dur", "DURATION")]);
+      const grid = el("div", "req-phases");
+      for (const one of each.phases) {
+        const track = el("span", "req-track");
+        const { left, width } = barOf(table, one);
+        const bar = el("span", `req-span ${one.tone}`);
+        bar.style.left = `${(left * 100).toFixed(2)}%`;
+        bar.style.width = `${(width * 100).toFixed(2)}%`;
+        track.append(bar);
+        grid.append(...row(one.label, one.end - one.start, track));
+      }
+      sect.body.append(grid);
+      box.append(sect.node);
+    }
+    const total = el("div", "req-phases req-total");
+    total.append(...row("Total", table.total, null));
+    box.append(total);
+    if (table.note) box.append(noteLine(table.note));
+    return box;
+  }
+
+  /** Request Cookies or Response Cookies, a cookie under another, each a line a field in the table's words. */
+  function cookies(name: string, list: readonly Cookie[]): HTMLElement | null {
+    if (list.length === 0) return null;
+    const box = part(name);
+    for (const each of list) {
+      const fields = pairs(cookieFields(each)).node;
+      fields.classList.add("req-cookie");
+      box.body.append(fields);
+    }
+    return box.node;
+  }
+
+  /** The messages of an event stream, as the browsers' EventStream table lists them: Id, Type, Data and Time. */
+  function events(at: RequestEntry): HTMLElement {
+    if (at.kind !== "eventsource") return noteLine(FETCH_STREAM);
+    const ids = at.messages.some((each) => each.id !== "");
+    const table = el("div", `req-events${ids ? " ids" : ""}`);
+    table.setAttribute("role", "table");
+    const cells = (head: boolean, values: string[]): HTMLElement => {
+      const line = el("div", head ? "req-event req-event-head" : "req-event");
+      line.setAttribute("role", "row");
+      for (const value of values) {
+        const cell = el("span", "req-cell", value);
+        cell.setAttribute("role", head ? "columnheader" : "cell");
+        line.append(cell);
+      }
+      return line;
+    };
+    const pick = (values: string[]): string[] => (ids ? values : values.slice(1));
+    table.append(cells(true, pick(["Id", "Type", "Data", "Time"])));
+    for (const each of at.messages) {
+      table.append(cells(false, pick([each.id, each.type, each.data, clockTime(new NativeDate(each.time))])));
+    }
+    if (at.messages.length > 0) return table;
+    const box = el("div", "req-response");
+    box.append(table, noteLine(NO_MESSAGES));
+    return box;
+  }
 
   const blocks: Record<Tab, Block[]> = {
     Headers: [
@@ -422,56 +576,46 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
       block((at) => [at.url], query),
       block((at) => [at.requestBody], (at) => (at.requestBody ? payload(at.requestBody) : null)),
     ],
-    // Until Preview has its own, it shows the answer as the detail did before: json laid out, a form as its fields.
     Preview: [
       block(
-        (at) => [at.responseBody, at.contentType, at.state],
         (at) => {
-          const record = at.responseBody;
-          if (!record) return noteLine(noResponse(at));
-          const shape = bodyShape(record, at.contentType);
-          if (shape.kind === "line") return noteLine(shape.text);
-          if (shape.kind === "fields") return pairs(shape.lines).node;
-          return codeBlock({ text: shape.text }).node;
+          const shape = previewOf(at);
+          // An image is loaded again only where its address changes.
+          return shape.kind === "image" ? [shape.kind, shape.url] : [at.responseBody, at.contentType, at.state];
         },
+        preview,
       ),
+      block((at) => [at.sizes, at.contentType, at.responseBody, at.state], imageFacts),
     ],
     Response: [block((at) => [at.responseBody, at.contentType, at.state], response)],
     Initiator: [
       block(
-        (at) => [at.initiator, at.initiatorType],
+        (at) => [at.initiator],
         (at) => {
-          if (at.initiator !== "") return stack(at.initiator);
-          return pairs([["loaded by", at.initiatorType]]).node;
+          if (at.initiator === "") return null;
+          const box = part("Request call stack");
+          box.body.append(stack(at.initiator));
+          return box.node;
         },
       ),
+      block((at) => [at.url, at.kind, at.initiator, at.initiatorType], chain),
     ],
     Timing: [
-      block((at) => [at.detail], light),
+      block((at) => [at.timing, at.phases, at.state, at.detail], timing),
       block(
-        (at) => [at.timing],
-        (at) => {
-          const box = part("Timing");
-          const parts = timingParts(at.timing);
-          if (parts.shares) {
-            const label = `waiting ${durationLabel(parts.waiting)}, download ${durationLabel(parts.download)}`;
-            box.body.append(splitBar(parts.shares, label));
-          }
-          box.body.append(pairs(timingLines(at.timing, clockTime(new NativeDate(at.timing.start)))).node);
-          return box.node;
-        },
-      ),
-      block(
-        (at) => [at.contentType, at.sizes, at.protocol, at.kind, at.initiatorType, at.source],
+        (at) => [at.contentType, at.sizes, at.protocol, at.kind, at.initiatorType, at.source, at.detail],
         (at) => {
           const box = part("Request");
-          box.body.append(pairs(otherLines(at)).node);
+          box.body.append(pairs(requestLines(at)).node);
           return box.node;
         },
       ),
     ],
-    Cookies: [block((at) => [at.requestHeaders, at.responseHeaders], (at) => pairs(cookieLines(at)).node)],
-    EventStream: [block(() => [], () => noteLine("not read: a stream"))],
+    Cookies: [
+      block((at) => [at.requestHeaders], (at) => cookies("Request Cookies", requestCookies(at))),
+      block((at) => [at.responseHeaders, at.timing.start, at.timing.response], (at) => cookies("Response Cookies", responseCookies(at))),
+    ],
+    EventStream: [block((at) => [at.kind, at.messages], events)],
   };
 
   /** Which blocks the region holds now. */

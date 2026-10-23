@@ -138,3 +138,9 @@ describe("json as a tree", () => {
     expect(jsonPreview({ a: "x".repeat(200) }, 80)).toBe("{…}");
   });
 });
+
+describe("a leaf of a json tree", () => {
+  test("a string shows quoted, a line break in it as its escape, as the browsers' preview has it", () => {
+    expect(jsonLeaf("a\r\nb")).toEqual(["str", '"a\\r\\nb"']);
+  });
+});
