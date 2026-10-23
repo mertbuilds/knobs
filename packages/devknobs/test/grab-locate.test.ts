@@ -396,7 +396,20 @@ function oldCalls(code: string, tag: string, host: boolean) {
 }
 
 /** A dev module's inline source map: one long run of base64, as Vite puts at a module's end. */
-const MAP = `\n//# sourceMappingURL=data:application/json;base64,${"eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpb".repeat(1500)}\n`;
+const mapOf = (runs: number) =>
+  `\n//# sourceMappingURL=data:application/json;base64,${"eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpb".repeat(runs)}\n`;
+const MAP = mapOf(1500);
+
+/** The best of several timed runs, in ms, so one slow run on a busy machine does not count. */
+function fastest(run: () => void) {
+  let best = Infinity;
+  for (let round = 0; round < 9; round++) {
+    const started = performance.now();
+    run();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
 
 describe("jsxCalls", () => {
   test("finds the same calls as a scan that tries every start", () => {
@@ -419,9 +432,11 @@ describe("jsxCalls", () => {
   });
 
   test("runs in linear time over a long inline source map", () => {
-    const code = `${CODE}${MAP}`;
-    const started = performance.now();
-    for (let round = 0; round < 10; round++) jsxCalls(code, "p", true);
-    expect(performance.now() - started).toBeLessThan(50);
+    // Four times the map should take about four times as long; a quadratic scan takes sixteen.
+    const short = `${CODE}${mapOf(250)}`;
+    const long = `${CODE}${mapOf(1000)}`;
+    fastest(() => jsxCalls(short, "p", true));
+    const ratio = fastest(() => jsxCalls(long, "p", true)) / fastest(() => jsxCalls(short, "p", true));
+    expect(ratio).toBeLessThan(8);
   });
 });
