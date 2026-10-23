@@ -37,6 +37,7 @@ import {
   pathRoom,
   payloadOf,
   preciseDuration,
+  previewDocument,
   previewOf,
   PROVISIONAL,
   queryLines,
@@ -440,13 +441,13 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
     return box;
   }
 
-  /** Html as the browsers' Preview draws it: in a frame that runs none of its scripts. */
+  /** Html as the browsers' Preview draws it: in a frame that runs none of its scripts and loads nothing but its inline styles and data images. */
   function html(text: string): HTMLElement {
     const frame = document.createElement("iframe");
     frame.className = "req-html";
     frame.setAttribute("sandbox", "");
     frame.setAttribute("title", "the response, drawn");
-    frame.setAttribute("srcdoc", text);
+    frame.setAttribute("srcdoc", previewDocument(text));
     return frame;
   }
 
@@ -535,8 +536,7 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
   /** The messages of an event stream, as the browsers' EventStream table lists them: Id, Type, Data and Time. */
   function events(at: RequestEntry): HTMLElement {
     if (at.kind !== "eventsource") return noteLine(FETCH_STREAM);
-    const ids = at.messages.some((each) => each.id !== "");
-    const table = el("div", `req-events${ids ? " ids" : ""}`);
+    const table = el("div", "req-events");
     table.setAttribute("role", "table");
     const cells = (head: boolean, values: string[]): HTMLElement => {
       const line = el("div", head ? "req-event req-event-head" : "req-event");
@@ -548,10 +548,9 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
       }
       return line;
     };
-    const pick = (values: string[]): string[] => (ids ? values : values.slice(1));
-    table.append(cells(true, pick(["Id", "Type", "Data", "Time"])));
+    table.append(cells(true, ["Id", "Type", "Data", "Time"]));
     for (const each of at.messages) {
-      table.append(cells(false, pick([each.id, each.type, each.data, clockTime(new NativeDate(each.time))])));
+      table.append(cells(false, [each.id, each.type, each.truncated ? `${each.data}…` : each.data, clockTime(new NativeDate(each.time))]));
     }
     if (at.messages.length > 0) return table;
     const box = el("div", "req-response");

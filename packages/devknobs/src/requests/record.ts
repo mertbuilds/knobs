@@ -42,7 +42,7 @@ export interface Log {
   /** The request is over, however it went. */
   ended(id: string, patch: Partial<RequestEntry>): void;
   /** An event stream sent a message. Its data is cut to `MESSAGE_CAP` bytes, and the oldest goes past `MESSAGES_KEPT`. */
-  message(id: string, message: Omit<StreamMessage, "time">): void;
+  message(id: string, message: Omit<StreamMessage, "time" | "truncated">): void;
 }
 
 /** `url` in full, from the page's own address. One that does not read stays as it is. */
@@ -134,7 +134,8 @@ export function createLog(
     message(id, message) {
       const messages = store.get(id)?.messages;
       if (!messages) return;
-      const kept = { ...message, data: clipText(message.data, "", MESSAGE_CAP).text, time: clock.origin + clock.now() };
+      const { text, truncated } = clipText(message.data, "", MESSAGE_CAP);
+      const kept = { ...message, data: text, truncated, time: clock.origin + clock.now() };
       store.update(id, { messages: [...messages.slice(1 - MESSAGES_KEPT), kept] });
     },
   };

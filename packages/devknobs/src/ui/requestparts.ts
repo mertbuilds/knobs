@@ -483,6 +483,8 @@ function phase(phases: Phase[], label: string, tone: Phase["tone"], start: numbe
 export function timingTable(entry: RequestEntry): TimingTable {
   const { at, response, duration } = entry.timing;
   const p = entry.phases;
+  // An open stream, or a body still coming, has its headers and no end yet.
+  const running = entry.state === "pending" || entry.timing.end === null;
   const scheduling: Phase[] = [];
   const connection: Phase[] = [];
   const exchange: Phase[] = [];
@@ -507,8 +509,8 @@ export function timingTable(entry: RequestEntry): TimingTable {
     const headers = Math.max(start, at + response);
     phase(exchange, "Waiting for server response", "wait", start, headers);
     if (duration !== null) phase(exchange, "Content Download", "download", headers, Math.max(headers, at + duration));
-    if (entry.state !== "pending") note = p ? TIMING_HIDDEN : TIMING_MISSING;
-  } else if (entry.state !== "pending") note = p ? TIMING_HIDDEN : TIMING_MISSING;
+    if (!running) note = p ? TIMING_HIDDEN : TIMING_MISSING;
+  } else if (!running) note = p ? TIMING_HIDDEN : TIMING_MISSING;
   const all = [...scheduling, ...connection, ...exchange];
   const to = Math.max(at + (duration ?? 0), p?.responseEnd ?? 0, ...all.map((each) => each.end));
   const sections = [
@@ -523,7 +525,7 @@ export function timingTable(entry: RequestEntry): TimingTable {
     from: Math.min(at, p?.startTime ?? at),
     to,
     total: duration,
-    pending: entry.state === "pending",
+    pending: running,
     note,
   };
 }
@@ -671,6 +673,14 @@ export function previewOf(entry: RequestEntry): PreviewShape {
   if (shape.kind === "fields") return shape;
   if (shape.kind === "line") return shape;
   return { kind: "code", text: record.text, lang: record.kind === "form" ? "text" : langOf(type) };
+}
+
+/** What the html preview lets its document load: its inline styles and data images, and nothing from the network. */
+export const PREVIEW_POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">`;
+
+/** Recorded html made ready to draw: the policy first, after a doctype where it has one. */
+export function previewDocument(text: string): string {
+  return text.replace(/^(\s*<!doctype[^>]*>)?/i, (lead) => lead + PREVIEW_POLICY);
 }
 
 /** Where a request came from, a link a line, as the browsers' Request initiator chain has it. */

@@ -13,7 +13,7 @@ import { comboText, defaultKeys, keyAction, type KeyLike, parseCombo } from "../
 import { GONE_NOTE, HIDES_NOTE } from "../src/ui/requestdetail";
 import { BRANDS } from "../src/ui/icons";
 import { clockTime, copyText, LIGHT_WHY } from "../src/ui/requestformat";
-import { FETCH_STREAM, NO_RESPONSE_DATA, PROVISIONAL, TIMING_MISSING } from "../src/ui/requestparts";
+import { FETCH_STREAM, NO_RESPONSE_DATA, PREVIEW_POLICY, PROVISIONAL, TIMING_MISSING } from "../src/ui/requestparts";
 import {
   COPIED_SHOWS,
   createRequests,
@@ -1008,6 +1008,7 @@ describe("the detail", () => {
     const tabs = bar.nodes();
     expect(tabs.map((tab) => tab.getAttribute("role"))).toEqual(tabs.map(() => "tab"));
     expect(region(at).getAttribute("role")).toBe("tabpanel");
+    expect(region(at).tabIndex).toBe(0);
     expect(region(at).id).not.toBe("");
     expect(tabs.every((tab) => tab.getAttribute("aria-controls") === region(at).id)).toBe(true);
     expect(region(at).getAttribute("aria-labelledby")).toBe(tabs[0]?.id ?? "-");
@@ -1525,7 +1526,7 @@ describe("the detail", () => {
     const frame = region(at).one("req-html");
     expect(frame.tag).toBe("iframe");
     expect(frame.getAttribute("sandbox")).toBe("");
-    expect(frame.getAttribute("srcdoc")).toBe("<p>hi</p>");
+    expect(frame.getAttribute("srcdoc")).toBe(`${PREVIEW_POLICY}<p>hi</p>`);
   });
 
   test("Cookies: Request Cookies and Response Cookies, a cookie's fields in the table's words", () => {
@@ -1548,7 +1549,7 @@ describe("the detail", () => {
     ]);
   });
 
-  test("EventStream: an EventSource's messages as Id, Type, Data and Time; a stream read with fetch says why it has none", () => {
+  test("EventStream: an EventSource's messages as Id, Type, Data and Time, cut data ending in …; a stream read with fetch says why it has none", () => {
     const at = scene();
     const stream = { kind: "stream" as const, text: "", size: null, truncated: false, type: "text/event-stream" };
     at.add(10, { contentType: "text/event-stream", responseBody: stream });
@@ -1559,8 +1560,8 @@ describe("the detail", () => {
       requestBody: null,
       responseBody: null,
       messages: [
-        { type: "tick", data: '{"tick":1}', id: "", time: LOADED + 100 },
-        { type: "done", data: '{"done":true}', id: "", time: LOADED + 200 },
+        { type: "tick", data: '{"tick":1}', id: "", truncated: false, time: LOADED + 100 },
+        { type: "done", data: '{"done":', id: "9", truncated: true, time: LOADED + 200 },
       ],
     });
     at.requests.toggle();
@@ -1572,9 +1573,9 @@ describe("the detail", () => {
     expect(segs(at).on).toEqual(["EventStream"]);
     const lines = region(at).find("req-event").map((line) => line.nodes().map((cell) => cell.textContent));
     expect(lines).toEqual([
-      ["Type", "Data", "Time"],
-      ["tick", '{"tick":1}', clockTime(new Date(LOADED + 100))],
-      ["done", '{"done":true}', clockTime(new Date(LOADED + 200))],
+      ["Id", "Type", "Data", "Time"],
+      ["", "tick", '{"tick":1}', clockTime(new Date(LOADED + 100))],
+      ["9", "done", '{"done":…', clockTime(new Date(LOADED + 200))],
     ]);
   });
 

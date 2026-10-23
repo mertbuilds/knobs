@@ -555,6 +555,7 @@ export function tabBar(options: TabsOptions): Tabs {
   node.setAttribute("aria-label", options.label);
   const panel = el("div", "tab-panel");
   panel.setAttribute("role", "tabpanel");
+  panel.tabIndex = 0;
   panel.id = `${id}-panel`;
   const items = options.options.map((option, index) => {
     const item = button("tab", option.label);

@@ -50,7 +50,7 @@ describe("an EventSource", () => {
     expect(page.row().timing.response).toBe(40);
     page.clock.tick(10);
     made().send("message", "hello", "7");
-    expect(page.row().messages).toEqual([{ type: "message", data: "hello", id: "7", time: LOADED + 50 }]);
+    expect(page.row().messages).toEqual([{ type: "message", data: "hello", id: "7", truncated: false, time: LOADED + 50 }]);
   });
 
   test("a named type is kept once the page listens for it, as a script hears no other", () => {
@@ -73,8 +73,9 @@ describe("an EventSource", () => {
     made().send("message", "x".repeat(MESSAGE_CAP + 10));
     const messages = page.row().messages;
     expect(messages.length).toBe(MESSAGES_KEPT);
-    expect(messages[0]?.data).toBe("6");
+    expect(messages[0]).toMatchObject({ data: "6", truncated: false });
     expect(messages.at(-1)?.data.length).toBe(MESSAGE_CAP);
+    expect(messages.at(-1)?.truncated).toBe(true);
   });
 
   test("a connection the server closes ends its row, and the next one is a row of its own", () => {

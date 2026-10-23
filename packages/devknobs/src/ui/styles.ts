@@ -1689,12 +1689,11 @@ s.css-decl, s.css-decl .css-var, s.css-decl .css-name { color: var(--faint); tex
 /* EventStream: a message a line under a head that names the columns, its data in mono and wrapping anywhere. */
 .req-events {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: 2px 8px;
   padding: 0 var(--view-end) 0 var(--view-start);
   font-size: 11px;
 }
-.req-events.ids { grid-template-columns: auto auto minmax(0, 1fr) auto; }
 .req-event { display: contents; }
 .req-event-head > .req-cell { font-size: 10.5px; color: var(--faint); }
 .req-event > .req-cell:nth-last-child(2) { font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }

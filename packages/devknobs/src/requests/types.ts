@@ -100,6 +100,8 @@ export interface StreamMessage {
   type: string;
   /** Its data, at most `MESSAGE_CAP` bytes of it. */
   data: string;
+  /** Whether the data was cut to the cap. */
+  truncated: boolean;
   /** The last event id, or empty. */
   id: string;
   /** When it came, in epoch ms. */

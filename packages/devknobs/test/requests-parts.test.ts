@@ -23,7 +23,9 @@ import {
   pathRoom,
   payloadOf,
   preciseDuration,
+  previewDocument,
   previewOf,
+  PREVIEW_POLICY,
   queryLines,
   queryString,
   rawHeaders,
@@ -552,6 +554,9 @@ describe("the timing", () => {
     expect(table).toMatchObject({ pending: true, total: null, note: "" });
     const answered = timingTable(fetched({ state: "pending", timing: { ...fetched().timing, duration: null, end: null } }));
     expect(names(answered)).toEqual([["Request/Response", [["Waiting for server response", 120, 200]]]]);
+    // An open stream has its headers and a state, and no end yet.
+    const open = timingTable(fetched({ state: "ok", timing: { ...fetched().timing, duration: null, end: null } }));
+    expect(open).toMatchObject({ pending: true, note: "" });
   });
 
   test("a bar is where its phase is on the track of the whole", () => {
@@ -642,6 +647,13 @@ describe("the preview", () => {
     expect(previewOf(fetched({ responseBody: page, contentType: page.type }))).toEqual({ kind: "html", html: "<p>hi</p>" });
     const plain = { ...page, text: "line", type: "text/plain" };
     expect(previewOf(fetched({ responseBody: plain, contentType: plain.type }))).toEqual({ kind: "code", text: "line", lang: "text" });
+  });
+
+  test("html is drawn under a policy that loads nothing from the network, after its doctype", () => {
+    expect(previewDocument("<p>hi</p>")).toBe(`${PREVIEW_POLICY}<p>hi</p>`);
+    expect(previewDocument("\n<!DOCTYPE html>\n<html>")).toBe(`\n<!DOCTYPE html>${PREVIEW_POLICY}\n<html>`);
+    expect(previewDocument("<p><!doctype html></p>")).toBe(`${PREVIEW_POLICY}<p><!doctype html></p>`);
+    expect(PREVIEW_POLICY).toContain("default-src 'none'; img-src data:; style-src 'unsafe-inline'");
   });
 
   test("an image shows from its address, a script's and one the page loaded", () => {
