@@ -106,7 +106,9 @@ const KINDS: Record<string, RequestEntry["kind"]> = { fetch: "fetch", xmlhttpreq
 /**
  * The full row the browser timed with `entry`, if any: the same address, made
  * by the same api, noted just before the browser started it, and not timed
- * yet. With several, the nearest in time.
+ * yet. With several, the nearest in time. An `EventSource` that connects again
+ * is noted only once it is open, a round trip after the browser started it, so
+ * its row may start anywhere up to the end of the entry.
  */
 export function matchFull(
   rows: readonly RequestEntry[],
@@ -116,11 +118,13 @@ export function matchFull(
   const kind = KINDS[text(entry, "initiatorType")];
   if (!kind) return null;
   const url = bare(entry.name);
+  const end = number(entry, "responseEnd") || entry.startTime + entry.duration;
   let best: RequestEntry | null = null;
   for (const row of rows) {
     if (row.kind !== kind || row.source !== source || row.sizes !== null) continue;
     const gap = entry.startTime - row.timing.at;
-    if (gap < -MATCH_AFTER || gap > MATCH_BEFORE || bare(row.url) !== url) continue;
+    const reopened = kind === "eventsource" && gap <= MATCH_AFTER && row.timing.at <= end + MATCH_AFTER;
+    if ((!reopened && (gap < -MATCH_AFTER || gap > MATCH_BEFORE)) || bare(row.url) !== url) continue;
     if (!best || Math.abs(gap) < Math.abs(entry.startTime - best.timing.at)) best = row;
   }
   return best;
