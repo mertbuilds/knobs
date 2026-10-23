@@ -102,14 +102,15 @@ export function patchEventSource(patches: Patch[], log: Log): void {
     patches,
     proto,
     "addEventListener",
-    (original) =>
+    // EventTarget's own, looked up at each call: a tool that wraps it later still sees these listeners.
+    () =>
       function (this: EventTarget, ...args: unknown[]) {
         try {
           if (typeof args[0] === "string") followed.get(this)?.listen(args[0]);
         } catch {
           // The page's listener goes on all the same.
         }
-        return original.apply(this, args);
+        return Reflect.apply(Reflect.get(Object.getPrototypeOf(proto), "addEventListener"), this, args);
       },
   );
   install<Method>(

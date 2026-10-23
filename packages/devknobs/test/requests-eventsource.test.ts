@@ -105,6 +105,36 @@ describe("an EventSource", () => {
     expect(failed.readyState).toBe(2);
   });
 
+  test("one the page closes before it opens was aborted", () => {
+    new EventSource("/api/events").close();
+    expect(page.row()).toMatchObject({ state: "aborted" });
+  });
+
+  test("a connection made again while the log is not taking any is no row", () => {
+    new EventSource("/api/events");
+    made().open();
+    made().drop();
+    page.recorder.quietly("http://app.test/api/events", () => made().open());
+    made().send("message", "unseen");
+    expect(page.rows().length).toBe(1);
+    expect(page.row().messages).toEqual([]);
+  });
+
+  test("a tool that wraps EventTarget's addEventListener later still sees the page's listeners", () => {
+    const native = EventTarget.prototype.addEventListener;
+    const seen: string[] = [];
+    EventTarget.prototype.addEventListener = function (this: EventTarget, ...args: Parameters<typeof native>) {
+      seen.push(args[0]);
+      return native.apply(this, args);
+    };
+    try {
+      new EventSource("/api/events").addEventListener("tick", () => {});
+      expect(seen).toEqual(["tick"]);
+    } finally {
+      EventTarget.prototype.addEventListener = native;
+    }
+  });
+
   test("is handed back as it was once the page is", () => {
     const store = page.recorder.store;
     expect(FakeEventSource.prototype.close).not.toBe(CLOSE);
@@ -113,6 +143,7 @@ describe("an EventSource", () => {
     expect(back === FakeEventSource).toBe(true);
     expect(FakeEventSource.prototype.close).toBe(CLOSE);
     expect(FakeEventSource.prototype.addEventListener).toBe(LISTEN);
+    expect(Object.hasOwn(FakeEventSource.prototype, "addEventListener")).toBe(false);
     new EventSource("/api/events");
     expect(store.entries()).toEqual([]);
   });
