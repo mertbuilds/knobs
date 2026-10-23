@@ -17,7 +17,10 @@ the request has, the arrows moving between them.
 
 - `Headers`: `General` (Request URL, Request Method, Status Code and Referrer
   Policy, where the request or the page sets one), `Response Headers` and
-  `Request Headers`, each with a `Raw` toggle. Request Headers says
+  `Request Headers`, each with a `Raw` toggle. `Redirected From` in General
+  is devknobs' own line: the browser lists a redirect as a row of its own,
+  and a page cannot see those rows, so the address it was asked for shows
+  here. Request Headers says
   `Provisional headers are shown`: the page knows the headers it set itself,
   not the ones the browser adds. there is no Remote Address, which a page
   cannot know
@@ -50,12 +53,14 @@ the request has, the arrows moving between them.
   Size and Protocol the browser's list has as columns
 - `Cookies`, where there are some: `Request Cookies` and `Response Cookies`,
   each cookie with its Name, Value, Domain, Path, Expires / Max-Age, Size,
-  HttpOnly, Secure and SameSite, the ones known. a page sees only the
+  HttpOnly, Secure and SameSite, the ones known. `Partitioned` is devknobs'
+  own word: the browser names the partition's top site, which a page cannot
+  know. a page sees only the
   `Cookie` header it set itself, and never `Set-Cookie`, so this tab is rare
 - `EventStream`, for an event stream: the messages an `EventSource` got, with
   their Id, Type, Data and Time. `message` is kept always, and another type
   once the page listens for it, as the page hears no other. the last 200 are
-  kept, each up to 4 KB. a stream read through `fetch` is not read, and says so
+  kept, each up to 4 KB, a cut one ending in `…`. a stream read through `fetch` is not read, and says so
 
 the tab you pick, the sections you close and the toggles you set stay for the
 next request you open. each body has its own copy. the way back in the view's
