@@ -31,13 +31,13 @@ Some knobs are set for real by Chrome instead of being imitated inside the page:
 - A plain width or a phone with nothing drawn around it becomes the tab's own viewport, with touch, and nothing reloads.
 - The user agent and its client hints go out on every request of the tab, so servers see the browser you picked.
 
-Real or in-page: the real knobs use Chrome's debugger, so Chrome shows its "started debugging this browser" bar while one is set. A switch in the panel's settings turns that off, and then every knob is imitated in the page, as the npm package does it, with no bar.
+Real or in-page: the real knobs use Chrome's debugger, so Chrome shows its "started debugging this browser" bar while one is set. A switch in the panel's settings turns that off, and then every knob except the user agent is imitated in the page, as the npm package does it, with no bar. The user agent is always set by a request rule, which shows no bar.
 
 The panel also has the views a front end developer reaches for: grab (click an element to copy its html, the components that rendered it and where they live in the code, for a coding agent), inspect, a requests view laid out like the browser's network panel, storage, replay animations, and a phone or foldable drawn around the page.
 
-What servers see: nothing changes until you set a knob. The user agent knob changes the User-Agent and client hint headers of that tab only. While the panel's width frame is open, frames of the page's own host in that tab load without X-Frame-Options and Content-Security-Policy, so the page can show inside the frame.
+What servers see: nothing changes until you set a knob. The user agent knob changes the User-Agent and client hint headers of that tab, and of what that page's service worker fetches from its own host. While the panel's width frame is open, frames of the page's own host in that tab load without X-Frame-Options and Content-Security-Policy, so the page can show inside the frame.
 
-Privacy: the extension sends nothing anywhere. It has no analytics and makes no network requests of its own. What it keeps stays in Chrome's storage on your computer.
+Privacy: the extension sends nothing to the developer or any third party, and has no analytics. The panel's only requests go to the page you are on: its bundles and source maps for grab, its fonts, and a second load of the page in the frame. The device images ship in the extension. The extension keeps its settings in Chrome's storage on your computer, and the panel keeps its settings under devknobs keys in that page's own storage. Privacy policy: https://knobs.dev/docs/privacy
 
 Docs: https://knobs.dev/docs/extension
 Source: https://github.com/mertbuilds/knobs
@@ -80,7 +80,7 @@ devknobs puts a developer panel on the page you are building, so you can see how
 `debugger`
 
 ```
-Used only to apply a setting for real to the tab the user is working on, and only on the user's action. It attaches to a tab in three cases: (1) "real browser settings" is on (the default) and the user sets text size, offline, a media preference (color scheme, contrast, reduced motion, reduced transparency) or a plain viewport away from its default; it detaches once they are all back to default or the user presses reset. (2) The user presses "find out why" under the notice that a page refused to load in the panel's frame; it watches that frame's next load and detaches once it has the answer. (3) The user presses "load without the service worker"; it detaches once the frame closes, unless a setting from case 1 keeps it. Commands sent: Page.setFontSizes, Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride and its touch emulation, Network.emulateNetworkConditions, Emulation.setUserAgentOverride, Network.setBypassServiceWorker, and Network, Audits and Log events to say why a frame was refused. Those events stay in memory in the extension and are shown only in the panel. With "real browser settings" off, it never attaches for a setting. Closing Chrome's debugging bar detaches it and turns real browser settings off.
+Used only to apply a setting for real to the tab the user is working on, and only on the user's action. It attaches to a tab in three cases: (1) "real browser settings" is on (the default) and the user sets text size, offline, a media preference (color scheme, contrast, reduced motion, reduced transparency) or a plain viewport away from its default; it detaches once they are all back to default or the user presses reset. (2) The user presses "find out why" under the notice that a page refused to load in the panel's frame; it watches that frame's next load and detaches once it finds that load. If no load matches, it may stay attached until the tab closes, the user closes the bar, or a knob is set and reset. (3) The user presses "load without the service worker"; it detaches once the frame closes, unless a setting from case 1 keeps it. Commands sent, all in the Page, Emulation and Network domains plus Audits.enable and Log.enable: Page.getFrameTree, Page.setFontSizes, Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride, Emulation.clearDeviceMetricsOverride, Emulation.setTouchEmulationEnabled, Emulation.setEmitTouchEventsForMouse, Emulation.setUserAgentOverride, Network.enable, Network.emulateNetworkConditions, Network.setBypassServiceWorker, Audits.enable, Log.enable. In all three cases, while it is attached it notes the tab's frame loads in memory to say why a frame was refused, including the full headers of up to 50 recent requests, cookies and authorization included. Only the Sec-Fetch values go into the record, which is shown only in the panel; the headers are never stored or sent. With "real browser settings" off, it never attaches for a setting. Closing Chrome's debugging bar detaches it and turns real browser settings off.
 ```
 
 `declarativeNetRequestWithHostAccess`
@@ -98,7 +98,7 @@ One offscreen document reads the user's own color scheme and reduced motion pref
 `storage`
 
 ```
-chrome.storage.session keeps each tab's settings, which tabs have the panel's frame open on which host, and each tab's user agent setting with its page's host, so they survive the extension's service worker restarting. Chrome clears it when it closes. chrome.storage.local keeps one switch: real browser settings on or off. Nothing else is stored and nothing is sent anywhere.
+chrome.storage.session keeps each tab's settings, which tabs have the panel's frame open on which host, and each tab's user agent setting with its page's host, so they survive the extension's service worker restarting. Chrome clears it when it closes. chrome.storage.local keeps one switch: real browser settings on or off. The panel on the page keeps its own settings under devknobs keys in that page's sessionStorage and localStorage. Nothing is sent to the developer or any third party.
 ```
 
 `webNavigation`
@@ -123,12 +123,15 @@ Every script is bundled in the package (`background.js`, `bridge.js`, `content.j
 
 **Data usage**
 
-What user data do you plan to collect: tick none. The extension transmits no data off the
-device: its code makes no `fetch`, `XMLHttpRequest` or other request of its own, and has no
-analytics. What it keeps is listed under `storage` above, on the user's computer only. While the
-debugger watches a tab for "find out why", it holds the last few frame loads (and up to 50 recent
-request headers, to read their `Sec-Fetch-*` values) in memory and shows the result in the panel;
-it never stores or sends them.
+What user data do you plan to collect: tick none. Nothing goes to the developer or any third
+party, and there are no analytics. The panel's only requests go to the page the user is on: its
+bundles and source maps for grab, its fonts, and a second load of the page in the frame. The
+device images ship in the package. The extension keeps what is listed under `storage` above, and
+the panel keeps its settings under `devknobs` keys in that page's own storage, on the user's
+computer only. While the debugger is attached, in any of its three cases, it notes the tab's
+frame loads in memory, including the full headers of up to 50 recent requests with cookies and
+authorization; only their `Sec-Fetch-*` values go into the record shown in the panel, and none of
+it is stored or sent. See the privacy policy: https://knobs.dev/docs/privacy
 
 Tick all three certifications:
 
