@@ -18,13 +18,19 @@ export const palette = defineVars({
 /**
  * Semantic colors, each the panel's value of the same name in light and dark.
  * `muted` is the panel's `--faint`, a step darker in light so small text on a
- * `card` keeps 4.5:1. `accent` is grab's blue.
+ * `card` keeps 4.5:1. `accent` is grab's blue; `link` is link text, a darker
+ * blue in light so it keeps 4.5:1 on the page.
  */
 export const colors = defineVars({
   accent: 'rgb(41, 151, 255)',
   bg: { [DARK]: '#151513', default: '#fbfbf9' },
   border: { [DARK]: '#2b2b28', default: '#e6e6e0' },
   card: { [DARK]: '#1f1f1c', default: '#f1f1ec' },
+  // The docs' code: four quiet roles, each 4.5:1 on a `card`. Comments are `muted`.
+  codeKeyword: { [DARK]: '#6cb6ff', default: '#1f6fbf' },
+  codeName: { [DARK]: '#bfa3ea', default: '#7a4cb8' },
+  codeNumber: { [DARK]: '#e3a066', default: '#a8501c' },
+  codeString: { [DARK]: '#86c79b', default: '#2a7444' },
   disabled: { [DARK]: '#8c8c85', default: '#8c8c85' },
   error: { [DARK]: '#ff6369', default: '#e5484d' },
   fg: { [DARK]: '#e9e9e3', default: '#1b1b19' },
@@ -32,6 +38,7 @@ export const colors = defineVars({
   grabBar: { [DARK]: '#ffffff', default: '#161616' },
   grabBarText: { [DARK]: '#171717', default: '#ffffff' },
   grabTag: { [DARK]: '#737373', default: '#a7a7a7' },
+  link: { [DARK]: 'rgb(41, 151, 255)', default: '#1f6fbf' },
   muted: { [DARK]: '#8c8c85', default: '#696963' },
   raised: { [DARK]: '#383833', default: '#ffffff' },
   track: { [DARK]: '#0f0f0e', default: '#e6e6e0' },

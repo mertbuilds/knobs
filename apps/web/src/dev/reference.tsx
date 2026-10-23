@@ -1,6 +1,6 @@
 import { create, props } from '@stylexjs/stylex';
 import { useEffect, useState } from 'react';
-import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
+import { mountKnobs, unmountKnobs } from '../lib/panel.ts';
 import { arriveAtReference } from './refscreen.ts';
 
 /**
