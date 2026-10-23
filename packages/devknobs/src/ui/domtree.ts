@@ -102,6 +102,18 @@ export function isElement(node: Node): node is Element {
   return node.nodeType === ELEMENT;
 }
 
+function isShadowRoot(node: Node): node is ShadowRoot {
+  return node.nodeType === FRAGMENT && "host" in node;
+}
+
+function isDoctype(node: Node): node is DocumentType {
+  return node.nodeType === DOCTYPE;
+}
+
+function isDocument(node: Node): node is Document {
+  return node.nodeType === DOCUMENT;
+}
+
 /** devknobs' own: its panel, its boxes, its frame's letterbox, the styles it puts on the page. */
 export function isOwnNode(node: Node): boolean {
   return isElement(node) && node.hasAttribute("data-devknobs");
@@ -114,7 +126,7 @@ export function isOwnAttribute(name: string): boolean {
 
 /** The node above in the tree: the element or document above, and for a shadow root its host. */
 export function parentOf(node: Node): Node | null {
-  if (node.nodeType === FRAGMENT && "host" in node) return (node as ShadowRoot).host;
+  if (isShadowRoot(node)) return node.host;
   return node.parentNode;
 }
 
@@ -332,7 +344,7 @@ export function createTreeModel(page: TreePage = PAGE): TreeModel {
       case "comment":
         return [["com", `<!--${cut(node.nodeValue ?? "", TEXT_MAX)}-->`]];
       case "doctype":
-        return [["doc", doctypeText(node as DocumentType)]];
+        return isDoctype(node) ? [["doc", doctypeText(node)]] : [];
       case "shadow":
         return [["", "#shadow-root (open)"]];
       case "pseudo":
@@ -457,7 +469,8 @@ export function elementOf(node: Node): Element | null {
 /** A node as markup, as "Copy element" copies it: its outer html, devknobs' own nodes and attributes left out. */
 export function markupOf(node: Node): string {
   if (isElement(node)) {
-    const copy = node.cloneNode(true) as Element;
+    const copy = node.cloneNode(true);
+    if (!isElement(copy)) return "";
     for (const own of Array.from(copy.querySelectorAll("[data-devknobs]"))) own.remove();
     for (const one of [copy, ...Array.from(copy.querySelectorAll("*"))]) {
       for (const attr of Array.from(one.attributes)) if (isOwnAttribute(attr.name)) one.removeAttribute(attr.name);
@@ -466,7 +479,7 @@ export function markupOf(node: Node): string {
   }
   if (node.nodeType === TEXT) return node.nodeValue ?? "";
   if (node.nodeType === COMMENT) return `<!--${node.nodeValue ?? ""}-->`;
-  if (node.nodeType === DOCTYPE) return doctypeText(node as DocumentType);
+  if (isDoctype(node)) return doctypeText(node);
   return "";
 }
 
@@ -489,12 +502,17 @@ export interface DomTree {
   destroy(): void;
 }
 
-/** What a line was built for, to tell when it has to be built again. */
+/** What a line was built for, to tell when it has to be built again, and the parts of it the selection changes. */
 interface Built {
   node: HTMLElement;
-  depth: number;
+  /** The triangle, where the line starts. */
+  turn: HTMLElement;
+  /** The line's text, which the selected line's `== $0` and copy end. */
+  code: HTMLElement;
+  row: Row;
   open: boolean;
-  more: number;
+  /** The `== $0` and copy while the line is selected. */
+  marks: HTMLElement[];
 }
 
 let treesMade = 0;
@@ -502,6 +520,11 @@ let treesMade = 0;
 /** The key a line is kept by among its node's lines. */
 function slot(row: Row): string {
   return row.kind === "pseudo" ? (row.pseudo ?? "") : row.kind;
+}
+
+/** Whether what an event happened on has classes, as an element of the tree's own does. */
+function hasClasses(target: EventTarget | null): target is Element {
+  return target !== null && "classList" in target;
 }
 
 export function createDomTree(context: DomTreeContext, model: TreeModel = createTreeModel()): DomTree {
@@ -514,12 +537,16 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
   node.append(list);
   node.hidden = true;
   let rows: Row[] = [];
+  /** The lines in the list, in order. */
+  let shown: HTMLElement[] = [];
   let built = new WeakMap<Node, Map<string, Built>>();
   let selection: Entry | null = null;
   /** Nodes that changed since the last build, and the attributes of each, to light. */
   let lit = new Map<Node, Set<string> | null>();
   let made = 0;
   let timer = 0;
+  let frame = 0;
+  let gone = false;
   const observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(onRecords);
 
   function drop(target: Node): void {
@@ -527,8 +554,7 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
   }
 
   function isSelected(row: Row): boolean {
-    if (!selection) return false;
-    if (row.kind === "close") return false;
+    if (!selection || !selectable(row)) return false;
     return row.node === selection.node && (row.kind === "pseudo" ? row.pseudo === selection.pseudo : selection.pseudo === null);
   }
 
@@ -543,7 +569,24 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
     return code;
   }
 
-  function build(row: Row): HTMLElement {
+  /** Show a line as selected or not: its ground, and the `== $0` and copy at the end of its text. */
+  function mark(line: Built, on: boolean): void {
+    line.node.classList.toggle("on", on);
+    line.node.setAttribute("aria-selected", on ? "true" : "false");
+    for (const part of line.marks) part.remove();
+    line.marks = [];
+    if (!on) return;
+    const ref = el("span", "dom-ref", " == $0");
+    ref.setAttribute("aria-hidden", "true");
+    const target = line.row.node;
+    const copy = actButton("copy", () => context.copy(markupOf(target)));
+    copy.setAttribute("aria-label", "Copy element");
+    // At the end of the line's text, as the browser's tools put it.
+    line.code.append(ref, copy);
+    line.marks = [ref, copy];
+  }
+
+  function build(row: Row, open: boolean): Built {
     const line = el("div", `dom-row dom-${row.kind}`);
     line.style.paddingLeft = `calc(var(--view-start) + ${row.depth} * var(--col-icon))`;
     if (row.kind === "more") {
@@ -555,7 +598,7 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
           render();
         }),
       );
-      return line;
+      return { node: line, turn: line, code: line, row, open, marks: [] };
     }
     const turn = el("span", "sect-turn dom-turn");
     turn.setAttribute("aria-hidden", "true");
@@ -564,7 +607,7 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
       turn.append(icon("chevron-left", 12));
       turn.addEventListener("click", (event: Event) => {
         event.stopPropagation();
-        toggle(row.node);
+        setOpen(row.node, !model.isExpanded(row.node));
       });
     }
     const code = pieceNodes(row);
@@ -576,27 +619,18 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
       line.id = `${id}-${++made}`;
       line.setAttribute("role", "treeitem");
       line.setAttribute("aria-level", String(row.depth + 1));
-      if (opens) line.setAttribute("aria-expanded", model.isExpanded(row.node) ? "true" : "false");
+      if (opens) line.setAttribute("aria-expanded", open ? "true" : "false");
     }
-    const on = isSelected(row);
-    line.setAttribute("aria-selected", on ? "true" : "false");
-    if (on) {
-      line.classList.add("on");
-      const ref = el("span", "dom-ref", " == $0");
-      ref.setAttribute("aria-hidden", "true");
-      const copy = actButton("copy", () => context.copy(markupOf(row.node)));
-      copy.setAttribute("aria-label", "Copy element");
-      // At the end of the line's text, as the browser's tools put it.
-      code.append(ref, copy);
-    }
+    const one: Built = { node: line, turn, code, row, open, marks: [] };
+    mark(one, isSelected(row));
     if (lit.has(row.node) && lit.get(row.node) === null) line.classList.add("dom-flash");
     const element = elementOf(row.node);
     line.addEventListener("pointerenter", () => context.outline(element));
     line.addEventListener("click", () => choose(row));
-    return line;
+    return one;
   }
 
-  function lineOf(row: Row): HTMLElement {
+  function builtOf(row: Row): Built {
     let lines = built.get(row.node);
     if (!lines) {
       lines = new Map();
@@ -605,13 +639,17 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
     const key = slot(row);
     const had = lines.get(key);
     const open = model.isExpanded(row.node);
-    if (had && had.depth === row.depth && had.open === open && had.more === row.more) return had.node;
-    const made = { node: build(row), depth: row.depth, open, more: row.more };
-    lines.set(key, made);
-    return made.node;
+    if (had && had.row.depth === row.depth && had.open === open && had.row.more === row.more) return had;
+    const one = build(row, open);
+    lines.set(key, one);
+    return one;
   }
 
-  /** Watch what shows: each line's node for its attributes or text, and what each element and open root holds. */
+  function lineOf(row: Row): HTMLElement {
+    return builtOf(row).node;
+  }
+
+  /** Watch what shows: each line's node for its attributes or text, and what each element and shadow root holds. */
   function observe(): void {
     if (!observer) return;
     observer.disconnect();
@@ -625,7 +663,7 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
         // The one text that stands in an element's line.
         const first = row.node.firstChild;
         if (first && first.nodeType === TEXT && first === row.node.lastChild) add(first, { characterData: true });
-      } else if (row.kind === "shadow" && model.isExpanded(row.node)) add(row.node, { childList: true });
+      } else if (row.kind === "shadow") add(row.node, { childList: true });
       else if (row.kind === "text" || row.kind === "comment") add(row.node, { characterData: true });
     }
     for (const [target, options] of watch) {
@@ -637,54 +675,99 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
     }
   }
 
+  /** Build the lines that show. The list is put together again only when its lines are others. */
   function render(): void {
     clearTimeout(timer);
     timer = 0;
     rows = model.rows();
-    list.replaceChildren(...rows.map(lineOf));
+    const lines = rows.map(lineOf);
     lit = new Map();
-    const at = selectedIndex();
-    const line = at < 0 ? null : lineOf(rows[at] as Row);
+    const same = lines.length === shown.length && lines.every((line, at) => line === shown[at]);
+    if (!same) {
+      list.replaceChildren(...lines);
+      shown = lines;
+    }
+    activate();
+    if (!same) observe();
+  }
+
+  /** Tell assistive tech which line is selected. */
+  function activate(): void {
+    const row = rows[selectedIndex()];
+    const line = row ? lineOf(row) : null;
     list.setAttribute("aria-activedescendant", line?.id ?? "");
-    observe();
   }
 
   function selectedIndex(): number {
     return rows.findIndex((row) => isSelected(row));
   }
 
+  function cancelFrame(): void {
+    if (frame) window.cancelAnimationFrame(frame);
+    frame = 0;
+  }
+
+  /** Bring the start of a line into sight sideways, where the tree is wider than its box: deep lines are far in. */
+  function across(line: Built): void {
+    const left = line.turn.offsetLeft;
+    const step = line.turn.offsetWidth;
+    const wide = node.clientWidth;
+    if (typeof left !== "number" || typeof step !== "number" || typeof wide !== "number") return;
+    if (left >= node.scrollLeft && left <= node.scrollLeft + (wide * 2) / 3) return;
+    node.scrollLeft = Math.max(0, left - step);
+  }
+
   /** Bring the selected line into the tree's sight, without moving the view around it. In its middle when it was far. */
-  function bringIntoView(middleOf: boolean): void {
-    const at = selectedIndex();
-    const row = rows[at];
+  function bringIntoView(middleOf: boolean, again = true): void {
+    cancelFrame();
+    const row = rows[selectedIndex()];
     if (!row) return;
-    const line = lineOf(row);
-    const top = line.offsetTop;
-    const height = line.offsetHeight;
     const seen = node.clientHeight;
+    if (seen === 0) {
+      // Not laid out yet, as when the view opens: once more when it is.
+      if (again) {
+        frame = window.requestAnimationFrame(() => {
+          frame = 0;
+          bringIntoView(middleOf, false);
+        });
+      }
+      return;
+    }
+    const line = builtOf(row);
+    across(line);
+    const top = line.node.offsetTop;
+    const height = line.node.offsetHeight;
     if (typeof top !== "number" || typeof height !== "number" || typeof seen !== "number") return;
     if (top >= node.scrollTop && top + height <= node.scrollTop + seen) return;
     if (middleOf) node.scrollTop = Math.max(0, top - (seen - height) / 2);
     else node.scrollTop = top < node.scrollTop ? top : top + height - seen;
   }
 
-  function setSelection(next: Entry | null): void {
-    if (selection) drop(selection.node);
-    selection = next;
-    if (next) drop(next.node);
+  /** Paint the lines built for a node as the selection now is. */
+  function repaint(target: Node): void {
+    for (const line of built.get(target)?.values() ?? []) if (selectable(line.row)) mark(line, isSelected(line.row));
   }
 
-  /** A line chosen by a click or a key: it is selected, and the view is told. */
+  function setSelection(next: Entry | null): void {
+    const before = selection;
+    selection = next;
+    if (before) repaint(before.node);
+    if (next) repaint(next.node);
+  }
+
+  /** A line chosen by a click or a key: it is selected in place, and the view is told. */
   function choose(row: Row): void {
     const target = row.kind === "close" ? { node: row.node, pseudo: null } : { node: row.node, pseudo: row.pseudo };
     setSelection(target);
-    render();
+    activate();
     bringIntoView(false);
     context.select(target.node, target.pseudo);
   }
 
-  function toggle(target: Node): void {
-    model.setExpanded(target, !model.isExpanded(target));
+  /** Open or close a node's line. What it holds is read again as it opens, since nothing watched it while closed. */
+  function setOpen(target: Node, open: boolean): void {
+    if (open) model.forget(target);
+    model.setExpanded(target, open);
     drop(target);
     render();
   }
@@ -706,20 +789,25 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
       if (row) choose(row);
       return;
     }
-    model.setExpanded(step.node, step.kind === "expand");
-    drop(step.node);
-    render();
+    setOpen(step.node, step.kind === "expand");
   }
 
   function onLeave(): void {
     context.outline(null);
   }
 
+  /** A line or a piece lights once: the light goes when it is over, so a line put back later does not light again. */
+  function onLit(event: Event): void {
+    if (hasClasses(event.target)) event.target.classList.remove("dom-flash");
+  }
+
   list.addEventListener("keydown", onKeydown);
   list.addEventListener("pointerleave", onLeave);
+  list.addEventListener("animationend", onLit);
 
   /** What changed on the page: the lines of those nodes are built again, lit, once it settles. */
   function onRecords(records: MutationRecord[]): void {
+    if (gone) return;
     let any = false;
     const light = (target: Node, name: string | null) => {
       if (name === null) {
@@ -765,21 +853,27 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
       observer?.disconnect();
       clearTimeout(timer);
       timer = 0;
+      cancelFrame();
       model.setRoot(null);
       built = new WeakMap();
       selection = null;
       rows = [];
+      shown = [];
       list.replaceChildren();
       node.hidden = true;
       return;
     }
-    const doc = target.nodeType === DOCUMENT ? (target as Document) : target.ownerDocument;
+    const doc = isDocument(target) ? target : target.ownerDocument;
     if (doc !== model.root()) {
       model.setRoot(doc);
       built = new WeakMap();
     }
     node.hidden = false;
-    for (let at = parentOf(target); at; at = parentOf(at)) drop(at);
+    // The way down is read again: what a closed node holds is not watched, and may have changed.
+    for (let at = parentOf(target); at; at = parentOf(at)) {
+      model.forget(at);
+      drop(at);
+    }
     model.reveal(target);
     setSelection({ node: target, pseudo });
     render();
@@ -791,13 +885,16 @@ export function createDomTree(context: DomTreeContext, model: TreeModel = create
     reveal,
     selected: () => selection?.node ?? null,
     destroy(): void {
+      gone = true;
       observer?.disconnect();
       clearTimeout(timer);
+      timer = 0;
+      cancelFrame();
       list.removeEventListener("keydown", onKeydown);
       list.removeEventListener("pointerleave", onLeave);
+      list.removeEventListener("animationend", onLit);
       context.outline(null);
       selection = null;
     },
   };
 }
-

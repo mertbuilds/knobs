@@ -1386,9 +1386,11 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 /* Inspect's view as the Elements panel: the DOM tree over the styles, the
    crumbs between them. The tree scrolls in itself, a share of the window's
    height, and its bottom edge drags for another. A line is a node, a step in
-   for each level, and wraps further in where it is long. The selected line
-   has a ground of its own, a blue one while the tree has the focus, and ends
-   with a quiet reference to it. A node that changed lights for a moment. */
+   for each level, and wraps where it is long, but never narrower than 30
+   characters: past that the tree is wider than its box and scrolls sideways,
+   as deep lines do in the browser's tools. The selected line has a ground of
+   its own, a blue one while the tree has the focus, and ends with a quiet
+   reference to it. A node that changed lights for a moment. */
 .elements { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .dom {
   position: relative;
@@ -1401,7 +1403,7 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
-.dom-tree { font: 11px/1.6 var(--mono); }
+.dom-tree { width: min-content; min-width: 100%; font: 11px/1.6 var(--mono); }
 .dom-row {
   display: flex;
   align-items: flex-start;
@@ -1414,7 +1416,7 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .dom-row.on { background: var(--card); }
 .dom-tree:focus-within .dom-row.on { background: var(--pick); }
 .dom-row > .sect-turn { height: 1.6em; cursor: pointer; }
-.dom-code { flex: 0 1 auto; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.dom-code { flex: 0 1 auto; min-width: 30ch; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
 .dom-ref { white-space: pre; color: var(--faint); }
 .dom-code > .act { margin-left: var(--col-pad); height: 1.6em; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6em; vertical-align: top; }
 .dom-flash { animation: dom-flash 900ms ease-out; }

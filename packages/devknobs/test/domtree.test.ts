@@ -13,6 +13,7 @@ import {
   type TreeModel,
   type TreePage,
 } from "../src/ui/domtree";
+import { CSS } from "../src/ui/styles";
 import { as, comment, elem, page, PageNode, shadow, svg, text } from "./dom-page";
 import { fake, FakeNode, FakeObserver } from "./styles-dom";
 
@@ -259,6 +260,7 @@ describe("what a line stands for", () => {
     const own = { remove: () => removed.push("node") };
     const inner = { attributes: [{ name: "data-devknobs-replay" }, { name: "class" }], removeAttribute: (name: string) => removed.push(name) };
     const copy = {
+      nodeType: 1,
       attributes: [{ name: "id" }],
       removeAttribute: (name: string) => removed.push(name),
       querySelectorAll: (selector: string) => (selector === "*" ? [inner] : [own]),
@@ -424,6 +426,149 @@ describe("the tree as built", () => {
     jest.advanceTimersByTime(SETTLE);
     const row = rows(node).find((one) => said(one) === '<span id="new"></span>') as FakeNode;
     expect(row.classList.contains("dom-flash")).toBe(true);
+  });
+
+  test("a line lights once: the light goes when it is over, and the line put back later does not light again", () => {
+    const node = start();
+    const { save, app } = setup();
+    tree?.reveal(as(save));
+    const observer = FakeObserver.made[0] as FakeObserver;
+    const added = elem("span", { id: "new" });
+    app.append(added);
+    observer.callback([{ type: "childList", target: as(app), addedNodes: [as(added)], removedNodes: [] } as unknown as MutationRecord]);
+    jest.advanceTimersByTime(SETTLE);
+    const row = rows(node).find((one) => said(one) === '<span id="new"></span>') as FakeNode;
+    expect(row.classList.contains("dom-flash")).toBe(true);
+    list(node).fire("animationend", { target: row });
+    expect(row.classList.contains("dom-flash")).toBe(false);
+    // Closed and opened again, the span's line is the one built before, unlit.
+    const div = () => rows(node).find((one) => said(one).startsWith('<div id="app">')) as FakeNode;
+    (div().children[0] as FakeNode).fire("click");
+    (div().children[0] as FakeNode).fire("click");
+    expect(rows(node)).toContain(row);
+    expect(row.classList.contains("dom-flash")).toBe(false);
+  });
+
+  test("a pick under a node closed since it was read shows the node as it is now, and its line selected", () => {
+    const node = start();
+    const items = Array.from({ length: 5 }, (_, at) => elem("li", { "data-i": String(at) }, elem("i", {}, text(`item ${at}`))));
+    const ul = elem("ul", { id: "list" }, ...items);
+    const host = elem("x-card", { id: "card" }, elem("p"));
+    const doc = page(() => [elem("body", {}, ul, host)]);
+    const root = shadow(host, elem("slot"));
+    root.ownerDocument = doc;
+    tree?.reveal(as(ul));
+    const line = (start: string) => rows(node).find((one) => said(one).startsWith(start)) as FakeNode;
+    const turn = (start: string) => line(start).children[0] as FakeNode;
+    turn('<ul id="list">').fire("click");
+    expect(rows(node).map(said)).toContain('<li data-i="3">…</li>');
+    turn('<ul id="list">').fire("click");
+    // Nothing watches the closed list, so no record says the li changed.
+    const fresh = elem("b", { id: "fresh" });
+    const li = items[3] as PageNode;
+    li.childNodes.unshift(fresh);
+    fresh.parentNode = li;
+    tree?.reveal(as(fresh));
+    const on = rows(node).filter((row) => row.attributes.get("aria-selected") === "true");
+    expect(on.map(said)).toEqual(['<b id="fresh"></b> == $0copy']);
+    const lines = rows(node).map(said);
+    const at = lines.indexOf('<li data-i="3">');
+    expect(lines.slice(at, at + 4)).toEqual(['<li data-i="3">', '<b id="fresh"></b> == $0copy', "<i>item 3</i>", "</li>"]);
+    // A node read while open and changed while closed shows as it is when it opens again.
+    turn('<li data-i="3">').fire("click");
+    li.append(elem("u"));
+    turn('<li data-i="3">').fire("click");
+    expect(rows(node).map(said)).toContain("<u></u>");
+    // A closed shadow root is watched for what it holds, for its triangle.
+    tree?.reveal(as(host.childNodes[0] as PageNode));
+    const observer = FakeObserver.made[0] as FakeObserver;
+    expect(tree?.selected()).toBe(as(host.childNodes[0] as PageNode));
+    expect(observer.watched.some((one) => one.node === as(root) && one.options.childList === true)).toBe(true);
+  });
+
+  test("a selection moves in place: the lines stay in the list, and only the two lines change", () => {
+    const node = start();
+    const { save, app } = setup();
+    tree?.reveal(as(save));
+    const before = list(node).children;
+    const button = rows(node).find((row) => said(row) === '<button id="save">Save</button> == $0copy') as FakeNode;
+    list(node).press("ArrowUp");
+    expect(list(node).children).toBe(before);
+    expect(selected).toEqual([[as(app), null]]);
+    expect(said(button)).toBe('<button id="save">Save</button>');
+    expect(button.classList.contains("on")).toBe(false);
+    expect(button.attributes.get("aria-selected")).toBe("false");
+    const on = rows(node).find((row) => row.attributes.get("aria-selected") === "true") as FakeNode;
+    expect(said(on)).toBe('<div id="app"> == $0copy');
+    expect(on.classList.contains("on")).toBe(true);
+    expect(list(node).attributes.get("aria-activedescendant")).toBe((on as unknown as { id: string }).id);
+    expect(on.find("act")).toHaveLength(1);
+  });
+
+  test("a tree not laid out yet brings the selected line into sight once it is, once, and not after it is gone", () => {
+    const frames: (() => void)[] = [];
+    const cancelled: number[] = [];
+    Object.assign(window, {
+      requestAnimationFrame: (run: () => void) => frames.push(run),
+      cancelAnimationFrame: (frame: number) => cancelled.push(frame),
+    });
+    const node = Object.assign(start(), { clientHeight: 0, clientWidth: 0 });
+    const { save } = setup();
+    tree?.reveal(as(save));
+    expect(frames).toHaveLength(1);
+    const on = rows(node).find((row) => row.attributes.get("aria-selected") === "true") as FakeNode;
+    Object.assign(on, { offsetTop: 400, offsetHeight: 20 });
+    Object.assign(node, { clientHeight: 100, clientWidth: 300 });
+    frames[0]?.();
+    expect(node.scrollTop).toBe(360);
+    Object.assign(node, { clientHeight: 0 });
+    tree?.reveal(as(save));
+    frames[1]?.();
+    expect(frames).toHaveLength(2);
+    tree?.reveal(as(save));
+    tree?.destroy();
+    tree = null;
+    expect(cancelled).toEqual([3]);
+  });
+
+  test("a deep line is brought into sight sideways, and a line far out is brought back", () => {
+    const node = Object.assign(start(), { clientHeight: 100, clientWidth: 300 });
+    const { save, app } = setup();
+    tree?.reveal(as(save));
+    const on = rows(node).find((row) => row.attributes.get("aria-selected") === "true") as FakeNode;
+    Object.assign(on, { offsetTop: 0, offsetHeight: 20 });
+    Object.assign(on.children[0] as FakeNode, { offsetLeft: 600, offsetWidth: 14 });
+    tree?.reveal(as(save));
+    expect(node.scrollLeft).toBe(586);
+    const div = rows(node).find((row) => said(row) === '<div id="app">') as FakeNode;
+    Object.assign(div, { offsetTop: 0, offsetHeight: 20 });
+    Object.assign(div.children[0] as FakeNode, { offsetLeft: 40, offsetWidth: 14 });
+    div.fire("click");
+    expect(selected).toEqual([[as(app), null]]);
+    expect(node.scrollLeft).toBe(26);
+  });
+
+  test("a deep line keeps a width to read: the tree grows wider than its box instead, and scrolls sideways", () => {
+    const rule = (selector: string) => CSS.slice(CSS.indexOf(`${selector} {`), CSS.indexOf("}", CSS.indexOf(`${selector} {`)));
+    expect(rule(".dom")).toContain("overflow: auto;");
+    expect(rule(".dom-tree")).toContain("width: min-content; min-width: 100%;");
+    expect(rule(".dom-code")).toContain("min-width: 30ch;");
+  });
+
+  test("once destroyed, a change on the page builds nothing", () => {
+    const node = start();
+    const { save, app } = setup();
+    tree?.reveal(as(save));
+    const observer = FakeObserver.made[0] as FakeObserver;
+    const before = rows(node).map(said);
+    tree?.destroy();
+    tree = null;
+    expect(observer.connected).toBe(false);
+    expect(list(node).listeners.get("animationend")?.size ?? 0).toBe(0);
+    app.setAttribute("class", "busy");
+    observer.callback([{ type: "attributes", target: as(app), attributeName: "class" } as unknown as MutationRecord]);
+    jest.advanceTimersByTime(SETTLE);
+    expect(rows(node).map(said)).toEqual(before);
   });
 
   test("revealing null empties it, and another document starts it over", () => {
