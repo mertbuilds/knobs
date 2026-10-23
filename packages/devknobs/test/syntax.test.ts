@@ -69,6 +69,13 @@ describe("the tokens", () => {
     ]);
   });
 
+  test("css: a long data url in a block takes no time to color", () => {
+    const font = `@font-face{src:url(data:font/woff2;base64,${"AbCd+".repeat(13_000)})}`;
+    const start = performance.now();
+    expect(tokens(font, "css").map(([, text]) => text).join("")).toBe(font);
+    expect(performance.now() - start).toBeLessThan(200);
+  });
+
   test("html: tags, attribute names, their values and comments, the text plain", () => {
     expect(colored('<!-- c --><a href="/x" hidden>hi</a>', "html")).toEqual([
       ["com", "<!-- c -->"],

@@ -58,7 +58,8 @@ const CSS_IN: Rule[] = [
   [BLOCK_COMMENT, "com"],
   [STRING, "str"],
   // A selector inside a block, as in an at-rule, is what opens a block of its own.
-  [/[^\s{};"']+(?=\s*\{)/y, "tag"],
+  // Bounded, so a long run with no block after it, as a data url is, is not tried at each of its characters to its end.
+  [/[^\s{};"']{1,256}(?=\s*\{)/y, "tag"],
   [/--[\w-]+|[a-zA-Z-]+(?=\s*:)/y, "key"],
   [/#[0-9a-fA-F]{3,8}\b|-?(?:\d+\.?\d*|\.\d+)(?:%|[a-zA-Z]+)?/y, "num"],
   [/![a-z]+/y, "kw"],
