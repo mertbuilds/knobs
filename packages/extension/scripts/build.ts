@@ -4,7 +4,6 @@ import { dirname, join, resolve } from 'node:path';
 const root = join(import.meta.dir, '..');
 // `dist/` is what Chrome loads; a work in progress builds elsewhere: `bun scripts/build.ts <dir>`.
 const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
-const publicDir = join(root, '../../apps/web/public');
 // devknobs' built package: run `pnpm --filter devknobs build` first (turbo does).
 const devknobs = dirname(Bun.resolveSync('devknobs', root));
 
@@ -46,5 +45,3 @@ await writeFile(
 
 await cp(join(root, 'static'), dist, { recursive: true });
 await cp(join(devknobs, 'bezels'), join(dist, 'bezels'), { recursive: true });
-await cp(join(publicDir, 'favicon-32.png'), join(dist, 'icon-32.png'));
-await cp(join(publicDir, 'favicon-16.png'), join(dist, 'icon-16.png'));

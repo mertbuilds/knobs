@@ -1,0 +1,32 @@
+// The Chrome Web Store upload: builds devknobs, then dist/, then zips it with manifest.json at the
+// root, as devknobs-<version>.zip beside this package's package.json.
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { $ } from 'bun';
+
+const root = join(import.meta.dir, '..');
+const dist = join(root, 'dist');
+
+const devknobs = join(root, '../devknobs');
+const versionOf = async (file: string) =>
+  (JSON.parse(await readFile(file, 'utf8')) as { version: string }).version;
+const packageVersion = await versionOf(join(devknobs, 'package.json'));
+const manifestVersion = await versionOf(join(root, 'static/manifest.json'));
+if (packageVersion !== manifestVersion) {
+  throw new Error(
+    `static/manifest.json is version ${manifestVersion} but devknobs is ${packageVersion}: ` +
+      'set the manifest to the version of the devknobs it ships',
+  );
+}
+
+await $`pnpm --filter devknobs build`.cwd(root);
+await $`bun ${join(root, 'scripts/build.ts')}`;
+
+const { version } = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8')) as {
+  version: string;
+};
+const zip = join(root, `devknobs-${version}.zip`);
+await rm(zip, { force: true });
+await $`zip -r -X -q ${zip} . -x '*.DS_Store' '*.map'`.cwd(dist);
+
+process.stdout.write(`${zip}\n`);
