@@ -14,12 +14,17 @@
  *   sectionFold({ label, glyph, ends, open }); branch([node, node]); noteButton("3 hidden", run);
  *   emptyAction("select an element", run);
  *   group({ label, ends }); pairs(lines); codeBlock({ text, lines }); splitBar(shares, label);
+ *   tabBar({ options, label, onChange }); section({ label, count, ends, open }); actButton("Raw", run);
+ *   codeView({ text, lang }); jsonTree(value);
  *   stack([noteLine("..."), codeBlock({ text }).node, pairs(lines).node, controls([{ label, run }]).node]);
  *   textField({ ... }); textArea({ ... }); switchLine({ ... }); confirmLine({ ... });
  */
 
 import { button, el, field, mark, rowBox } from "./dom";
 import { type IconName, icon } from "./icons";
+import { radioMove } from "./keys";
+import type { RadioItem } from "./radio";
+import { indentOf, jsonEntries, jsonLeaf, jsonOpens, jsonPreview, type Lang, type Token, tokenLines } from "./syntax";
 
 export { LAYOUTS, type Layout, type RowBox, type RowParts, rowBox, rowButton, rowsLabel } from "./dom";
 export { type Segments, type SegmentsOptions, segments } from "./radio";
@@ -384,12 +389,13 @@ export interface Pairs {
  * color and the values in the text's, both in mono and wrapping anywhere. Where the
  * view is narrow a name stands over its value.
  */
-export function pairs(lines: readonly (readonly [name: string, value: string])[]): Pairs {
+export function pairs(lines: readonly (readonly [name: string, value: string | HTMLElement])[]): Pairs {
   const node = el("dl", "pairs");
   const rows = lines.map(([name, value]) => {
-    const cells = [el("dt", "pair-name", name), el("dd", "pair-value", value)];
+    const cells = [el("dt", "pair-name", name), el("dd", "pair-value", typeof value === "string" ? value : undefined)];
+    if (typeof value !== "string") cells[1]?.append(value);
     node.append(...cells);
-    return { name, value, cells };
+    return { name, value: typeof value === "string" ? value : (value.textContent ?? ""), cells };
   });
   return {
     node,
@@ -529,4 +535,226 @@ export function confirmLine(options: ConfirmOptions): Controls {
   ]);
   node.append(noteLine(options.text), answers.node);
   return { node, buttons: answers.buttons };
+}
+
+/** What a tab bar is built from. */
+export interface TabsOptions {
+  /** The tabs, in order. */
+  options: readonly { value: string; label: string }[];
+  /** The bar's name, for assistive tech. */
+  label: string;
+  /** A tab picked, by a click or the arrows. The caller says which is on from there. */
+  onChange(value: string): void;
+}
+
+export interface Tabs {
+  node: HTMLElement;
+  items: readonly RadioItem[];
+  /** What the tab that is on shows, named by it. */
+  panel: HTMLElement;
+  /** Show which tab is on. */
+  set(value: string): void;
+}
+
+/** Tells one bar's tabs and panel from another's, for the names that tie them together. */
+let tabsMade = 0;
+
+/**
+ * A row of tabs over the panel that shows what the one that is on holds, as
+ * the browsers' own tools have them: a tablist that is one tab stop, the
+ * arrows, Home and End move along the tabs that show and pick as they go. A
+ * bar wider than the view scrolls sideways, and keeps the tab that is on in view.
+ */
+export function tabBar(options: TabsOptions): Tabs {
+  const id = `dk-tabs-${++tabsMade}`;
+  const node = el("div", "tabs");
+  node.setAttribute("role", "tablist");
+  node.setAttribute("aria-label", options.label);
+  const panel = el("div", "tab-panel");
+  panel.setAttribute("role", "tabpanel");
+  panel.id = `${id}-panel`;
+  const items = options.options.map((option, index) => {
+    const item = button("tab", option.label);
+    item.id = `${id}-${index}`;
+    item.setAttribute("role", "tab");
+    item.setAttribute("aria-controls", panel.id);
+    item.addEventListener("click", () => options.onChange(option.value));
+    node.append(item);
+    return { node: item, value: option.value };
+  });
+  node.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const shown = items.filter((item) => !item.node.hidden);
+    const at = shown.findIndex((item) => item.node === event.target);
+    const next = at < 0 ? null : radioMove(event.key, at, shown.length);
+    const item = next === null ? undefined : shown[next];
+    if (!item) return;
+    event.preventDefault();
+    item.node.focus();
+    options.onChange(item.value);
+  });
+  return {
+    node,
+    items,
+    panel,
+    set(value: string): void {
+      for (const item of items) {
+        const on = item.value === value;
+        item.node.classList.toggle("on", on);
+        item.node.setAttribute("aria-selected", on ? "true" : "false");
+        item.node.tabIndex = on ? 0 : -1;
+        if (!on) continue;
+        panel.setAttribute("aria-labelledby", item.node.id);
+        // The tab that is on stays in view where the bar scrolls.
+        const left = item.node.offsetLeft;
+        const width = item.node.offsetWidth;
+        if (typeof left !== "number" || typeof width !== "number") continue;
+        if (left < node.scrollLeft) node.scrollLeft = left;
+        else if (left + width > node.scrollLeft + node.clientWidth) node.scrollLeft = left + width - node.clientWidth;
+      }
+    },
+  };
+}
+
+/** What a section is built from. */
+export interface SectionOptions {
+  label: string;
+  /** What the head says after the label, quiet: how many lines it holds. */
+  count?: string;
+  /** What the head ends with, in order: small controls for what it holds. */
+  ends?: readonly HTMLElement[];
+  open: boolean;
+  /** The head was pressed, and the section is open or closed as `open` says. */
+  onToggle?(open: boolean): void;
+}
+
+export interface Section {
+  node: HTMLElement;
+  /** The head's button, which opens and closes it. */
+  head: HTMLButtonElement;
+  /** Where what it holds goes. */
+  body: HTMLElement;
+  set(open: boolean): void;
+}
+
+let sectionsMade = 0;
+
+/**
+ * A section of a view under a head that opens and closes it, as the
+ * browsers' tools head the parts of a request: a triangle, the label in
+ * the text's color, a quiet count, and small controls at the far end. What it
+ * holds stands under its label.
+ */
+export function section(options: SectionOptions): Section {
+  const node = el("div", "sect");
+  const top = el("div", "sect-top");
+  const head = button("sect-head", "");
+  const turn = el("span", "sect-turn");
+  turn.append(icon("chevron-left", 12));
+  head.append(turn, el("span", "sect-label", options.label));
+  if (options.count !== undefined) head.append(el("span", "sect-count", options.count));
+  top.append(head, ...(options.ends ?? []));
+  const body = el("div", "sect-body");
+  body.id = `dk-sect-${++sectionsMade}`;
+  head.setAttribute("aria-controls", body.id);
+  node.append(top, body);
+  let open = false;
+  const set = (next: boolean): void => {
+    open = next;
+    head.setAttribute("aria-expanded", next ? "true" : "false");
+    body.hidden = !next;
+  };
+  head.addEventListener("click", () => {
+    set(!open);
+    options.onToggle?.(open);
+  });
+  set(options.open);
+  return { node, head, body, set };
+}
+
+/**
+ * A small control in words, as the browsers' tools have them by a section's
+ * head: `view source`, `Raw`. With `pressed`, it is a toggle that shows
+ * whether it is on.
+ */
+export function actButton(label: string, run: () => void, pressed?: boolean): HTMLButtonElement {
+  const node = button("act", label);
+  node.addEventListener("click", run);
+  if (pressed !== undefined) mark(node, pressed);
+  return node;
+}
+
+/** Pieces of code as spans, each colored for what it is. */
+function tokenNodes(tokens: readonly Token[]): (HTMLElement | string)[] {
+  return tokens.map(([kind, text]) => (kind === "" ? text : el("span", `tok-${kind}`, text)));
+}
+
+/** What a code view is built from. */
+export interface CodeViewOptions {
+  text: string;
+  /** The kind of code, which colors it. Plain where left out. */
+  lang?: Lang;
+}
+
+/**
+ * Text as the browsers' tools show a response: a line a row, its number in
+ * a gutter, colored for its kind of code. A long line wraps, and goes on a
+ * little further in than where it starts, never back at the edge.
+ */
+export function codeView(options: CodeViewOptions): HTMLElement {
+  const node = el("div", "src");
+  const lines = tokenLines(options.text, options.lang ?? "text");
+  const raw = options.text.split("\n");
+  lines.forEach((tokens, index) => {
+    const row = el("div", "src-line");
+    const number = el("span", "src-num", String(index + 1));
+    number.setAttribute("aria-hidden", "true");
+    const text = el("span", "src-text");
+    text.append(...tokenNodes(tokens));
+    // Wrapped, a line goes on two steps in from where its own text starts.
+    const hang = indentOf(raw[index] ?? "") + 2;
+    text.style.paddingLeft = `${hang}ch`;
+    text.style.textIndent = `-${hang}ch`;
+    row.append(number, text);
+    node.append(row);
+  });
+  return node;
+}
+
+/** One value of a json tree under its key: a leaf, or a node that opens to what it holds. */
+function jsonItem(key: string | null, value: unknown, open: boolean): HTMLElement {
+  const name = key === null ? [] : [el("span", "tok-key", key), ": "];
+  if (!jsonOpens(value)) {
+    const leaf = el("div", "json-leaf");
+    leaf.append(...name, ...tokenNodes([jsonLeaf(value)]));
+    return leaf;
+  }
+  const node = el("div", "json-node");
+  const head = button("json-head", "");
+  const turn = el("span", "sect-turn");
+  turn.append(icon("chevron-left", 12));
+  head.append(turn, ...name, el("span", "json-preview", jsonPreview(value)));
+  const kids = el("div", "json-kids");
+  node.append(head, kids);
+  let built = false;
+  const set = (next: boolean): void => {
+    // What a node holds is built the first time it opens, so a large tree costs what shows of it.
+    if (next && !built) {
+      built = true;
+      kids.append(...jsonEntries(value).map(([each, inner]) => jsonItem(each, inner, false)));
+    }
+    head.setAttribute("aria-expanded", next ? "true" : "false");
+    kids.hidden = !next;
+  };
+  head.addEventListener("click", () => set(head.getAttribute("aria-expanded") !== "true"));
+  set(open);
+  return node;
+}
+
+/** Json as a tree, as the browsers' tools show a payload: the top open, each node a line that opens to what it holds. */
+export function jsonTree(value: unknown): HTMLElement {
+  const node = el("div", "json");
+  node.append(jsonItem(null, value, true));
+  return node;
 }

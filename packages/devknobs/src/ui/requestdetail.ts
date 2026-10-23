@@ -1,56 +1,64 @@
 import { NativeDate } from "../engine/clock";
-import type { BodyRecord, RequestEntry } from "../requests/types";
+import type { BodyRecord, HeaderList, RequestEntry } from "../requests/types";
 import { button, el } from "./dom";
 import { glyph, icon } from "./icons";
 import {
+  actButton,
   codeBlock,
-  emptyLine,
-  filterField,
+  codeView,
   group,
+  jsonTree,
   noteLine,
-  type Pairs,
   pairs,
   rowButton,
-  segments,
+  section,
   splitBar,
+  tabBar,
   toolbar,
 } from "./kit";
-import { clockTime, durationLabel, hasText, type Lead, LIGHT_WHY, middle, STATUS_TONES } from "./requestformat";
+import { bodyText, clockTime, durationLabel, hasText, type Lead, LIGHT_WHY, middle, STATUS_TONES } from "./requestformat";
 import {
-  BODY_LINES,
   bodyShape,
+  cookieLines,
   cutNote,
+  decodeForm,
+  encodedLines,
   type Frame,
-  headerGroups,
-  headersFilter,
-  isSegment,
-  LIGHT_BODIES,
-  moreLines,
+  generalLines,
+  isTab,
   noResponse,
+  otherLines,
   pathRoom,
+  payloadOf,
+  PROVISIONAL,
   queryLines,
-  type Segment,
-  SEGMENTS,
-  segmentsOf,
+  queryString,
+  rawHeaders,
   stackFile,
   stackLines,
-  startSegment,
+  startTab,
   summary,
+  type Tab,
+  TABS,
+  tabsOf,
   timingLines,
   timingParts,
 } from "./requestparts";
+import { langOf } from "./syntax";
 
 /**
- * One request in full, in place of the list. What is read most is on top: a
- * summary that stays, with the method and the path and then how it went, and
- * under it one of three segments at a time. `body` has the request's body
- * and the answer's, `headers` both sets of headers, and `more` the rest: the
- * address in full, what the request is, its timing and the call that made
- * it. The way back is the view's head.
+ * One request in full, in place of the list, laid out as the browsers' own
+ * network panel lays it out, in its words, so nothing about it is new to
+ * learn. A summary stays on top, the method and the path and how it went,
+ * and under it the tabs: Headers, Payload, Preview, Response, Initiator,
+ * Timing, Cookies and EventStream, the ones the request has. The way back is
+ * the view's head.
  *
  * A part is built once and drawn again only when what it shows has changed,
- * so a request that changes while it shows keeps its segment, its scroll and
- * what the user opened.
+ * so a request that changes while it shows keeps its tab, its scroll and
+ * what the user opened. Which tab is on, which sections are open and how
+ * each shows are kept from one request to the next, as the browsers' tools
+ * keep them.
  */
 
 /** What the detail says once, the first time a request is copied. */
@@ -60,17 +68,29 @@ export const HIDES_NOTE =
 /** What the detail says of a request the log let go while it showed. */
 export const GONE_NOTE = "this request is no longer in the log, and shows as it last was";
 
-/** What the headers say where the filter leaves none. */
-export const NO_HEADER = "no header matches";
+/** What the detail keeps from one request to the next: the tab picked, and how each section was left. */
+export interface DetailMemory {
+  tab: Tab | null;
+  /** By a section's name and a toggle's: whether it is open, or on. */
+  open: Map<string, boolean>;
+}
+
+export function detailMemory(): DetailMemory {
+  return { tab: null, open: new Map() };
+}
 
 /** What the detail needs from the view it shows in. */
 export interface DetailContext {
   /** Copy a text, and say how that went. */
   copy(text: string): void;
-  /** The user picked another segment, which starts at its top. */
+  /** The user picked another tab, which starts at its top. */
   picked?(): void;
+  /** What the detail keeps between requests. One of its own where left out. */
+  memory?: DetailMemory;
   /** The file devknobs runs from, as a stack names it. Read from a stack of its own where left out. */
   own?: string;
+  /** The page's own referrer policy, where it sets one. Read from the page where left out. */
+  policy?: string;
 }
 
 export interface Detail {
@@ -81,13 +101,13 @@ export interface Detail {
   gone(): void;
   /** Say what a copy leaves out. */
   hides(): void;
-  /** Escape came: empty the headers' filter, and say whether there was anything in it. */
+  /** Escape came: say whether the detail had anything of its own to undo. It has not: escape goes back. */
   escape(): boolean;
   /** The detail left the view. */
   destroy(): void;
 }
 
-/** One part of a segment: what it shows, and its node while that is the same. */
+/** One part of a tab: what it shows, and its node while that is the same. */
 interface Block {
   /** What the block shows. A new one of any of them means it is built again. */
   of(entry: RequestEntry): readonly unknown[];
@@ -110,11 +130,17 @@ function put(node: HTMLElement, text: string): void {
   if (node.textContent !== text) node.textContent = text;
 }
 
+/** The referrer policy the page sets for itself in its head, or empty. */
+function pagePolicy(): string {
+  if (typeof document.querySelector !== "function") return "";
+  return document.querySelector('meta[name="referrer"]')?.getAttribute("content")?.trim() ?? "";
+}
+
 export function createDetail(entry: RequestEntry, context: DetailContext): Detail {
   const own = context.own ?? stackFile(new Error().stack);
+  const memory = context.memory ?? detailMemory();
+  const policy = context.policy ?? pagePolicy();
   let now = entry;
-  /** The segment the user picked for this request. Until then it opens on what it has. */
-  let picked: Segment | null = null;
 
   const verb = el("span", "req-verb");
   let verbShown: Lead | null = null;
@@ -130,46 +156,90 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
   const top = el("div", "req-sum");
   top.append(first, second);
 
-  const choice = segments({
-    options: SEGMENTS.map((each) => ({ value: each, label: each })),
+  const tabs = tabBar({
+    options: TABS.map((each) => ({ value: each, label: each })),
     label: "what of the request shows",
     onChange(value: string): void {
-      if (!isSegment(value) || value === shown()) return;
-      picked = value;
+      if (!isTab(value) || value === shown()) return;
+      memory.tab = value;
       draw();
       context.picked?.();
     },
   });
-  /** The headers' lists, which the filter goes through. */
-  let lists: { box: HTMLElement; list: Pairs }[] = [];
-  const unmatched = emptyLine(NO_HEADER);
-  const filter = filterField({ placeholder: "filter", label: "filter headers", onInput: refilter });
 
   const hides = noteLine(HIDES_NOTE);
   hides.hidden = true;
   const left = noteLine(GONE_NOTE);
   left.hidden = true;
-  const region = el("div", "req-body");
-  region.setAttribute("role", "region");
+  const region = tabs.panel;
+  region.classList.add("req-body");
   const node = el("div", "req-detail");
-  node.append(toolbar([top, choice.node, filter.node]), hides, left, region);
+  node.append(toolbar([top, tabs.node]), hides, left, region);
 
-  function shown(): Segment {
-    return picked !== null && segmentsOf(now).includes(picked) ? picked : startSegment(now);
+  function shown(): Tab {
+    return startTab(now, memory.tab);
   }
 
-  function refilter(): void {
-    const words = filter.node.value.toLowerCase().split(/\s+/).filter((word) => word !== "");
-    let kept = 0;
-    for (const { box, list } of lists) {
-      const here = list.keep((name, value) => {
-        const text = `${name} ${value}`.toLowerCase();
-        return words.every((word) => text.includes(word));
-      });
-      box.hidden = here === 0;
-      kept += here;
+  /** Whether a section or a toggle is open, or on, as it was left, else as it starts. */
+  function isOpen(name: string, start = true): boolean {
+    return memory.open.get(name) ?? start;
+  }
+
+  /** A section of a tab, open or closed as it was left. */
+  function part(name: string, count?: string, ends?: readonly HTMLElement[]): ReturnType<typeof section> {
+    return section({
+      label: name,
+      count,
+      ends,
+      open: isOpen(name),
+      onToggle: (open) => memory.open.set(name, open),
+    });
+  }
+
+  /**
+   * A section whose body shows one of two ways, as `view source` and `view
+   * parsed` switch it, or with `Raw`: each press draws its body again, the
+   * section kept. `toggles` are the switches, each a name, its two labels,
+   * and whether it starts on.
+   */
+  function switched(
+    name: string,
+    count: string | undefined,
+    toggles: readonly { name: string; on: string; off: string; start: boolean }[],
+    draw: (on: (toggle: string) => boolean) => HTMLElement[],
+    more: readonly HTMLElement[] = [],
+  ): HTMLElement {
+    const key = (toggle: string): string => `${name}/${toggle}`;
+    const on = (toggle: string): boolean => {
+      const found = toggles.find((each) => each.name === toggle);
+      return isOpen(key(toggle), found?.start ?? false);
+    };
+    const buttons = toggles.map((toggle) => {
+      // A switch names what a press shows, `Raw` alone says whether it is on, as it is a checkbox there.
+      const raw = toggle.on === toggle.off;
+      const label = (): string => (on(toggle.name) ? toggle.off : toggle.on);
+      const control = actButton(label(), () => {
+        memory.open.set(key(toggle.name), !on(toggle.name));
+        control.textContent = label();
+        if (raw) control.setAttribute("aria-pressed", on(toggle.name) ? "true" : "false");
+        control.classList.toggle("on", raw && on(toggle.name));
+        fill();
+      }, raw ? on(toggle.name) : undefined);
+      return control;
+    });
+    const box = part(name, count, [...buttons, ...more]);
+    function fill(): void {
+      box.body.replaceChildren(...draw(on));
     }
-    unmatched.hidden = kept > 0;
+    fill();
+    return box.node;
+  }
+
+  /** The copy at the end of a section's head: just that text, as it was kept. */
+  function copyOf(text: string, what: string): HTMLButtonElement {
+    const copy = rowButton("req-copy", icon("copy"), `copy the ${what}`);
+    copy.addEventListener("click", () => context.copy(text));
+    return copy;
   }
 
   /** The summary, changed in place. */
@@ -201,28 +271,107 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
     put(host, said.host);
   }
 
-  /** A body: what is missing of it, then its text, its fields, or the line that says why it has none. */
-  function body(record: BodyRecord, type: string, name: string, lines?: number): { ends: HTMLElement[]; nodes: HTMLElement[] } {
-    const ends: HTMLElement[] = [];
-    const nodes: HTMLElement[] = [];
-    const cut = cutNote(record);
-    if (cut) nodes.push(noteLine(cut));
-    const shape = bodyShape(record, type);
-    if (shape.kind === "line") nodes.push(noteLine(shape.text));
-    else if (shape.kind === "fields") nodes.push(pairs(shape.lines).node);
-    else {
-      const code = codeBlock({ text: shape.text, lines });
-      if (code.wrap) ends.push(code.wrap);
-      nodes.push(code.node);
-    }
-    if (hasText(record) && record.text !== "") {
-      const copy = rowButton("req-copy", icon("copy"), `copy the ${name} body`);
-      copy.addEventListener("click", () => context.copy(record.text));
-      ends.push(copy);
-    }
-    return { ends, nodes };
+  /** General, as the browsers' tools have it: a dot in the status's tone before the Status Code. */
+  function general(at: RequestEntry): HTMLElement {
+    const box = part("General");
+    const lines = generalLines(at, policy).map(({ label, value, tone }): [string, string | HTMLElement] => {
+      if (tone === undefined) return [label, value];
+      const code = el("span", "req-code");
+      const dot = el("span", `req-dot req-stat${tone ? ` ${tone}` : ""}`, "●");
+      dot.setAttribute("aria-hidden", "true");
+      code.append(dot, value);
+      return [label, code];
+    });
+    box.body.append(pairs(lines).node);
+    return box.node;
   }
 
+  /** A set of headers, as the browsers' tools show it: a name and a value a line, or as text with Raw. */
+  function headers(name: string, list: HeaderList, warn: boolean): HTMLElement {
+    return switched(name, `(${list.length})`, [{ name: "raw", on: "Raw", off: "Raw", start: false }], (on) => {
+      const nodes: HTMLElement[] = [];
+      if (warn) {
+        const line = el("div", "req-warn");
+        line.append(el("span", "req-warn-mark", "⚠"), PROVISIONAL);
+        nodes.push(line);
+      }
+      if (on("raw")) nodes.push(codeView({ text: rawHeaders(list) }));
+      else if (list.length > 0) nodes.push(pairs(list).node);
+      return nodes;
+    });
+  }
+
+  /** The query, as Query String Parameters: parsed or as written, and decoded or not. */
+  function query(at: RequestEntry): HTMLElement | null {
+    const written = queryString(at.url);
+    if (written === "") return null;
+    return switched(
+      "Query String Parameters",
+      `(${queryLines(at.url).length})`,
+      [
+        { name: "source", on: "view source", off: "view parsed", start: false },
+        { name: "encoded", on: "view URL-encoded", off: "view decoded", start: false },
+      ],
+      (on) => [
+        on("source")
+          ? codeView({ text: on("encoded") ? written : decodeForm(written) })
+          : pairs(queryLines(at.url, !on("encoded"))).node,
+      ],
+      [copyOf(written, "query string")],
+    );
+  }
+
+  /** What was sent, as Form Data or Request Payload: parsed by default, or as it was kept. */
+  function payload(record: BodyRecord): HTMLElement {
+    const shape = payloadOf(record);
+    const cut = cutNote(record);
+    const notes = cut ? [noteLine(cut)] : [];
+    const copy = hasText(record) && record.text !== "" ? [copyOf(record.text, "request payload")] : [];
+    if (shape.kind === "form") {
+      const toggles = [{ name: "source", on: "view source", off: "view parsed", start: false }];
+      if (shape.encoded) toggles.push({ name: "encoded", on: "view URL-encoded", off: "view decoded", start: false });
+      return switched("Form Data", `(${shape.lines.length})`, toggles, (on) => {
+        // Only a urlencoded form reads two ways. Any other is shown as it was kept.
+        const decoded = shape.encoded && !on("encoded");
+        if (on("source")) return [...notes, codeView({ text: decoded ? decodeForm(shape.source) : shape.source })];
+        const lines = shape.encoded && !decoded ? encodedLines(shape.source) : shape.lines;
+        return [...notes, pairs(lines).node];
+      }, copy);
+    }
+    if (shape.kind === "json") {
+      return switched("Request Payload", undefined, [{ name: "source", on: "view source", off: "view parsed", start: false }], (on) => [
+        ...notes,
+        on("source") ? codeView({ text: shape.source, lang: "json" }) : jsonTree(shape.value),
+      ], copy);
+    }
+    const box = part("Request Payload", undefined, copy);
+    box.body.append(...notes, shape.kind === "text" ? codeView({ text: shape.text, lang: langOf(record.type) }) : noteLine(shape.text));
+    return box.node;
+  }
+
+  /** The response's body as text, numbered and colored, or the line that says why there is none. */
+  function response(at: RequestEntry): HTMLElement {
+    const record = at.responseBody;
+    const box = el("div", "req-response");
+    if (!record) {
+      box.append(noteLine(noResponse(at)));
+      return box;
+    }
+    const shape = bodyShape(record, at.contentType);
+    const type = record.type || at.contentType;
+    const cut = cutNote(record);
+    if (shape.kind === "line") {
+      box.append(noteLine(shape.text));
+      return box;
+    }
+    const head = group({ label: type.split(";", 1)[0] || "response", ends: [copyOf(record.text, "response")] });
+    box.append(head);
+    if (cut) box.append(noteLine(cut));
+    box.append(codeView({ text: bodyText(record, at.contentType), lang: record.kind === "form" ? "text" : langOf(type) }));
+    return box;
+  }
+
+  /** A stack, a frame a line, as the detail showed it before Initiator had its own. */
   function stack(text: string): HTMLElement {
     const box = el("div", "req-stack");
     const frameLine = (frame: Frame): HTMLElement => {
@@ -254,107 +403,89 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
     return box;
   }
 
-  const blocks: Record<Segment, Block[]> = {
-    body: [
+  const light = (at: RequestEntry): HTMLElement | null => (at.detail === "light" ? noteLine(LIGHT_WHY) : null);
+
+  const blocks: Record<Tab, Block[]> = {
+    Headers: [
+      block((at) => [at.detail], light),
+      block((at) => [at.url, at.finalUrl, at.method, at.state, at.status, at.statusText, at.error, at.referrerPolicy], general),
       block(
-        (at) => [at.detail],
-        (at) => (at.detail === "light" ? noteLine(LIGHT_BODIES) : null),
+        (at) => [at.detail, at.responseHeaders],
+        (at) => (at.detail === "light" || at.responseHeaders.length === 0 ? null : headers("Response Headers", at.responseHeaders, false)),
       ),
       block(
-        (at) => [at.detail, at.url, at.requestBody],
-        (at) => {
-          const query = queryLines(at.url);
-          if (at.detail === "light" || (at.requestBody === null && query.length === 0)) return null;
-          const sent = at.requestBody ? body(at.requestBody, "", "request", BODY_LINES) : { ends: [], nodes: [] };
-          const box = group({ label: "request", ends: sent.ends });
-          if (query.length > 0) box.append(pairs(query).node);
-          box.append(...sent.nodes);
-          return box;
-        },
+        (at) => [at.detail, at.requestHeaders],
+        (at) => (at.detail === "light" ? null : headers("Request Headers", at.requestHeaders, true)),
       ),
+    ],
+    Payload: [
+      block((at) => [at.url], query),
+      block((at) => [at.requestBody], (at) => (at.requestBody ? payload(at.requestBody) : null)),
+    ],
+    // Until Preview has its own, it shows the answer as the detail did before: json laid out, a form as its fields.
+    Preview: [
       block(
-        (at) => [at.detail, at.responseBody, at.contentType, at.state === "pending"],
+        (at) => [at.responseBody, at.contentType, at.state],
         (at) => {
-          if (at.detail === "light") return null;
-          const got = at.responseBody
-            ? body(at.responseBody, at.contentType, "response")
-            : { ends: [], nodes: [noteLine(noResponse(at))] };
-          const box = group({ label: "response", ends: got.ends });
-          box.append(...got.nodes);
-          return box;
+          const record = at.responseBody;
+          if (!record) return noteLine(noResponse(at));
+          const shape = bodyShape(record, at.contentType);
+          if (shape.kind === "line") return noteLine(shape.text);
+          if (shape.kind === "fields") return pairs(shape.lines).node;
+          return codeBlock({ text: shape.text }).node;
         },
       ),
     ],
-    headers: [
+    Response: [block((at) => [at.responseBody, at.contentType, at.state], response)],
+    Initiator: [
       block(
-        (at) => [at.responseHeaders, at.requestHeaders],
+        (at) => [at.initiator, at.initiatorType],
         (at) => {
-          const box = el("div", "req-headers");
-          lists = headerGroups(at).map((each) => {
-            const part = group({ label: each.label });
-            const list = pairs(each.lines);
-            part.append(list.node);
-            box.append(part);
-            return { box: part, list };
-          });
-          box.append(unmatched);
-          refilter();
-          return box;
+          if (at.initiator !== "") return stack(at.initiator);
+          return pairs([["loaded by", at.initiatorType]]).node;
         },
       ),
     ],
-    more: [
-      block(
-        (at) => [at.detail],
-        (at) => (at.detail === "light" ? noteLine(LIGHT_WHY) : null),
-      ),
-      block(
-        (at) => [at],
-        (at) => {
-          const box = group({ label: "request" });
-          box.append(pairs(moreLines(at)).node);
-          return box;
-        },
-      ),
+    Timing: [
+      block((at) => [at.detail], light),
       block(
         (at) => [at.timing],
         (at) => {
-          const box = group({ label: "timing" });
+          const box = part("Timing");
           const parts = timingParts(at.timing);
           if (parts.shares) {
             const label = `waiting ${durationLabel(parts.waiting)}, download ${durationLabel(parts.download)}`;
-            box.append(splitBar(parts.shares, label));
+            box.body.append(splitBar(parts.shares, label));
           }
-          box.append(pairs(timingLines(at.timing, clockTime(new NativeDate(at.timing.start)))).node);
-          return box;
+          box.body.append(pairs(timingLines(at.timing, clockTime(new NativeDate(at.timing.start)))).node);
+          return box.node;
         },
       ),
       block(
-        (at) => [at.initiator],
+        (at) => [at.contentType, at.sizes, at.protocol, at.kind, at.initiatorType, at.source],
         (at) => {
-          if (at.initiator === "") return null;
-          const box = group({ label: "initiator" });
-          box.append(stack(at.initiator));
-          return box;
+          const box = part("Request");
+          box.body.append(pairs(otherLines(at)).node);
+          return box.node;
         },
       ),
     ],
+    Cookies: [block((at) => [at.requestHeaders, at.responseHeaders], (at) => pairs(cookieLines(at)).node)],
+    EventStream: [block(() => [], () => noteLine("not read: a stream"))],
   };
 
   /** Which blocks the region holds now. */
   let held: readonly HTMLElement[] = [];
 
-  /** Show the request as it stands: the summary, the segments it has, and the one that shows. */
+  /** Show the request as it stands: the summary, the tabs it has, and the one that is on. */
   function draw(): void {
     drawTop();
-    const has = segmentsOf(now);
-    for (const item of choice.items) item.node.hidden = !isSegment(item.value) || !has.includes(item.value);
-    const segment = shown();
-    choice.set(segment);
-    region.setAttribute("aria-label", segment);
-    filter.node.hidden = segment !== "headers" || !headersFilter(now);
+    const has = tabsOf(now);
+    for (const item of tabs.items) item.node.hidden = !isTab(item.value) || !has.includes(item.value);
+    const tab = shown();
+    tabs.set(tab);
     const nodes: HTMLElement[] = [];
-    for (const each of blocks[segment]) {
+    for (const each of blocks[tab]) {
       const what = each.of(now);
       if (!same(each.shown, what)) {
         each.shown = what;
@@ -387,9 +518,7 @@ export function createDetail(entry: RequestEntry, context: DetailContext): Detai
     hides(): void {
       hides.hidden = false;
     },
-    escape(): boolean {
-      return !filter.node.hidden && filter.clear();
-    },
+    escape: () => false,
     destroy(): void {
       sized?.disconnect();
     },

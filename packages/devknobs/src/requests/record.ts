@@ -16,6 +16,8 @@ export interface Started {
   headers: HeaderList;
   body: BodyRecord | null;
   initiator: string;
+  /** The referrer policy the script asked for, where it asked for one. */
+  referrerPolicy?: string;
 }
 
 /** What the `fetch` and `XMLHttpRequest` patches write the log through. */
@@ -76,6 +78,7 @@ export function blank(
     initiator: "",
     initiatorType: "",
     protocol: "",
+    referrerPolicy: "",
   };
 }
 
@@ -96,6 +99,7 @@ export function createLog(
         requestHeaders: request.headers,
         requestBody: request.body,
         initiator: request.initiator,
+        referrerPolicy: request.referrerPolicy ?? "",
       });
       return id;
     },

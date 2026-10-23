@@ -4,7 +4,7 @@ import { button, el } from "./dom";
 import { glyph } from "./icons";
 import { emptyLine, filterField, rowBox, segments, toolbar } from "./kit";
 import { closePane, openPane, type PaneView, paneView, retitlePane } from "./pane";
-import { createDetail, type Detail } from "./requestdetail";
+import { createDetail, type Detail, detailMemory } from "./requestdetail";
 import {
   atTop,
   type Chip,
@@ -175,6 +175,8 @@ export function createRequests(context: RequestsContext = {}): Requests {
   let opened: string | null = null;
   /** The first copy says what it leaves out. */
   let told = false;
+  /** The tab and the sections a request was left with, which the next one opens with. */
+  const memory = detailMemory();
 
   function shows(row: Row): boolean {
     return !row.box.hidden;
@@ -424,6 +426,7 @@ export function createRequests(context: RequestsContext = {}): Requests {
       mount(body: HTMLElement): () => void {
         const view = createDetail(entry, {
           copy: (text) => send(text),
+          memory,
           picked(): void {
             if (body.scrollTop !== 0) body.scrollTop = 0;
           },
@@ -446,7 +449,6 @@ export function createRequests(context: RequestsContext = {}): Requests {
           detail = null;
         };
       },
-      // Escape empties the headers' filter first, as it does the list's.
       escape: () => detail?.escape() ?? false,
       // The head's way back and Escape go to the list, and from there to the rows.
       back,

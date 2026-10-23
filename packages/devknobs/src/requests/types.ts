@@ -103,4 +103,6 @@ export interface RequestEntry {
   initiatorType: string;
   /** The protocol the browser spoke, such as `h2`, or empty. */
   protocol: string;
+  /** The referrer policy the script asked for, such as `no-referrer`, or empty where it asked for none. */
+  referrerPolicy: string;
 }

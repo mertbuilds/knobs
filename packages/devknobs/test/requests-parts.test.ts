@@ -1,21 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import { BODY_CAP, type BodyRecord, type RequestEntry } from "../src/requests/types";
 import {
+  BINARY,
   bodyShape,
+  boundaryOf,
+  cookieLines,
   cutNote,
-  headerGroups,
-  HEADERS_FILTER,
-  headersFilter,
-  moreLines,
+  decodeForm,
+  encodedLines,
+  FAILED_RESPONSE,
+  generalLines,
+  multipartFields,
+  NO_RESPONSE_DATA,
   noResponse,
+  otherLines,
   PATH_CHARS,
   pathRoom,
+  payloadOf,
   queryLines,
-  segmentsOf,
+  queryString,
+  rawHeaders,
   stackFile,
   stackLines,
-  startSegment,
+  startTab,
+  statusCode,
   summary,
+  TABS,
+  tabsOf,
   timingLines,
   timingParts,
   urlParts,
@@ -111,61 +122,224 @@ describe("urlParts and pathRoom", () => {
   });
 });
 
-describe("the segments", () => {
-  test("a fetch has all three, and opens on its bodies", () => {
-    expect(segmentsOf(fetched())).toEqual(["body", "headers", "more"]);
-    expect(startSegment(fetched())).toBe("body");
+describe("the tabs", () => {
+  test("are the browsers' own, in their words and their order", () => {
+    expect(TABS).toEqual(["Headers", "Payload", "Preview", "Response", "Initiator", "Timing", "Cookies", "EventStream"]);
   });
 
-  test("with a body on one side only it still opens on the bodies", () => {
-    expect(startSegment(fetched({ requestBody: null }))).toBe("body");
-    expect(startSegment(fetched({ responseBody: null }))).toBe("body");
+  test("a fetch that sent a body has all but Cookies and EventStream, and opens on Headers", () => {
+    expect(tabsOf(fetched({ responseHeaders: [["content-type", "application/json"]] }))).toEqual([
+      "Headers",
+      "Payload",
+      "Preview",
+      "Response",
+      "Initiator",
+      "Timing",
+    ]);
+    expect(startTab(fetched(), null)).toBe("Headers");
   });
 
-  test("with no body it opens on its headers", () => {
-    expect(startSegment(fetched({ method: "GET", requestBody: null, responseBody: null }))).toBe("headers");
+  test("Payload is there for a query or a body, and not for a GET with neither", () => {
+    expect(tabsOf(fetched({ method: "GET", requestBody: null, url: "http://app.test/a" }))).not.toContain("Payload");
+    expect(tabsOf(fetched({ method: "GET", requestBody: null, url: "http://app.test/a?x=1" }))).toContain("Payload");
+    expect(tabsOf(fetched({ url: "http://app.test/a" }))).toContain("Payload");
   });
 
-  test("a light row has no headers to show, and opens on the rest", () => {
-    expect(segmentsOf(image())).toEqual(["body", "more"]);
-    expect(startSegment(image())).toBe("more");
+  test("Cookies shows only with a cookie to show, and EventStream only for an event stream", () => {
+    expect(tabsOf(fetched({ responseHeaders: [] }))).not.toContain("Cookies");
+    expect(tabsOf(fetched())).toContain("Cookies");
+    expect(tabsOf(fetched({ responseHeaders: [], requestHeaders: [["Cookie", "a=1"]] }))).toContain("Cookies");
+    expect(tabsOf(fetched())).not.toContain("EventStream");
+    expect(tabsOf(fetched({ contentType: "text/event-stream; charset=utf-8" }))).toContain("EventStream");
   });
 
-  test("a request with no header at all leaves the headers out", () => {
-    const bare = fetched({ requestHeaders: [], responseHeaders: [], requestBody: null, responseBody: null });
-    expect(segmentsOf(bare)).toEqual(["body", "more"]);
-    expect(startSegment(bare)).toBe("more");
+  test("a light row shows what it can: Headers, Initiator and Timing", () => {
+    expect(tabsOf(image())).toEqual(["Headers", "Initiator", "Timing"]);
+    expect(tabsOf(image({ initiatorType: "" }))).toEqual(["Headers", "Timing"]);
+  });
+
+  test("the tab picked last opens again where the request has it, and Headers where it has not", () => {
+    expect(startTab(fetched(), "Response")).toBe("Response");
+    expect(startTab(image(), "Response")).toBe("Headers");
+    expect(startTab(image(), "Timing")).toBe("Timing");
   });
 });
 
-describe("the query and the headers", () => {
-  test("the query's parameters, decoded, one that comes twice kept twice", () => {
+describe("General and the headers", () => {
+  test("a fetch: the address, the method, the status with its text, in the browsers' words", () => {
+    expect(generalLines(fetched())).toEqual([
+      { label: "Request URL", value: "http://app.test/api/users?page=2" },
+      { label: "Request Method", value: "POST" },
+      { label: "Status Code", value: "201 Created", tone: "ok" },
+    ]);
+  });
+
+  test("an answer with no status text gets the standard one, as HTTP/2 gives none", () => {
+    expect(statusCode(fetched({ status: 404, statusText: "" }))).toBe("404 Not Found");
+    expect(statusCode(fetched({ status: 299, statusText: "" }))).toBe("299");
+    expect(statusCode(fetched({ status: 200, statusText: "Fine" }))).toBe("200 Fine");
+  });
+
+  test("what happened in place of a status is in brackets, as the browsers' tools write it", () => {
+    expect(statusCode(fetched(PENDING))).toBe("(pending)");
+    expect(statusCode(fetched({ state: "aborted", status: null }))).toBe("(canceled)");
+    expect(statusCode(fetched({ state: "failed", status: null, error: "TypeError: Failed to fetch" }))).toBe(
+      "(failed) TypeError: Failed to fetch",
+    );
+    expect(statusCode(fetched({ status: 0 }))).toBe("(opaque)");
+    expect(statusCode(image({ status: null }))).toBe("");
+  });
+
+  test("a redirect shows where it ended, and where it was asked for", () => {
+    const lines = generalLines(fetched({ redirected: true, finalUrl: "http://app.test/v2/users" }));
+    expect(lines.slice(0, 2)).toEqual([
+      { label: "Request URL", value: "http://app.test/v2/users" },
+      { label: "Redirected From", value: "http://app.test/api/users?page=2" },
+    ]);
+    const same = generalLines(fetched({ finalUrl: "http://app.test/api/users?page=2" }));
+    expect(same.map((line) => line.label)).not.toContain("Redirected From");
+  });
+
+  test("Referrer Policy is the request's own, else the page's, and left out where neither is known", () => {
+    const labels = (lines: { label: string }[]) => lines.map((line) => line.label);
+    expect(labels(generalLines(fetched()))).not.toContain("Referrer Policy");
+    expect(generalLines(fetched(), "origin").at(-1)).toEqual({ label: "Referrer Policy", value: "origin" });
+    expect(generalLines(fetched({ referrerPolicy: "no-referrer" }), "origin").at(-1)).toEqual({
+      label: "Referrer Policy",
+      value: "no-referrer",
+    });
+  });
+
+  test("a light row has no method, and its status where the browser gives one", () => {
+    expect(generalLines(image()).map((line) => line.label)).toEqual(["Request URL", "Status Code"]);
+    expect(generalLines(image({ status: null })).map((line) => line.label)).toEqual(["Request URL"]);
+  });
+
+  test("Raw is the headers a `name: value` a line, as they were read", () => {
+    expect(rawHeaders(fetched().requestHeaders)).toBe("content-type: application/json\nAuthorization: Bearer abc\nX-Api-Key: k1");
+    expect(rawHeaders([])).toBe("");
+  });
+
+  test("the cookies are the request's Cookie and the answer's Set-Cookie", () => {
+    expect(cookieLines(fetched({ requestHeaders: [["Cookie", "a=1"], ["accept", "*/*"]] }))).toEqual([
+      ["Cookie", "a=1"],
+      ["set-cookie", "sid=1"],
+    ]);
+  });
+});
+
+describe("the query", () => {
+  test("is the address's own, without its `?`", () => {
+    expect(queryString("http://app.test/a?page=2&q=a%20b#top")).toBe("page=2&q=a%20b");
+    expect(queryString("http://app.test/a")).toBe("");
+    expect(queryString("not a url")).toBe("");
+  });
+
+  test("its parameters decoded, one that comes twice kept twice, or as written", () => {
     expect(queryLines("http://app.test/a?page=2&q=a%20b&tag=x&tag=y")).toEqual([
       ["page", "2"],
       ["q", "a b"],
       ["tag", "x"],
       ["tag", "y"],
     ]);
+    expect(queryLines("http://app.test/a?q=a%20b&flag", false)).toEqual([
+      ["q", "a%20b"],
+      ["flag", ""],
+    ]);
     expect(queryLines("http://app.test/a")).toEqual([]);
     expect(queryLines("not a url")).toEqual([]);
   });
 
-  test("the headers are in two groups, the answer's first, and a group with none is left out", () => {
-    const entry = fetched();
-    expect(headerGroups(entry)).toEqual([
-      { label: "response", lines: entry.responseHeaders },
-      { label: "request", lines: entry.requestHeaders },
+  test("decoding reads `+` as a space, and leaves what does not decode as it is", () => {
+    expect(decodeForm("q=a+b%26c")).toBe("q=a b&c");
+    expect(decodeForm("bad=%E0%A4%A")).toBe("bad=%E0%A4%A");
+    expect(encodedLines("a=1&b=x%20y&&c")).toEqual([
+      ["a", "1"],
+      ["b", "x%20y"],
+      ["c", ""],
     ]);
-    expect(headerGroups(fetched(PENDING)).map((each) => each.label)).toEqual(["request"]);
-    expect(headerGroups(image())).toEqual([]);
+  });
+});
+
+describe("the payload", () => {
+  test("json is a tree of its value, and its source as it was sent", () => {
+    expect(payloadOf(text('{"name":"Ada"}'))).toEqual({ kind: "json", value: { name: "Ada" }, source: '{"name":"Ada"}' });
+    // Json that would come back changed, or was cut, is text.
+    expect(payloadOf(text('{"a":1,"a":2}'))).toEqual({ kind: "text", text: '{"a":1,"a":2}' });
+    expect(payloadOf(text('{"a":', { truncated: true }))).toEqual({ kind: "text", text: '{"a":' });
+    expect(payloadOf(text("hi", { type: "text/plain" }))).toEqual({ kind: "text", text: "hi" });
   });
 
-  test("the headers get a filter only where there are more than twelve of them in all", () => {
-    const many = (count: number) => Array.from({ length: count }, (_, at): [string, string] => [`x-${at}`, "1"]);
-    expect(HEADERS_FILTER).toBe(12);
-    expect(headersFilter(fetched())).toBe(false);
-    expect(headersFilter(fetched({ requestHeaders: many(6), responseHeaders: many(6) }))).toBe(false);
-    expect(headersFilter(fetched({ requestHeaders: many(6), responseHeaders: many(7) }))).toBe(true);
+  test("a urlencoded body is Form Data, decoded, and can show as written", () => {
+    expect(payloadOf(text("a=1&b=x%20y", { type: "application/x-www-form-urlencoded;charset=UTF-8" }))).toEqual({
+      kind: "form",
+      lines: [
+        ["a", "1"],
+        ["b", "x y"],
+      ],
+      source: "a=1&b=x%20y",
+      encoded: true,
+    });
+  });
+
+  test("a FormData is Form Data, a file as (binary)", () => {
+    const form = text("name=Ada\nbio=one\ntwo\nfile=(file a.png, image/png, 12 bytes)", {
+      kind: "form",
+      type: "multipart/form-data",
+    });
+    expect(payloadOf(form)).toEqual({
+      kind: "form",
+      lines: [
+        ["name", "Ada"],
+        ["bio", "one\ntwo"],
+        ["file", BINARY],
+      ],
+      source: form.text,
+      encoded: false,
+    });
+  });
+
+  test("a multipart body sent as text is parsed into its fields", () => {
+    const body = [
+      "------WebKitFormBoundaryX",
+      'Content-Disposition: form-data; name="name"',
+      "",
+      "Ada",
+      "------WebKitFormBoundaryX",
+      'Content-Disposition: form-data; name="photo"; filename="a.png"',
+      "Content-Type: image/png",
+      "",
+      "\u0089PNG",
+      "------WebKitFormBoundaryX",
+      'Content-Disposition: form-data; name="bio"',
+      "",
+      "one",
+      "two",
+      "------WebKitFormBoundaryX--",
+      "",
+    ].join("\r\n");
+    const type = "multipart/form-data; boundary=----WebKitFormBoundaryX";
+    expect(boundaryOf(type)).toBe("----WebKitFormBoundaryX");
+    expect(boundaryOf('multipart/form-data; boundary="a b"')).toBe("a b");
+    expect(boundaryOf("text/plain")).toBe("");
+    expect(multipartFields(body, boundaryOf(type))).toEqual([
+      ["name", "Ada"],
+      ["photo", BINARY],
+      ["bio", "one\r\ntwo"],
+    ]);
+    expect(payloadOf(text(body, { type })).kind).toBe("form");
+    // Cut short, it keeps what came.
+    expect(multipartFields(body.slice(0, body.indexOf("Ada") + 2), boundaryOf(type))).toEqual([["name", "Ad"]]);
+    expect(multipartFields(body, "")).toEqual([]);
+  });
+
+  test("what has no text to show says so in a line", () => {
+    expect(payloadOf(text("", { kind: "stream", size: null }))).toEqual({ kind: "line", text: "not read: a stream" });
+    expect(payloadOf(text("", { kind: "binary", size: 2048, type: "image/png" }))).toEqual({
+      kind: "line",
+      text: "binary, 2 KB, image/png",
+    });
+    expect(payloadOf(text(""))).toEqual({ kind: "line", text: "empty" });
   });
 });
 
@@ -238,45 +412,35 @@ describe("how a body shows", () => {
 
   test("with no answer's body it says whether one may still come", () => {
     expect(noResponse(fetched(PENDING))).toBe("waiting for the response");
-    expect(noResponse(fetched({ responseBody: null }))).toBe("no response body");
+    expect(noResponse(fetched({ responseBody: null }))).toBe(NO_RESPONSE_DATA);
+    expect(NO_RESPONSE_DATA).toBe("This request has no response data available.");
+    expect(noResponse(fetched({ state: "failed", status: null, responseBody: null }))).toBe(FAILED_RESPONSE);
+    expect(FAILED_RESPONSE).toBe("Failed to load response data");
   });
 });
 
 describe("the rest", () => {
-  test("a fetch: its address in full, then what it is", () => {
-    expect(moreLines(fetched())).toEqual([
-      ["url", "http://app.test/api/users?page=2"],
+  test("a fetch: what it is, how big, and what made it", () => {
+    expect(otherLines(fetched())).toEqual([
       ["type", "application/json"],
       ["size", "1.5 KB over the wire, 21 bytes of body"],
       ["protocol", "h2"],
-      ["state", "ok"],
       ["kind", "fetch"],
     ]);
   });
 
   test("a light row says what loaded it, and that its size is hidden", () => {
-    expect(moreLines(image())).toEqual([
-      ["url", "http://cdn.test/img/logo.png"],
+    expect(otherLines(image())).toEqual([
       ["size", "hidden by the server"],
       ["protocol", "h2"],
-      ["state", "ok"],
       ["kind", "img, loaded by img"],
     ]);
   });
 
-  test("says that it is the frame's, that it was redirected, and where the answer came from", () => {
-    const lines = moreLines(
-      fetched({ source: "frame", redirected: true, finalUrl: "http://app.test/v2/users", sizes: null, protocol: "" }),
-    );
-    expect(lines.slice(-3)).toEqual([
-      ["from", "the device frame"],
-      ["redirected", "yes"],
-      ["answered from", "http://app.test/v2/users"],
-    ]);
+  test("says that it is the frame's", () => {
+    const lines = otherLines(fetched({ source: "frame", sizes: null, protocol: "" }));
+    expect(lines.at(-1)).toEqual(["from", "the device frame"]);
     expect(lines.map(([label]) => label)).not.toContain("size");
-    const same = moreLines(fetched({ finalUrl: "http://app.test/api/users?page=2" })).map(([label]) => label);
-    expect(same).not.toContain("redirected");
-    expect(same).not.toContain("answered from");
   });
 });
 

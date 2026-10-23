@@ -81,6 +81,13 @@ export const CSS = `
   --req-image: #2a7e3b;
   --req-font: #c2298a;
   --req-media: #00749e;
+  /* Code as the browsers' tools color it, each 4.5:1 on the ground and on a card. */
+  --code-key: #881280;
+  --code-str: #c41a16;
+  --code-num: #1a1aa6;
+  --code-kw: #0d22aa;
+  --code-attr: #994500;
+  --code-com: #236e25;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --edge: 0px;
   --edge-line: transparent;
@@ -137,6 +144,12 @@ export const CSS = `
     --req-image: #71d083;
     --req-font: #ff8dcc;
     --req-media: #4ccce6;
+    --code-key: #5db0d7;
+    --code-str: #f29766;
+    --code-num: #9980ff;
+    --code-kw: #c58af9;
+    --code-attr: #9bbbdc;
+    --code-com: #8fbf8f;
   }
 }
 .wrap[data-side="left"] {
@@ -1207,6 +1220,96 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   border-radius: 2px;
 }
 .split-part { flex: 0 0 0; min-width: 1px; background: var(--fg); }
+/* A row of tabs, as the browsers' tools have them over a request: words
+   alone, quiet, and the one that is on in the text's color on a card. A bar
+   wider than the view scrolls sideways, with no bar of its own. */
+.tabs {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--view-end) 0 calc(var(--view-start) - var(--col-pad));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none;
+  height: 22px;
+  padding: 0 var(--col-pad);
+  line-height: 22px;
+  color: var(--faint);
+  border-radius: 4px;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.tab:hover { color: var(--fg); }
+.tab.on { color: var(--fg); background: var(--card); }
+/* A section under a head that opens and closes it: a triangle where the
+   view's lines start, the label in the text's color, a quiet count, and small
+   controls in words at the far end. What it holds stands under the label. */
+.sect { display: grid; grid-template-columns: minmax(0, 1fr); }
+/* Where the head has no room for its controls, they go under it, at the end. */
+.sect-top { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 2px; min-height: 24px; padding-right: calc(var(--view-end) - var(--col-pad)); }
+.sect-head {
+  flex: 1 0 auto;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--col-gap);
+  min-height: 24px;
+  padding-left: var(--view-start);
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--fg);
+}
+.sect-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sect-count { flex: none; color: var(--faint); }
+.sect-turn { flex: none; width: var(--col-icon); display: grid; place-items: center; color: var(--faint); }
+.sect-turn .glyph { transform: rotate(180deg); transition: transform 120ms ease-out; }
+[aria-expanded="true"] > .sect-turn .glyph { transform: rotate(270deg); }
+.sect-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 0 0 6px var(--col-step); }
+.act {
+  flex: none;
+  height: 20px;
+  padding: 0 var(--col-pad);
+  font-size: 10.5px;
+  line-height: 20px;
+  color: var(--faint);
+  border-radius: 4px;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.act:hover { color: var(--fg); }
+.act.on { color: var(--fg); background: var(--card); }
+/* Text as the browsers' tools show a response: a line a row, its number in
+   a gutter as wide as the longest, on the panel's ground. A long line wraps
+   and goes on a little in from where it starts, never back at the edge. */
+.src {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 0 var(--view-end) 0 var(--view-start);
+  font: 11px/1.6 var(--mono);
+  tab-size: 2;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.src-line { display: contents; }
+.src-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--faint); user-select: none; -webkit-user-select: none; }
+.src-text { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.tok-key, .tok-tag { color: var(--code-key); }
+.tok-str { color: var(--code-str); }
+.tok-num { color: var(--code-num); }
+.tok-kw { color: var(--code-kw); }
+.tok-attr { color: var(--code-attr); }
+.tok-com { color: var(--code-com); }
+/* Json as a tree: a node a line that opens to what it holds, a step in. */
+.json { padding: 0 var(--view-end) 0 var(--view-start); font: 11px/1.6 var(--mono); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.json-head { display: flex; align-items: baseline; width: 100%; white-space: pre; text-align: left; }
+.json-head > .sect-turn { align-self: center; }
+.json-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.json-kids, .json-leaf { padding-left: var(--col-icon); }
 /* What folds out under a view's row, one thing under another, padded as a
    row's editor is: 4 in from the row's edges, so what it holds is 4 round. */
 .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 2px var(--col-pad) 6px; }
@@ -1510,9 +1613,9 @@ s.css-decl, s.css-decl .css-var, s.css-decl .css-name { color: var(--faint); tex
 .req-row.light { color: var(--faint); }
 
 /* One request in full, under the head that is its way back. Its summary and
-   its segments are in the kit's bar, so they stay while the rest scrolls, and
-   its groups, lists, code and bar are the kit's. What is here is only the
-   cells of the summary and of a stack's frames. Everything starts where
+   its tabs are in the kit's bar, so they stay while the rest scrolls, and
+   its sections, lists, code and bar are the kit's. What is here is only the
+   cells of the summary, of the Status Code and of a stack's frames. Everything starts where
    the kit's lists do. The path is the main thing: it has the room, breaks
    anywhere and keeps to two lines, cut in its middle by the view. */
 .req-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
@@ -1549,7 +1652,13 @@ s.css-decl, s.css-decl .css-var, s.css-decl .css-name { color: var(--faint); tex
   text-align: right;
   color: var(--faint);
 }
-.req-body, .req-headers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.req-body, .req-response { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+/* The Status Code: a dot in the status's tone, a mark in its text, then the code in the text's color. */
+.req-code { display: inline-flex; align-items: baseline; gap: 6px; }
+.req-dot { font-size: 9px; }
+/* The browsers' warning over Request Headers, its mark amber. */
+.req-warn { display: flex; gap: 6px; padding: 0 var(--view-end) 0 var(--view-start); font-size: 11px; }
+.req-warn-mark { color: var(--req-moved); }
 /* A frame a line: the function in the text's color, then where it is, quiet, which a press copies. */
 .req-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0 var(--view-end) 0 var(--view-start); font-family: var(--mono); font-size: 11px; }
 .req-frame { display: flex; align-items: baseline; gap: 8px; }

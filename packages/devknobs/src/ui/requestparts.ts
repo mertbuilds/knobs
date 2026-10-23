@@ -1,6 +1,7 @@
 import { READ_MS } from "../requests/body";
 import { BODY_CAP, type BodyRecord, type HeaderList, type RequestEntry, type RequestTiming } from "../requests/types";
 import {
+  bodyJson,
   bodyNote,
   bodyText,
   bytesLabel,
@@ -17,18 +18,9 @@ import {
 
 /**
  * What one request's detail reads, part by part: its summary, which of its
- * segments there are, and what each of them lists. All of it from the row
+ * tabs there are, and what each of them lists. All of it from the row
  * alone, so none of it needs a page.
  */
-
-/** What the body segment says of a row the browser gives no bodies of. */
-export const LIGHT_BODIES = "the browser gives a page no bodies for this";
-
-/** A request body past this many lines shows its first ones, so the response stays in reach. */
-export const BODY_LINES = 12;
-
-/** With more headers than this, the headers get a filter. */
-export const HEADERS_FILTER = 12;
 
 /** How many characters of a path show where nothing tells how wide its lines are. */
 export const PATH_CHARS = 72;
@@ -83,54 +75,6 @@ export function summary(entry: RequestEntry): Summary {
   };
 }
 
-/** What a request's detail shows, one at a time, in the order they stand. */
-export const SEGMENTS = ["body", "headers", "more"] as const;
-
-export type Segment = (typeof SEGMENTS)[number];
-
-export function isSegment(value: string): value is Segment {
-  return SEGMENTS.some((each) => each === value);
-}
-
-/** The segments a request has. One with nothing to show is left out. */
-export function segmentsOf(entry: RequestEntry): Segment[] {
-  const headers = entry.requestHeaders.length + entry.responseHeaders.length > 0;
-  return SEGMENTS.filter((each) => each !== "headers" || headers);
-}
-
-/** Whether a request has a body, its own or its answer's. */
-export function hasBody(entry: RequestEntry): boolean {
-  return entry.requestBody !== null || entry.responseBody !== null;
-}
-
-/** The segment a request opens on: its bodies where it has one, else its headers, else the rest. */
-export function startSegment(entry: RequestEntry): Segment {
-  if (hasBody(entry)) return "body";
-  return segmentsOf(entry).includes("headers") ? "headers" : "more";
-}
-
-/** The parameters of an address's query, a name and a value each, as they read once decoded. */
-export function queryLines(url: string): [name: string, value: string][] {
-  try {
-    return [...new URL(url).searchParams];
-  } catch {
-    return [];
-  }
-}
-
-/** The headers in their groups, the answer's first. A group with none is left out. */
-export function headerGroups(entry: RequestEntry): { label: string; lines: HeaderList }[] {
-  return [
-    { label: "response", lines: entry.responseHeaders },
-    { label: "request", lines: entry.requestHeaders },
-  ].filter((each) => each.lines.length > 0);
-}
-
-/** Whether a request has so many headers that they get a filter. */
-export function headersFilter(entry: RequestEntry): boolean {
-  return entry.requestHeaders.length + entry.responseHeaders.length > HEADERS_FILTER;
-}
-
 /** How a body shows: as text, as a list of fields, or as a line that says why there is none to show. */
 export type BodyShape =
   | { kind: "code"; text: string }
@@ -173,11 +117,6 @@ export function cutNote(record: BodyRecord): string {
   return `first ${bytesLabel(BODY_CAP)}${record.size === null ? "" : ` of ${bytesLabel(record.size)}`}`;
 }
 
-/** What stands in an answer's body's place while there is none. */
-export function noResponse(entry: RequestEntry): string {
-  return entry.state === "pending" ? "waiting for the response" : "no response body";
-}
-
 function kindWords(entry: RequestEntry): string {
   if (entry.kind === "fetch") return "fetch";
   if (entry.kind === "xhr") return "XMLHttpRequest";
@@ -187,20 +126,281 @@ function kindWords(entry: RequestEntry): string {
 }
 
 /**
- * What is rarely asked of a request, a label and a value a line: its address
- * in full, then what it is and where it came from. Lines with nothing to say
- * are left out.
+ * The tabs of a request's detail, in the words and the order of the browsers'
+ * own network panel, so nothing about them is new to learn.
  */
-export function moreLines(entry: RequestEntry): [label: string, value: string][] {
-  const lines: [string, string][] = [["url", entry.url]];
+export const TABS = ["Headers", "Payload", "Preview", "Response", "Initiator", "Timing", "Cookies", "EventStream"] as const;
+
+export type Tab = (typeof TABS)[number];
+
+export function isTab(value: string): value is Tab {
+  return TABS.some((each) => each === value);
+}
+
+/** A response that comes a piece at a time for as long as the page listens. */
+export function isEventStream(entry: RequestEntry): boolean {
+  return /^text\/event-stream\b/i.test(entry.contentType.trim());
+}
+
+/** The cookies a request carries or its answer sets, as far as a script sees them. */
+export function cookieLines(entry: RequestEntry): [name: string, value: string][] {
+  return [
+    ...entry.requestHeaders.filter(([name]) => name.toLowerCase() === "cookie"),
+    ...entry.responseHeaders.filter(([name]) => name.toLowerCase() === "set-cookie"),
+  ];
+}
+
+/**
+ * The tabs a request has. Headers and Timing always; Payload where it sent a
+ * query or a body; Preview and Response where the browser lets the page see
+ * the answer; Initiator where something is known of what made it; Cookies
+ * and EventStream only where there are some.
+ */
+export function tabsOf(entry: RequestEntry): Tab[] {
+  const full = entry.detail === "full";
+  const has: Record<Tab, boolean> = {
+    Headers: true,
+    Payload: full && (entry.requestBody !== null || queryString(entry.url) !== ""),
+    Preview: full,
+    Response: full,
+    Initiator: entry.initiator !== "" || entry.initiatorType !== "",
+    Timing: true,
+    Cookies: cookieLines(entry).length > 0,
+    EventStream: full && isEventStream(entry),
+  };
+  return TABS.filter((each) => has[each]);
+}
+
+/** The tab a request opens on: the one picked last where it has it, else Headers. */
+export function startTab(entry: RequestEntry, picked: Tab | null): Tab {
+  return picked !== null && tabsOf(entry).includes(picked) ? picked : "Headers";
+}
+
+/** An address's query, as written, without its `?`. */
+export function queryString(url: string): string {
+  try {
+    return new URL(url).search.slice(1);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The parameters of an address's query, a name and a value each: as they
+ * read once decoded, or as written with `decoded` false.
+ */
+export function queryLines(url: string, decoded = true): [name: string, value: string][] {
+  const query = queryString(url);
+  if (decoded) return query === "" ? [] : [...new URLSearchParams(query)];
+  return encodedLines(query);
+}
+
+/** The fields of a urlencoded text as written, a name and a value each, none of it decoded. */
+export function encodedLines(text: string): [name: string, value: string][] {
+  return text
+    .split("&")
+    .filter((part) => part !== "")
+    .map((part) => {
+      const at = part.indexOf("=");
+      return at < 0 ? [part, ""] : [part.slice(0, at), part.slice(at + 1)];
+    });
+}
+
+/** A urlencoded text decoded, its `+` a space, and left as it is where it does not decode. */
+export function decodeForm(text: string): string {
+  try {
+    return decodeURIComponent(text.replace(/\+/g, " "));
+  } catch {
+    return text;
+  }
+}
+
+/** The standard text of the common statuses, for an answer that gave none, as HTTP/2 never does. */
+const STATUS_TEXTS = new Map([
+  [100, "Continue"],
+  [101, "Switching Protocols"],
+  [200, "OK"],
+  [201, "Created"],
+  [202, "Accepted"],
+  [203, "Non-Authoritative Information"],
+  [204, "No Content"],
+  [205, "Reset Content"],
+  [206, "Partial Content"],
+  [300, "Multiple Choices"],
+  [301, "Moved Permanently"],
+  [302, "Found"],
+  [303, "See Other"],
+  [304, "Not Modified"],
+  [307, "Temporary Redirect"],
+  [308, "Permanent Redirect"],
+  [400, "Bad Request"],
+  [401, "Unauthorized"],
+  [402, "Payment Required"],
+  [403, "Forbidden"],
+  [404, "Not Found"],
+  [405, "Method Not Allowed"],
+  [406, "Not Acceptable"],
+  [408, "Request Timeout"],
+  [409, "Conflict"],
+  [410, "Gone"],
+  [411, "Length Required"],
+  [412, "Precondition Failed"],
+  [413, "Content Too Large"],
+  [414, "URI Too Long"],
+  [415, "Unsupported Media Type"],
+  [416, "Range Not Satisfiable"],
+  [418, "I'm a teapot"],
+  [422, "Unprocessable Content"],
+  [425, "Too Early"],
+  [426, "Upgrade Required"],
+  [428, "Precondition Required"],
+  [429, "Too Many Requests"],
+  [431, "Request Header Fields Too Large"],
+  [451, "Unavailable For Legal Reasons"],
+  [500, "Internal Server Error"],
+  [501, "Not Implemented"],
+  [502, "Bad Gateway"],
+  [503, "Service Unavailable"],
+  [504, "Gateway Timeout"],
+  [505, "HTTP Version Not Supported"],
+]);
+
+/**
+ * The Status Code line of General, as the browsers' tools write it: the code
+ * and its text, the answer's own or the standard one, or in brackets what
+ * happened in place of one. Empty where the browser does not say.
+ */
+export function statusCode(entry: RequestEntry): string {
+  if (entry.state === "pending") return "(pending)";
+  if (entry.state === "aborted") return "(canceled)";
+  if (entry.status === null) {
+    if (entry.state !== "failed") return "";
+    return entry.error ? `(failed) ${entry.error}` : "(failed)";
+  }
+  if (entry.status === 0) return "(opaque)";
+  return `${entry.status} ${entry.statusText || STATUS_TEXTS.get(entry.status) || ""}`.trim();
+}
+
+/** A line of General: its label, its value, and the tone of the dot before a status. */
+export interface GeneralLine {
+  label: string;
+  value: string;
+  tone?: StatusTone | null;
+}
+
+/**
+ * The General section of Headers, in the browsers' words. Remote Address is
+ * left out, as a page cannot know it, and Referrer Policy shows only where it
+ * is known: the request's own, else the page's, `documentPolicy`. A request
+ * that was redirected shows where it ended, and the address it was asked for
+ * after it.
+ */
+export function generalLines(entry: RequestEntry, documentPolicy = ""): GeneralLine[] {
+  const moved = entry.finalUrl !== null && entry.finalUrl !== entry.url;
+  const lines: GeneralLine[] = [{ label: "Request URL", value: moved && entry.finalUrl ? entry.finalUrl : entry.url }];
+  if (moved) lines.push({ label: "Redirected From", value: entry.url });
+  if (entry.method !== "") lines.push({ label: "Request Method", value: entry.method });
+  const code = statusCode(entry);
+  if (code !== "") lines.push({ label: "Status Code", value: code, tone: statusTone(entry) });
+  const policy = entry.referrerPolicy || documentPolicy;
+  if (policy !== "") lines.push({ label: "Referrer Policy", value: policy });
+  return lines;
+}
+
+/** The note under Request Headers: the page knows the headers it set, and not the ones the browser adds. */
+export const PROVISIONAL = "Provisional headers are shown";
+
+/** Headers as the Raw view shows them, a `name: value` a line. */
+export function rawHeaders(headers: HeaderList): string {
+  return headers.map(([name, value]) => `${name}: ${value}`).join("\n");
+}
+
+/** What the Response tab says where there is no body: the browsers' words, or that one may still come. */
+export const NO_RESPONSE_DATA = "This request has no response data available.";
+export const FAILED_RESPONSE = "Failed to load response data";
+export const WAITING_RESPONSE = "waiting for the response";
+
+/** What stands in an answer's body's place while there is none. */
+export function noResponse(entry: RequestEntry): string {
+  if (entry.state === "pending") return WAITING_RESPONSE;
+  return entry.state === "failed" && entry.status === null ? FAILED_RESPONSE : NO_RESPONSE_DATA;
+}
+
+/** What a body of a form shows a file as, as the browsers' tools do. */
+export const BINARY = "(binary)";
+
+/** The boundary a multipart content type names, or empty. */
+export function boundaryOf(type: string): string {
+  const found = /;\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(type);
+  return found?.[1] ?? found?.[2] ?? "";
+}
+
+/**
+ * The fields of a multipart body, a name and a value each, a file as
+ * `(binary)`. A part that is cut short is kept as far as it came.
+ */
+export function multipartFields(text: string, boundary: string): [name: string, value: string][] {
+  if (boundary === "") return [];
+  const fields: [string, string][] = [];
+  const parts = text.split(`--${boundary}`).slice(1);
+  for (const part of parts) {
+    if (part.startsWith("--")) break;
+    const body = part.replace(/^\r?\n/, "");
+    const split = /\r?\n\r?\n/.exec(body);
+    const head = split ? body.slice(0, split.index) : body;
+    const value = split ? body.slice(split.index + split[0].length).replace(/\r?\n$/, "") : "";
+    const disposition = /^content-disposition:(.*)$/im.exec(head)?.[1] ?? "";
+    const name = /\bname="([^"]*)"/i.exec(disposition)?.[1] ?? /\bname=([^;\s]+)/i.exec(disposition)?.[1] ?? "";
+    fields.push([name, /\bfilename\*?=/i.test(disposition) ? BINARY : value]);
+  }
+  return fields;
+}
+
+/** What `formText` in the recorder writes for a file. */
+const FILE_LINE = /^\(file .*, \d+ bytes\)$/;
+
+/**
+ * What a request sent, as the Payload tab shows it: the fields of a form, json
+ * as a tree, other text as it was kept, or a line that says why there is
+ * none to show. A form's `source` is its text as it was kept, and `encoded`
+ * says it is urlencoded, which can show as written or decoded.
+ */
+export type Payload =
+  | { kind: "form"; lines: [name: string, value: string][]; source: string; encoded: boolean }
+  | { kind: "json"; value: unknown; source: string }
+  | { kind: "text"; text: string }
+  | { kind: "line"; text: string };
+
+export function payloadOf(record: BodyRecord): Payload {
+  if (record.kind === "stream") return { kind: "line", text: "not read: a stream" };
+  if (!hasText(record)) return { kind: "line", text: [bodyNote(record), record.type].filter(Boolean).join(", ") };
+  if (record.text === "") return { kind: "line", text: "empty" };
+  if (record.kind === "form") {
+    const lines = formLines(record.text).map(([name, value]): [string, string] => [name, FILE_LINE.test(value) ? BINARY : value]);
+    return { kind: "form", lines, source: record.text, encoded: false };
+  }
+  if (/x-www-form-urlencoded/i.test(record.type)) {
+    return { kind: "form", lines: [...new URLSearchParams(record.text)], source: record.text, encoded: true };
+  }
+  if (/^multipart\/form-data/i.test(record.type)) {
+    const lines = multipartFields(record.text, boundaryOf(record.type));
+    if (lines.length > 0) return { kind: "form", lines, source: record.text, encoded: false };
+  }
+  const json = bodyJson(record);
+  return json ? { kind: "json", value: json.value, source: record.text } : { kind: "text", text: record.text };
+}
+
+/**
+ * What the Timing tab shows besides the timing, until it has its own: what
+ * the request is, how big, and where it came from.
+ */
+export function otherLines(entry: RequestEntry): [label: string, value: string][] {
+  const lines: [string, string][] = [];
   if (entry.contentType) lines.push(["type", entry.contentType]);
   if (entry.sizes) lines.push(["size", sizeLabel(entry.sizes)]);
   if (entry.protocol) lines.push(["protocol", entry.protocol]);
-  lines.push(["state", entry.state], ["kind", kindWords(entry)]);
+  lines.push(["kind", kindWords(entry)]);
   if (entry.source === "frame") lines.push(["from", "the device frame"]);
-  const moved = entry.finalUrl !== null && entry.finalUrl !== entry.url;
-  if (entry.redirected || moved) lines.push(["redirected", "yes"]);
-  if (entry.finalUrl !== null && moved) lines.push(["answered from", entry.finalUrl]);
   return lines;
 }
 

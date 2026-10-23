@@ -1407,7 +1407,7 @@ describe("the requests, at every width the panel takes", () => {
 
   test("a request in full is one column as wide as the body, and its values wrap anywhere", () => {
     expect(body(".req-detail")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
-    expect(body(".req-body, .req-headers")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+    expect(body(".req-body, .req-response")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
     // The path breaks anywhere and keeps to two lines of 18.
     expect(body(".req-url")).toMatch(/word-break:\s*break-all/);
     expect(body(".req-url")).toMatch(/max-height:\s*36px;\s*overflow:\s*hidden/);
@@ -1473,6 +1473,25 @@ describe("the request tones", () => {
         const color = scheme.get(name) ?? "";
         expect(contrast(color, scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
         expect(contrast(color, scheme.get("--card") ?? "")).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test("the code colors are set for both schemes, and read as body text on the ground and on a card", () => {
+    const code = ["--code-key", "--code-str", "--code-num", "--code-kw", "--code-attr", "--code-com"];
+    for (const scheme of [light, dark]) {
+      for (const name of code) {
+        const color = scheme.get(name) ?? "";
+        expect([name, color]).toEqual([name, expect.stringMatching(/^#[0-9a-f]{6}$/)]);
+        for (const ground of ["--bg", "--card"]) {
+          expect([name, ground, contrast(color, scheme.get(ground) ?? "") >= 4.5]).toEqual([name, ground, true]);
+        }
+      }
+    }
+    // A response's text and its line numbers are on the panel's ground, where both read.
+    for (const scheme of [light, dark]) {
+      for (const name of ["--fg", "--faint"]) {
+        expect(contrast(scheme.get(name) ?? "", scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

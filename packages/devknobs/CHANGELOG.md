@@ -2,6 +2,7 @@
 
 ## unreleased
 
+- a request in full is laid out as the browser's own network panel lays it out, in its words: tabs for Headers, Payload, Preview, Response, Initiator, Timing, Cookies and EventStream, the ones the request has, in place of `body`, `headers` and `more`. Headers has General and both sets of headers with a Raw toggle, Payload the query, the json sent as a tree and a form's fields, each with view source, and Response the body numbered and colored, a long line wrapping in from where it starts. the tab, the sections and the toggles stay for the next request
 - devknobs' styles, the panel's, grab's, the frame's and those it puts on the page, are constructed stylesheets where the browser adopts them, so a page whose Content Security Policy blocks inline styles no longer gets the panel unstyled. a browser without them gets `<style>` elements as before. the early stand-in's picture sets its styles through the CSSOM, which such a policy allows
 - `native.ua` hands the host the browser the page's requests go out as, from the ua knob or a device's browser, so it can send that user agent and its client hints to servers. the page's own patches stay, it is handed with the switch off too, and a promise it returns holds the frame's next load until it settles
 - `mount({ native })` hands text size, offline and the prefers knobs to a host that sets them for real, such as a browser extension through the DevTools protocol, in place of emulating them in the page. without it nothing changes

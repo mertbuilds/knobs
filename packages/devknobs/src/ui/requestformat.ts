@@ -369,12 +369,22 @@ function compact(json: string): string {
  * come back changed, and the screen would say other than the copied text.
  */
 export function bodyText(record: BodyRecord, type = ""): string {
-  if (record.kind !== "text" || record.truncated || !isJson(record.type || type)) return record.text;
+  const parsed = bodyJson(record, type);
+  return parsed ? JSON.stringify(parsed.value, null, 2) : record.text;
+}
+
+/**
+ * A body's json, where it is all there, reads as json and comes back the same
+ * from what it reads as, for the same reasons `bodyText` has. Null for any
+ * other body.
+ */
+export function bodyJson(record: BodyRecord, type = ""): { value: unknown } | null {
+  if (record.kind !== "text" || record.truncated || !isJson(record.type || type)) return null;
   try {
     const value: unknown = JSON.parse(record.text);
-    return JSON.stringify(value) === compact(record.text) ? JSON.stringify(value, null, 2) : record.text;
+    return JSON.stringify(value) === compact(record.text) ? { value } : null;
   } catch {
-    return record.text;
+    return null;
   }
 }
 
