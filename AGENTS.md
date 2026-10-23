@@ -143,6 +143,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 - `@knobs/extension`: a Manifest V3 Chrome extension that mounts devknobs on any page and sets some knobs for real (DevTools protocol, `declarativeNetRequest`). Private, not published. Its user docs are `/docs/extension` on the site (`apps/web/content/docs/extension.md`); its README is short and links there.
 - `pnpm --filter devknobs build` first: it bundles devknobs' `dist/`. Then `pnpm --filter @knobs/extension build` writes `dist/`, which Chrome loads unpacked (`chrome://extensions`, Developer mode, Load unpacked). Work in progress builds elsewhere (`bun scripts/build.ts <dir>`, from `packages/extension`), so `dist/` stays what Chrome has loaded.
+- The extension's copy of devknobs mounts as the page's host (`mount({ host: true })`): a copy the page mounts itself hands it its keys and grab and takes no panel. See the extension's README, "How it fits together".
 - `pnpm --filter @knobs/extension test` (`bun test`), `typecheck`, and `smoke`: `node scripts/smoke.ts [dir]` loads a build into Playwright's Chromium and drives it on local pages only. CI runs the smoke in the `test` job.
 
 ## Dev workflow

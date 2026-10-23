@@ -236,6 +236,7 @@ if (top || window.name === FRAME_NAME) {
     document.addEventListener(TO_PAGE, onMessage);
   }
   // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
-  // The user's own choice in the panel's settings still wins.
-  mount({ handle: false, native: driver });
+  // The user's own choice in the panel's settings still wins. As the host, a copy of
+  // devknobs the page mounts itself hands its keys and grab here and takes no panel.
+  mount({ handle: false, host: true, native: driver });
 }

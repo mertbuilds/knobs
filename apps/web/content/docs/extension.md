@@ -93,6 +93,10 @@ a service worker that answers the frame from its own cache sends the refused pag
 
 a link, form or script in the frame that goes to another origin (a sign-in provider, say, which refuses frames anyway) takes the whole tab there, as it would with no frame; the knobs wait on the page's origin for the way back. a server's redirect to another host still gets devknobs' notice, whose button closes the frame.
 
+## pages that run devknobs themselves
+
+the extension's panel wins. it mounts before any of the page's scripts, as the page's host, so when the page mounts its own devknobs later, that copy puts up no panel of its own: its hotkey, grab key, grab on or off, open and grab color go to the extension's panel instead, and `window.devknobs` stays the extension's. when the page unmounts its copy, such as a component that goes on a route change, the extension's panel stays. the page's early script, if it has one, sees the extension's copy and patches nothing. an older devknobs (0.3.0 and before) does not know about the extension and takes the page; the extension takes it back, up to three times per page load, then leaves it to the page with a warning in the console.
+
 ## permissions
 
 | permission                                                         | what it is for                                                                                                                                                                     |

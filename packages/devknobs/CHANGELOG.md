@@ -15,6 +15,8 @@
 - `native.refused(url)` lets the host say why the frame's page was refused: a line under the notice, a "copy details" button and a button to look again. without it the notice is as before
 - `native.framed(open)` hears the frame open, before its first load, and go; a promise it returns as the frame opens holds that load until it settles, and a `retry` with `now: true` runs and loads the frame again at once, with no press
 - the width knob's frame, the panel and the style that hides the page under the frame go back where a page's script takes them out, as a React root on `<body>` does as it starts (x.com), or puts a new `<body>` in, which left the page blank with no frame. the frame loads its page again then. a page that keeps taking them out gets them back less often, with one warning in the console
+- `mount({ host: true })` holds the page as its host, as the extension's copy does: a copy the page mounts later takes no panel of its own, it hands its `hotkey`, `grabKey`, `grab`, `open` and `grabColor` to the host, and its `unmount()` leaves the host's panel up. `window.devknobs` stays the host's. a copy without this, such as 0.3.0, still takes over; the host then takes the page back from it, up to three times per page, then lets it be with a warning in the console. without a host, a second copy takes over as before
+- the early script leaves the page alone where a copy of devknobs already holds it, such as the extension's, which mounts before any page script: only the React hook goes in, so no stand-in hides the page with nothing to take it away
 
 ## 0.3.0
 

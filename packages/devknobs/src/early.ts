@@ -7,6 +7,7 @@ import { resume } from "./engine/scrollkeep";
 import { load } from "./engine/store";
 import { apply as earlyUa } from "./engine/ua";
 import { installHook } from "./grab/hook";
+import { owned } from "./instance";
 import { start as recordRequests } from "./requests";
 import { applyOnLoad } from "./storage/onload";
 
@@ -23,18 +24,23 @@ import { applyOnLoad } from "./storage/onload";
  * scrolled.
  * Before all of that it sets what the storage presets marked "apply on load"
  * hold, so the page's own scripts start with them.
+ * Where a copy of devknobs already holds the page, such as the extension's,
+ * which mounts before any page script, that copy did the rest: only the hook goes in.
  */
 applyOnLoad();
-const stored = load();
-const inFrame = isDevknobsFrame();
-// In a frame that gets the scheme natively, the patch steps aside, as in the full script.
-const scheme = inFrame && nativeScheme(stored.scheme) ? "system" : stored.scheme;
-const { motion, contrast, transparency } = stored;
-early({ scheme, motion, contrast, transparency, touch: inFrame && hasTouch(stored.device) });
-earlyClock(stored.clock);
-earlyUa(stored.ua);
-recordRequests();
-installHook();
-// The page in the frame is the frame's own, and never hides.
-if (!inFrame) showEarly(stored);
-resume();
+if (owned(window)) installHook();
+else {
+  const stored = load();
+  const inFrame = isDevknobsFrame();
+  // In a frame that gets the scheme natively, the patch steps aside, as in the full script.
+  const scheme = inFrame && nativeScheme(stored.scheme) ? "system" : stored.scheme;
+  const { motion, contrast, transparency } = stored;
+  early({ scheme, motion, contrast, transparency, touch: inFrame && hasTouch(stored.device) });
+  earlyClock(stored.clock);
+  earlyUa(stored.ua);
+  recordRequests();
+  installHook();
+  // The page in the frame is the frame's own, and never hides.
+  if (!inFrame) showEarly(stored);
+  resume();
+}

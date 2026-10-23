@@ -10,7 +10,8 @@ import { UA_PRESETS } from "./engine/ua";
 import { createGrab, type GrabControl } from "./grab/control";
 import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
 import type { GrabOptions, GrabResult } from "./grab/types";
-import { claim, expose, free, superseded, withdraw } from "./instance";
+import { pageChoices } from "./host";
+import { claim, expose, free, hostOf, owned, superseded, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
 import type { DevknobsState, DevknobsStatePatch, GrabColorValue } from "./types";
 import { createKeys, type LiveKeys } from "./ui/bindings";
@@ -100,6 +101,13 @@ export interface MountOptions extends engine.EngineOptions {
    * panel's settings wins over it.
    */
   handle?: boolean;
+  /**
+   * Mount as the page's host, as the devknobs extension does. A copy the page
+   * mounts later does not take over: its `hotkey`, `grabKey`, `grab`, `open`
+   * and `grabColor` go to this one, and its `unmount` leaves this one up.
+   * Defaults to false.
+   */
+  host?: boolean;
 }
 
 export const PRESETS = {
@@ -115,6 +123,12 @@ let stopKeys: (() => void) | null = null;
 let grabControl: GrabControl | null = null;
 let inspectControl: InspectControl | null = null;
 let keys: LiveKeys | null = null;
+/** The options of the mount in force, with what a host took from the page's on top. Null unmounted. */
+let mounted: MountOptions | null = null;
+
+/** How often a host takes the page back from copies that know no hosts, before it lets them have it. */
+const RETAKES = 3;
+let retaken = 0;
 
 /**
  * Start the knobs and put the panel on the page. Patches go in right away, even
@@ -122,15 +136,27 @@ let keys: LiveKeys | null = null;
  * emulated values. The panel host waits for the body. Inside the width knob's
  * frame there is no panel: the page above has it, and gets the frame's keys.
  * A second copy of devknobs on the page, such as a hot update loads, takes
- * over from the first, which unmounts.
+ * over from the first, which unmounts. Where a host holds the page, such as
+ * the extension's copy, it takes this mount's choices instead.
  */
 export function mount(options: MountOptions = {}): void {
   if (panel || stopKeys) return;
+  const host = options.host ? null : hostOf(window);
+  if (host) {
+    host.adopt(options);
+    return;
+  }
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
-  claim(window, unmount);
+  claim(window, unmount, options.host ? adopt : undefined);
   expose(window, api);
   engine.start(options);
+  mounted = options;
+  attach(options);
+}
+
+/** The panel, its keys, grab and inspect, for the engine that runs. */
+function attach(options: MountOptions): void {
   // The mount's keys, with the ones the user set in the panel on top.
   const live = createKeys({
     hotkey: options.hotkey,
@@ -151,14 +177,17 @@ export function mount(options: MountOptions = {}): void {
     stopKeys = forwardKeys(live.get, () => engine.getState().panel.open);
     return;
   }
-  if (options.open !== undefined) engine.setState({ panel: { open: options.open } });
-  if (options.grabColor !== undefined) engine.setState({ grabColor: options.grabColor });
+  choose(options);
   panel = createPanel({ keys: live, grab: grabControl, inspect, handle: options.handle });
 }
 
-/** Remove the panel and undo every knob. A copy that was taken over has done so already. */
-export function unmount(): void {
-  if (superseded(window, unmount)) return;
+/** Open or close the panel and set grab's color, where the options say. */
+function choose(options: MountOptions): void {
+  if (options.open !== undefined) engine.setState({ panel: { open: options.open } });
+  if (options.grabColor !== undefined) engine.setState({ grabColor: options.grabColor });
+}
+
+function detach(): void {
   panel?.destroy();
   panel = null;
   grabControl?.destroy();
@@ -169,9 +198,47 @@ export function unmount(): void {
   stopKeys = null;
   keys?.destroy();
   keys = null;
+}
+
+/** A host's side of a page's mount: take its choices, with a new panel where the keys or grab change. */
+function adopt(options: object): void {
+  if (!mounted) return;
+  const chosen = pageChoices(options);
+  const rebuild = (["hotkey", "grabKey", "grab"] as const).some(
+    (key) => chosen[key] !== undefined && chosen[key] !== mounted?.[key],
+  );
+  mounted = { ...mounted, ...chosen };
+  if (!rebuild) {
+    if (!isDevknobsFrame()) choose(chosen);
+    return;
+  }
+  detach();
+  attach(mounted);
+}
+
+/** Remove the panel and undo every knob. A copy that was taken over has done so already. */
+export function unmount(): void {
+  if (superseded(window, unmount)) return;
+  detach();
   engine.stop();
   withdraw(window, api);
   free(window, unmount);
+  const was = mounted;
+  mounted = null;
+  // A host taken over by a copy that knows no hosts, such as an older one the
+  // page loads, takes the page back once that copy is in.
+  if (was?.host) queueMicrotask(() => retake(was));
+}
+
+function retake(options: MountOptions): void {
+  if (mounted || !owned(window) || hostOf(window)) return;
+  if (retaken++ >= RETAKES) {
+    if (retaken === RETAKES + 1) {
+      console.warn("devknobs: this page runs its own copy of devknobs, which does not know hosts; it keeps the page");
+    }
+    return;
+  }
+  mount(options);
 }
 
 /**
