@@ -1,6 +1,6 @@
 # changelog
 
-## unreleased
+## 0.4.0
 
 - a request in full is laid out as the browser's own network panel lays it out, in its words: tabs for Headers, Payload, Preview, Response, Initiator, Timing, Cookies and EventStream, the ones the request has, in place of `body`, `headers` and `more`. Headers has General and both sets of headers with a Raw toggle, Payload the query, the json sent as a tree and a form's fields, each with view source, and Response the body numbered and colored, a long line wrapping in from where it starts. the tab, the sections and the toggles stay for the next request. Preview shows json as a tree, an image from its address with its size, html drawn in a sandboxed frame and other text as it is. Initiator has Request call stack and Request initiator chain. Timing has Queued at and Started at, then Resource Scheduling, Connection Start and Request/Response, a bar and a duration each, from Resource Timing, with the Type, Size and Protocol columns under it. Cookies lists Request Cookies and Response Cookies with the browser's fields, and EventStream an `EventSource`'s messages as Id, Type, Data and Time
 - `EventSource` is recorded: a row a connection, `eventsource` in the Type column and under `fetch/xhr`, with the last 200 messages of the types the page listens for, each up to 4 KB
