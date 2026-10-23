@@ -23,6 +23,8 @@ function fakeKit() {
       reset: () => calls.push("reset"),
       onExit() {},
       onZoom() {},
+      onRefused() {},
+      onFramed() {},
       frameWindow: () => null,
       panelSized() {},
       zoomKey: () => true,
@@ -60,6 +62,7 @@ beforeEach(() => {
       dropped++;
       return [];
     },
+    querySelector: () => null,
   });
 });
 

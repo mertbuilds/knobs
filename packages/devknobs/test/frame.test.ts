@@ -7,9 +7,11 @@ import {
   framed,
   isDevknobsFrame,
   knobFrame,
+  leaveFor,
   nativeScheme,
   needsFrame,
   plainFrame,
+  post,
   readMessage,
   UNFRAMED,
 } from "../src/engine/frame";
@@ -181,6 +183,27 @@ describe("readMessage", () => {
     ).toEqual({ source: "devknobs", type: "state", state: DEFAULT_STATE });
   });
 
+  test("reads whether the driver above is on, and only a boolean", () => {
+    const state = { scheme: "dark" };
+    expect(from({ source: "devknobs", type: "state", state, native: false })).toEqual({
+      source: "devknobs",
+      type: "state",
+      state: { ...DEFAULT_STATE, scheme: "dark" },
+      native: false,
+    });
+    expect(from({ source: "devknobs", type: "state", state, native: "no" })).not.toHaveProperty("native");
+  });
+
+  test("reads where the frame's page leaves for, a web address only", () => {
+    expect(from({ source: "devknobs", type: "leave", url: "https://github.com/login" })).toEqual({
+      source: "devknobs",
+      type: "leave",
+      url: "https://github.com/login",
+    });
+    expect(from({ source: "devknobs", type: "leave", url: "javascript:alert(1)" })).toBeNull();
+    expect(from({ source: "devknobs", type: "leave", url: 7 })).toBeNull();
+  });
+
   test("reads the zoom keys", () => {
     for (const action of ["zoom-in", "zoom-out", "zoom-fit"] as const) {
       expect(from({ source: "devknobs", type: "key", action })).toEqual({
@@ -304,6 +327,25 @@ describe("readMessage", () => {
   });
 });
 
+describe("leaveFor", () => {
+  test("sends the window above where the frame's page sets off for another origin, but not a form's post", () => {
+    const go = {
+      navigationType: "push",
+      hashChange: false,
+      cancelable: true,
+      downloadRequest: null,
+      formData: null,
+      destination: { url: "https://github.com/login" },
+    };
+    expect(leaveFor(go, ORIGIN)).toBe("https://github.com/login");
+    expect(leaveFor({ ...go, destination: { url: `${ORIGIN}/next` } }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, navigationType: "traverse" }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, cancelable: false }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, destination: { url: "mailto:a@b.c" } }, ORIGIN)).toBeNull();
+    expect(leaveFor({ ...go, formData: new FormData() }, ORIGIN)).toBeNull();
+  });
+});
+
 describe("isDevknobsFrame", () => {
   test("knows its frame by the attribute", () => {
     setWindow(() => ({ hasAttribute: (name: string) => name === FRAME_ATTRIBUTE }));
@@ -361,5 +403,40 @@ describe("nativeScheme", () => {
       throw new Error("cross-origin");
     });
     expect(nativeScheme("dark")).toBe(false);
+  });
+});
+
+describe("post", () => {
+  const message = { source: "devknobs", type: "ready" } as const;
+
+  function target(location: () => unknown) {
+    const posted: [unknown, string][] = [];
+    const view = {
+      get location() {
+        return location();
+      },
+      postMessage: (data: unknown, origin: string) => posted.push([data, origin]),
+    };
+    return { posted, view: view as unknown as Window };
+  }
+
+  test("posts to a window on this origin", () => {
+    const { posted, view } = target(() => ({ origin: ORIGIN }));
+    post(view, message);
+    expect(posted).toEqual([[message, "/"]]);
+  });
+
+  test("posts nothing, and throws nothing, to a frame on another origin or holding an error page", () => {
+    const { posted, view } = target(() => ({
+      get origin() {
+        throw new Error("SecurityError");
+      },
+    }));
+    expect(() => post(view, message)).not.toThrow();
+    expect(posted).toEqual([]);
+  });
+
+  test("posts nothing with no window", () => {
+    expect(() => post(null, message)).not.toThrow();
   });
 });

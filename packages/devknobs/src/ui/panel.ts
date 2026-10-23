@@ -6,6 +6,9 @@ import { isMac } from "../engine/ua";
 import { setDockWidth, watchColumn } from "../engine/dock";
 import { still } from "../engine/matchmedia";
 import { frameWindow, panelSized, zoomKey } from "../engine/frames";
+import { rewriteMediaText } from "../engine/media";
+import { keepMounted } from "../engine/remount";
+import { type SystemMedia, watchSystemMedia } from "../engine/system";
 import type { GrabControl } from "../grab/control";
 import type { InspectControl } from "../grab/inspect";
 import type { DevknobsState } from "../types";
@@ -43,6 +46,7 @@ import { stage } from "./stage";
 import { createStorageControl } from "./storageaction";
 import { CSS } from "./styles";
 import { createTips } from "./tooltip";
+import { addStyle } from "../engine/style";
 
 export { wallInput } from "./catalog";
 
@@ -97,6 +101,18 @@ export const HOST_STYLE = "position:fixed;top:0;z-index:2147483646;pointer-event
  * away: the add knob button under the rows opens a field that finds knobs,
  * values and actions, and with nothing typed lists them all.
  */
+/** The panel's styles with their prefers queries settled by what a host handed over. */
+export function ownCss(media: SystemMedia): string {
+  const settle = (_whole: string, query: string): string => {
+    const scheme = rewriteMediaText(query.trim(), "prefers-color-scheme", media.scheme);
+    return `@media ${rewriteMediaText(scheme, "prefers-reduced-motion", media.motion)} {`;
+  };
+  return CSS.replace(/@media ([^{]+)\{/g, settle).replaceAll(
+    "color-scheme: light dark",
+    `color-scheme: ${media.scheme}`,
+  );
+}
+
 export function createPanel(options: PanelOptions = {}): Panel {
   const keys = options.keys ?? createKeys();
   const prefs = createPrefs({ handle: options.handle });
@@ -136,8 +152,11 @@ export function createPanel(options: PanelOptions = {}): Panel {
   host.setAttribute("data-devknobs", "panel");
   host.style.cssText = HOST_STYLE;
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
-  style.textContent = CSS;
+  const style = addStyle(root, "");
+
+  const stopSystem = watchSystemMedia((media) => {
+    style.textContent = media ? ownCss(media) : CSS;
+  });
 
   const wrap = el("div", "wrap");
   const handle = button("handle", "knobs");
@@ -145,7 +164,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   const panel = el("div", "panel");
 
   // A label, so a click anywhere around the field lands in it. The search
-  // and its results start at the panel's inset, not past the grip's column.
+  // and its results start at the panel's inset, as the rows do.
   const head = el("label", "head");
   lay(head, "flush");
   const searchInput = document.createElement("input");
@@ -219,6 +238,12 @@ export function createPanel(options: PanelOptions = {}): Panel {
     renderKeys,
     handleShown: handleShows,
     showHandle: () => engine.setState({ panel: { handle: true } }),
+    native: engine.nativeSwitch()?.setting ?? null,
+    setNative: (on) => {
+      // The host hears it first, so it is ready for what the driver hands it next.
+      engine.nativeSwitch()?.setting.change(on);
+      engine.setNative(on, null);
+    },
     searching: () => palette.searching(),
     leaveSearch: () => palette.leaveSearch(),
   });
@@ -284,7 +309,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   // The tooltip sits in the wrapper it is placed in, as the panel places the strip.
   panel.append(body, foot, sizer.strip);
   wrap.append(handle, panel, tip);
-  root.append(style, wrap);
+  root.append(wrap);
 
   const knobRows = createRows({
     root,
@@ -333,6 +358,8 @@ export function createPanel(options: PanelOptions = {}): Panel {
     const handleShown = handleShows();
     wrap.dataset.handle = handleShown ? "shown" : "hidden";
     settings.drawHandle(handleShown);
+    const nativeNow = engine.nativeSwitch();
+    if (nativeNow) settings.drawNative(nativeNow.on, nativeNow.note);
     dockSlide.aim({
       docked: state.panel.docked,
       side: state.panel.side,
@@ -642,12 +669,15 @@ export function createPanel(options: PanelOptions = {}): Panel {
   render();
   (document.body ?? document.documentElement).append(host);
   if (!document.body) document.addEventListener("DOMContentLoaded", attach, { once: true });
+  // A page that clears its <body> as it starts, such as a React root on it, takes the panel too.
+  const stopKeeping = keepMounted(host);
   layout("edge");
 
   return {
     destroy(): void {
       settings.stopRecording();
       unsubscribe();
+      stopSystem();
       stopKeys();
       if (!options.keys) keys.destroy();
       stopPrefs();
@@ -683,6 +713,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
       stopMoving();
       dockSlide.destroy();
       document.removeEventListener("DOMContentLoaded", attach);
+      stopKeeping();
       host.remove();
     },
   };

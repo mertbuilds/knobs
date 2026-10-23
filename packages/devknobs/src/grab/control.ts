@@ -2,6 +2,7 @@
 import * as engine from "../engine";
 import { isDevknobsFrame, needsFrame, post, readMessage } from "../engine/frame";
 import { frameWindow } from "../engine/frames";
+import { systemMedia } from "../engine/system";
 import { typesInField } from "../ui/keys";
 import {
   defaultGrabKey,
@@ -18,6 +19,7 @@ import {
 } from "./keys";
 import type { Mode, ModeOptions, Purpose } from "./mode";
 import { type GrabPlace, grabStep } from "./place";
+import { addStyle } from "../engine/style";
 
 export interface GrabControlOptions {
   /**
@@ -75,14 +77,15 @@ function holdScene(): { input: boolean; selection: boolean } {
  * its own can be the emulated one, handed down natively.
  */
 function systemScheme(): "light" | "dark" {
+  const own = systemMedia();
+  if (own) return own.scheme;
   const host = document.createElement("div");
   host.setAttribute("data-devknobs", "probe");
   host.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;pointer-events:none";
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
-  style.textContent = "i{display:block;width:0}@media (prefers-color-scheme: dark){i{width:1px}}";
+  addStyle(root, "i{display:block;width:0}@media (prefers-color-scheme: dark){i{width:1px}}");
   const probe = document.createElement("i");
-  root.append(style, probe);
+  root.append(probe);
   (document.body ?? document.documentElement).append(host);
   const dark = probe.getBoundingClientRect().width > 0;
   host.remove();

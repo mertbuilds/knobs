@@ -372,11 +372,22 @@ function restoreRoot(): void {
   markInline(document.documentElement, "font-size", null);
 }
 
-/** The root size the page would compute on its own, read with the knob's off. */
+/**
+ * The root size the page would compute on its own, read with the knob's off,
+ * as if the browser's default were 16px: a host that set the default for
+ * real can leave its own behind until the next load.
+ */
 function computedSize(): number {
   restoreRoot();
-  const value = parseFloat(getComputedStyle(document.documentElement).fontSize);
-  return value > 0 ? value : INITIAL;
+  const root = document.documentElement;
+  const value = parseFloat(getComputedStyle(root).fontSize);
+  if (!(value > 0)) return INITIAL;
+  const style = root.style;
+  const own = { value: style.getPropertyValue("font-size"), priority: style.getPropertyPriority("font-size") };
+  style.setProperty("font-size", "medium", "important");
+  const medium = parseFloat(getComputedStyle(root).fontSize);
+  style.setProperty("font-size", own.value, own.priority);
+  return medium > 0 ? (value * INITIAL) / medium : value;
 }
 
 /**

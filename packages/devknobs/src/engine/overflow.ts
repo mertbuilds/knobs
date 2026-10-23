@@ -1,4 +1,5 @@
 import { isOwn, walk } from "./tree";
+import { addStyle, type OwnStyle, styleNode } from "./style";
 
 /** Under the width knob's frame and the panel, so both stay on top. */
 const Z_INDEX = 2147483644;
@@ -31,6 +32,8 @@ export type CountListener = (count: number) => void;
 
 let host: HTMLElement | null = null;
 let layer: ShadowRoot | null = null;
+/** The marks' sheet, a `<style>` in the layer where the browser cannot adopt one. */
+let sheet: OwnStyle | null = null;
 let observer: MutationObserver | null = null;
 let frame = 0;
 let timer = 0;
@@ -145,15 +148,14 @@ export function warning(count: number, width: number, excess: number): string {
 
 function draw(offenders: Offender[]): void {
   if (!layer) return;
-  const style = document.createElement("style");
-  style.textContent = CSS;
   const marks = offenders.map(({ rect }) => {
     const mark = document.createElement("div");
     mark.className = "mark";
     mark.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
     return mark;
   });
-  layer.replaceChildren(style, ...marks);
+  const node = sheet && styleNode(sheet);
+  layer.replaceChildren(...(node ? [node] : []), ...marks);
 }
 
 function update(): void {
@@ -188,6 +190,7 @@ function start(): void {
   host.setAttribute("data-devknobs", "overflow");
   host.style.cssText = `position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:${Z_INDEX}`;
   layer = host.attachShadow({ mode: "open" });
+  sheet = addStyle(layer, CSS);
   document.body.append(host);
   window.addEventListener("resize", schedule);
   // Capture hears every scroller on the page, not only the window.
@@ -227,6 +230,7 @@ export function reset(): void {
   host.remove();
   host = null;
   layer = null;
+  sheet = null;
   logged = new WeakSet();
   loggedUnfound = false;
   setCount(0);

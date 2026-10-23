@@ -1,5 +1,5 @@
 import { composedParent, isDevknobs } from "../grab/hit";
-import { ensureStyle, removeStyle } from "./style";
+import { addStyle, ensureStyle, removeStyle } from "./style";
 import { DOT_LOOK, MARK_EVENT, type Mark } from "./touchmark";
 
 /**
@@ -478,12 +478,11 @@ function mountDot(): void {
   host = document.createElement("div");
   host.setAttribute("data-devknobs", "touch-pointer");
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
-  style.textContent = DOT_CSS;
+  addStyle(root, DOT_CSS);
   dot = document.createElement("div");
   dot.className = "dot";
   dot.hidden = true;
-  root.append(style, dot);
+  root.append(dot);
   document.documentElement.append(host);
   if (!layered()) return;
   host.setAttribute("popover", "manual");

@@ -6,6 +6,8 @@
  * that is.
  */
 
+import { systemMedia } from "./system";
+
 type MatchMedia = (query: string) => MediaQueryList;
 
 /** One step of the patch. It gets the query and the rest of the chain below it. */
@@ -66,5 +68,7 @@ export function removeLayer(name: LayerName): void {
 export function still(): boolean {
   if (typeof window.matchMedia !== "function" || typeof Element === "undefined") return true;
   if (typeof Element.prototype.animate !== "function") return true;
+  const own = systemMedia();
+  if (own) return own.motion === "reduce";
   return baseMatchMedia("(prefers-reduced-motion: reduce)").matches;
 }

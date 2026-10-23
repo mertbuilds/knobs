@@ -1,5 +1,21 @@
 # changelog
 
+## unreleased
+
+- devknobs' styles, the panel's, grab's, the frame's and those it puts on the page, are constructed stylesheets where the browser adopts them, so a page whose Content Security Policy blocks inline styles no longer gets the panel unstyled. a browser without them gets `<style>` elements as before. the early stand-in's picture sets its styles through the CSSOM, which such a policy allows
+- `native.ua` hands the host the browser the page's requests go out as, from the ua knob or a device's browser, so it can send that user agent and its client hints to servers. the page's own patches stay, it is handed with the switch off too, and a promise it returns holds the frame's next load until it settles
+- `mount({ native })` hands text size, offline and the prefers knobs to a host that sets them for real, such as a browser extension through the DevTools protocol, in place of emulating them in the page. without it nothing changes
+- `native.viewport` takes a plain size or a device with nothing drawn around it, so the host sets the tab's own viewport, ratio and touch screen in place of the frame. anything drawn keeps the frame, and the host gets `null` meanwhile
+- a frame that holds the browser's error page, as for a page that refuses to be framed, no longer gets a message, which logged an error
+- the knob rows start at the panel's inset, with no column kept for the grip: it shows over the row's icon on hover or focus, and in its place where there is no hover
+- `native.setting` puts a switch for the host's driver in the panel's settings, and `setNative(on, note)` sets it from the host: off, every knob is emulated in the page as with no driver, and kept as it was. without a `setting` nothing shows
+- a navigation to another origin inside the frame takes the whole tab there, as it would with no frame, where it got the refusal notice: a sign-in provider that refuses frames is no longer a dead end. a form's post stays in the frame, since the tab could only follow it without its body. chromium only (the Navigation API); a server's redirect to another origin still gets the notice
+- text size sizes a root the page leaves unset against the browser's own default, so a default other than 16px, such as one a host set for real and left behind, is not counted twice
+- `setSystemMedia({ scheme, motion })` gives the panel and grab the user's own scheme and motion when such a host hides them from every media query in the tab. until it is called nothing changes
+- `native.refused(url)` lets the host say why the frame's page was refused: a line under the notice, a "copy details" button and a button to look again. without it the notice is as before
+- `native.framed(open)` hears the frame open, before its first load, and go; a promise it returns as the frame opens holds that load until it settles, and a `retry` with `now: true` runs and loads the frame again at once, with no press
+- the width knob's frame, the panel and the style that hides the page under the frame go back where a page's script takes them out, as a React root on `<body>` does as it starts (x.com), or puts a new `<body>` in, which left the page blank with no frame. the frame loads its page again then. a page that keeps taking them out gets them back less often, with one warning in the console
+
 ## 0.3.0
 
 ### agents

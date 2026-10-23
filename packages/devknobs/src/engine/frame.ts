@@ -49,14 +49,17 @@ const KEY_ACTIONS: readonly KeyAction[] = [
 
 /** Everything the page and its frame say to each other. */
 export type DevknobsMessage =
-  | { source: "devknobs"; type: "state"; state: DevknobsState }
+  /** `native`: whether the host's driver is on above, so the frame emulates its knobs while it is off. */
+  | { source: "devknobs"; type: "state"; state: DevknobsState; native?: boolean }
   | { source: "devknobs"; type: "key"; action: KeyAction }
   | { source: "devknobs"; type: "overflow"; count: number }
   | { source: "devknobs"; type: "grab" | "inspect"; on: boolean; scheme?: "light" | "dark" }
   /** `picked`: inspect took an element in the frame. `outline`: the frame is to box another. */
   | { source: "devknobs"; type: "ready" | "replay" | "picked" | "outline" }
   /** The frame is to tint one area of the box it outlines, or with null all four. */
-  | { source: "devknobs"; type: "area"; ring: BoxRing | null };
+  | { source: "devknobs"; type: "area"; ring: BoxRing | null }
+  /** The frame's page is going to another origin, which the window above goes to instead. */
+  | { source: "devknobs"; type: "leave"; url: string };
 
 /** The parts of a `MessageEvent` that decide whether devknobs reads it. */
 export interface Envelope {
@@ -210,7 +213,10 @@ export function readMessage(
   const type = message.type;
   if (type === "state") {
     if (typeof message.state !== "object" || message.state === null) return null;
-    return { source: "devknobs", type, state: parse(JSON.stringify(message.state)) };
+    const state = parse(JSON.stringify(message.state));
+    return typeof message.native === "boolean"
+      ? { source: "devknobs", type, state, native: message.native }
+      : { source: "devknobs", type, state };
   }
   if (type === "key") {
     const action = KEY_ACTIONS.find((known) => known === message.action);
@@ -233,13 +239,53 @@ export function readMessage(
     const ring = RINGS.find((known) => known === message.ring) ?? null;
     return ring === null && message.ring !== null ? null : { source: "devknobs", type, ring };
   }
+  if (type === "leave") {
+    const url = typeof message.url === "string" ? URL.parse(message.url) : null;
+    return url && (url.protocol === "https:" || url.protocol === "http:")
+      ? { source: "devknobs", type, url: url.href }
+      : null;
+  }
   if (type === "ready" || type === "replay" || type === "picked" || type === "outline") {
     return { source: "devknobs", type };
   }
   return null;
 }
 
-/** Post to a window on this origin. A window on any other origin never sees it. */
+/** What the frame needs of a Navigation API `navigate` event, where the browser has it. */
+export interface FrameNavigation {
+  navigationType: string;
+  hashChange: boolean;
+  cancelable: boolean;
+  downloadRequest: string | null;
+  formData: FormData | null;
+  destination: { url: string };
+}
+
+/**
+ * Where the window above goes in place of the frame's page, which sets off for
+ * another origin, or null where the frame goes itself. A form's post keeps its
+ * body in the frame: the window above could only follow it with a get.
+ */
+export function leaveFor(navigate: FrameNavigation, origin: string): string | null {
+  if (navigate.navigationType === "traverse" || navigate.hashChange || navigate.downloadRequest !== null) return null;
+  if (!navigate.cancelable || navigate.formData !== null) return null;
+  const url = URL.parse(navigate.destination.url);
+  if (!url || url.origin === origin) return null;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  return url.href;
+}
+
+/**
+ * Post to a window on this origin. A window on any other origin never sees it,
+ * nor does a frame that holds the browser's error page for a refused load:
+ * reading its origin throws, where posting to it would log an error.
+ */
 export function post(target: Window | null, message: DevknobsMessage): void {
-  target?.postMessage(message, "/");
+  if (!target) return;
+  try {
+    void target.location?.origin;
+  } catch {
+    return;
+  }
+  target.postMessage(message, "/");
 }

@@ -118,7 +118,8 @@ function earlyCover(stored: string): string {
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: {
-      head: { append: (node: (typeof added)[number]) => added.push(node) },
+      head: { appendChild: (node: (typeof added)[number]) => added.push(node) },
+      querySelector: () => null,
       createElement: () => {
         const attributes = new Map<string, string>();
         return {
@@ -179,7 +180,8 @@ describe("the early cover", () => {
     Object.defineProperty(globalThis, "document", {
       configurable: true,
       value: {
-        head: { append: (node: { textContent: string }) => added.push(node) },
+        head: { appendChild: (node: { textContent: string }) => added.push(node) },
+        querySelector: () => null,
         createElement: () => ({ textContent: "", setAttribute: () => {} }),
       },
     });

@@ -34,7 +34,6 @@ const PAD = token("--col-pad");
 const ICON = token("--col-icon");
 const GAP = token("--col-gap");
 const INSET = token("--col-inset");
-const GRIP = token("--col-grip");
 
 /** A feature's view in a layout, the rows' pane and the settings'. */
 const view = (layout: Layout): string[] => [...BODY, `view pane data-layout=${layout}`];
@@ -83,9 +82,9 @@ beforeEach(page);
 afterEach(leave);
 
 describe("the columns", () => {
-  test("are said once, on the wrapper: the pad, an icon, the gap, the inset, and the grip's column from them", () => {
-    expect({ PAD, ICON, GAP, INSET, GRIP }).toEqual({ PAD: 4, ICON: 14, GAP: 8, INSET: 10, GRIP: 22 });
-    expect(GRIP).toBe(PAD + ICON + PAD);
+  test("are said once, on the wrapper: the pad, an icon, the gap and the inset, with no column for the grip", () => {
+    expect({ PAD, ICON, GAP, INSET }).toEqual({ PAD: 4, ICON: 14, GAP: 8, INSET: 10 });
+    expect(CSS).not.toContain("--col-grip");
     // A level of a tree is an icon and the gap in.
     expect(token("--col-step")).toBe(ICON + GAP);
     const setting = rules(CSS).filter((rule) => /(^|[\s;])--col-[\w-]+\s*:/.test(rule.body));
@@ -101,7 +100,7 @@ describe("the columns", () => {
     const named = rules(CSS).filter((rule) => rule.selector.includes("data-layout"));
     expect(named.map((rule) => rule.selector)).toEqual(LAYOUTS.map((layout) => `[data-layout="${layout}"]`));
     for (const rule of named) expect([...declarations(rule.body).keys()]).toEqual(["--view-start"]);
-    expect(start("rows")).toBe(GRIP);
+    expect(start("rows")).toBe(INSET);
     expect(start("flush")).toBe(INSET);
   });
 
@@ -132,14 +131,14 @@ describe("the columns", () => {
 describe("the knob rows' columns", () => {
   const ROW = [...HOME, "rows", "row"];
 
-  test("the grip stands in its column, the icon after it, then the name", () => {
+  test("the icon starts at the inset, the grip over it and as wide, then the name", () => {
     expect(boxLeft(...ROW)).toBe(0);
-    expect(boxLeft(...ROW, "line", "button lead grip")).toBe(PAD);
-    expect(sheet.px(path(...ROW, "line", "button lead grip"), "width")).toBe(ICON);
     const glyph = left(...ROW, "line", "button main");
-    expect(glyph).toBe(GRIP);
+    expect(glyph).toBe(INSET);
     expect(glyph).toBe(start("rows"));
-    expect(glyph + ICON + sheet.px(path(...ROW, "line", "button main"), "column-gap")).toBe(GRIP + ICON + GAP);
+    expect(boxLeft(...ROW, "line", "button lead grip")).toBe(glyph);
+    expect(sheet.px(path(...ROW, "line", "button lead grip"), "width")).toBe(ICON);
+    expect(glyph + ICON + sheet.px(path(...ROW, "line", "button main"), "column-gap")).toBe(INSET + ICON + GAP);
   });
 
   test("the row's value ends the inset short of its x, and the x half the pad short of the edge", () => {
@@ -148,10 +147,10 @@ describe("the knob rows' columns", () => {
   });
 
   test("the list's own lines are on the same columns: add knob, the empty state, and a row's editor", () => {
-    expect(left(...HOME, "button add")).toBe(GRIP);
+    expect(left(...HOME, "button add")).toBe(INSET);
     expect(sheet.px(path(...HOME, "button add"), "column-gap")).toBe(GAP);
     expect(right(...HOME, "button add")).toBe(INSET);
-    expect(left(...HOME, "empty")).toBe(GRIP);
+    expect(left(...HOME, "empty")).toBe(INSET);
     expect(boxLeft(...ROW, "fold", "editor", "knob")).toBe(PAD);
     expect(left(...ROW, "fold", "editor", "knob", "knob-label")).toBe(INSET);
     expect(left(...ROW, "fold", "editor", "extra", "note")).toBe(INSET);
@@ -407,9 +406,9 @@ describe("the storage view", () => {
 });
 
 describe("the settings", () => {
-  test("are on the knob rows' columns: the head's chevron, a row's icon and the shortcuts' title all start past the grip's", () => {
+  test("are on the knob rows' columns: the head's chevron, a row's icon and the shortcuts' title all start at the inset", () => {
     const chevron = left(...KEYS, "row view-head", "line", "button main");
-    expect(chevron).toBe(GRIP);
+    expect(chevron).toBe(INSET);
     expect(left(...KEYS, "row", "line", "div main")).toBe(chevron);
     expect(left(...KEYS, "rows-label")).toBe(chevron);
     expect(chevron).toBe(left(...HOME, "rows", "row", "line", "button main"));

@@ -79,6 +79,8 @@ function buildSettings(more: Partial<SettingsContext> = {}): Settings {
     renderKeys: () => {},
     handleShown: () => true,
     showHandle: () => {},
+    native: null,
+    setNative: () => {},
     searching: () => false,
     leaveSearch: () => {},
     ...more,
@@ -136,7 +138,7 @@ describe("the row builder", () => {
     const all = rules(CSS);
     const slot = all.filter((rule) => rule.selector === ".lead");
     expect(slot).toHaveLength(1);
-    expect(slot[0]?.body).toMatch(/left:\s*var\(--col-pad\)/);
+    expect(slot[0]?.body).toMatch(/left:\s*var\(--view-start\)/);
     expect(slot[0]?.body).toMatch(/width:\s*var\(--col-icon\)/);
     expect(slot[0]?.body).toMatch(/position:\s*absolute/);
     const main = all.find((rule) => rule.selector === ".main");
@@ -261,6 +263,45 @@ describe("the settings' handle switch", () => {
     switchOf(made).fire("click");
     expect(set).toEqual([false]);
     expect(shown).toBe(0);
+  });
+});
+
+describe("the settings' native switch", () => {
+  const native = { label: "real browser settings", hint: "uses the debugger" };
+
+  test("is not there where the host gives none", () => {
+    const view = settings();
+    expect(view.find("switch")).toHaveLength(1);
+    expect(view.find("row-hint")).toHaveLength(0);
+  });
+
+  test("shows the host's words under the handle's row, and says what the user picks", () => {
+    const picked: boolean[] = [];
+    const made = buildSettings({ native, setNative: (on) => picked.push(on) });
+    const view = fake(made.view);
+    const row = view.children[2];
+    expect(parts(row?.children[0]?.children[0])).toEqual(["glyph", "row-label", "switch row-control"]);
+    expect(row?.children[0]?.children[0]?.children[1]?.textContent).toBe("real browser settings");
+    expect(row?.children[1]?.className).toBe("row-hint");
+    expect(row?.children[1]?.textContent).toBe("uses the debugger");
+    const [, toggle] = view.find("switch");
+    made.drawNative(true, null);
+    toggle?.fire("click");
+    made.drawNative(false, null);
+    toggle?.fire("click");
+    expect(picked).toEqual([false, true]);
+    expect(toggle?.attributes.get("aria-checked")).toBe("false");
+  });
+
+  test("shows a note in place of the hint, and the hint again once it clears", () => {
+    const said = node("div");
+    const made = buildSettings({ native, said });
+    const view = fake(made.view);
+    made.drawNative(false, "switched to in-page");
+    expect(view.find("row-hint")[0]?.textContent).toBe("switched to in-page");
+    expect(fake(said).textContent).toBe("switched to in-page");
+    made.drawNative(true, null);
+    expect(view.find("row-hint")[0]?.textContent).toBe("uses the debugger");
   });
 });
 

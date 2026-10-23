@@ -16,6 +16,8 @@ import {
   FRAME_API_WAIT,
   idle as caughtUp,
   label,
+  onFramed,
+  onRefused,
   onZoom,
   origin,
   panelSized,
@@ -700,6 +702,8 @@ beforeEach(() => {
 afterEach(() => {
   reset();
   onZoom(null);
+  onRefused(null);
+  onFramed(null);
   FakeDialog.prototype.showModal = NATIVE_SHOW_MODAL;
   for (const name of [
     "window",
@@ -763,6 +767,80 @@ describe("the frame over the page", () => {
     expect(Reflect.get(frameElement().style, "height")).toBe("700px");
     const readout = everything().find((element) => Reflect.get(element, "className") === "size");
     expect(readout && Reflect.get(readout, "hidden")).toBe(false);
+  });
+
+  test("asks the host why a page was refused, says it under the notice, and loads the page again for more", async () => {
+    const asked: string[] = [];
+    let watched = 0;
+    onRefused(async (url) => {
+      asked.push(url);
+      return watched === 0
+        ? { why: "not watched", retry: { label: "find out why", run: async () => void (watched += 1) } }
+        : { why: "x.com answered 200 with X-Frame-Options: DENY", details: "{}" };
+    });
+    apply(VIEWPORT);
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    const named = (name: string) =>
+      everything().find((element) => Reflect.get(element, "className") === name) ?? new FakeElement();
+    const notice = named("blocked");
+    const why = named("why");
+    expect(Reflect.get(notice, "hidden")).toBe(false);
+    expect(asked).toEqual([PAGE]);
+    expect(why.children[0]?.textContent).toBe("not watched");
+    const retry = why.children.find((node) => Reflect.get(node, "className") === "retry");
+    retry?.dispatchEvent(new Event("click"));
+    await Bun.sleep(1);
+    expect(watched).toBe(1);
+    expect(Reflect.get(notice, "hidden")).toBe(true);
+    expect(Reflect.get(frameElement(), "src")).toBe(PAGE);
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    expect(why.children.map((node) => node.textContent)).toEqual([
+      "x.com answered 200 with X-Frame-Options: DENY",
+      "copy details",
+    ]);
+    await load(PAGE);
+    expect(Reflect.get(notice, "hidden")).toBe(true);
+  });
+
+  test("tells the host the frame opened and went, and loads the page again at once where the host says so", async () => {
+    const heard: boolean[] = [];
+    onFramed((open) => {
+      heard.push(open);
+    });
+    let runs = 0;
+    onRefused(async () =>
+      runs === 0
+        ? { why: "past the worker", retry: { label: "load again", now: true, run: async () => void (runs += 1) } }
+        : { why: "still refused" },
+    );
+    apply(VIEWPORT);
+    expect(heard).toEqual([true]);
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    const named = (name: string) =>
+      everything().find((element) => Reflect.get(element, "className") === name) ?? new FakeElement();
+    expect(runs).toBe(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(true);
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    expect(runs).toBe(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(false);
+    expect(named("why").children[0]?.textContent).toBe("still refused");
+    reset();
+    expect(heard).toEqual([true, false]);
+  });
+
+  test("holds the frame's first load until the host has let it in", async () => {
+    let letIn = () => {};
+    onFramed((open) => (open ? new Promise<void>((resolve) => (letIn = resolve)) : undefined));
+    apply(VIEWPORT);
+    await Bun.sleep(1);
+    expect(Reflect.get(frameElement(), "src")).toBeUndefined();
+    letIn();
+    await Bun.sleep(1);
+    expect(Reflect.get(frameElement(), "src")).toBe(PAGE);
   });
 
   test("lies on the mat color picked, and takes a new one in place", () => {

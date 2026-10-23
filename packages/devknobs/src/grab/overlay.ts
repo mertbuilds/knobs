@@ -1,6 +1,7 @@
 import { getState, subscribe } from "../engine";
 import { isCustomColor } from "../engine/color";
 import { baseMatchMedia } from "../engine/matchmedia";
+import { systemMedia, watchSystemMedia } from "../engine/system";
 import { middle } from "../ui/stylesformat";
 import { type BoxRing, RINGS, ringPaths, ringQuads } from "./boxmodel";
 import { sizeText } from "./boxtext";
@@ -11,6 +12,7 @@ import { boxTint, GRAB_COLOR_NAMES, GRAB_COLORS, grabColor } from "./colors";
 import { DWELL } from "./dwell";
 import { createColorReader } from "./paint";
 import { createThemeReader, type GrabTone, invertTheme, type Theme } from "./theme";
+import { addStyle } from "../engine/style";
 
 /** Over everything, the panel too. It never takes a pointer. */
 const Z_INDEX = 2147483647;
@@ -490,8 +492,7 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
   host.setAttribute("data-devknobs", "grab");
   host.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z_INDEX}`;
   const root = host.attachShadow({ mode: "open" });
-  const style = document.createElement("style");
-  style.textContent = CSS;
+  addStyle(root, CSS);
   const layer = document.createElement("div");
   layer.className = "layer";
   const glow = document.createElement("div");
@@ -554,7 +555,7 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
     return { ring, node };
   });
   layer.append(glow, glide, tip);
-  root.append(style, layer);
+  root.append(layer);
   (document.body ?? document.documentElement).append(host);
 
   /** The real setting, under the motion knob: the layer is devknobs' own. */
@@ -616,7 +617,8 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
   }
 
   function still(): void {
-    reduced = reduce.matches;
+    const own = systemMedia();
+    reduced = own ? own.motion === "reduce" : reduce.matches;
     layer.toggleAttribute("data-still", reduced);
   }
 
@@ -865,11 +867,12 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
     window.removeEventListener("scroll", sync, true);
     window.removeEventListener("resize", resize);
     reduce.removeEventListener("change", still);
+    stopSystem();
     stopColor();
     host.remove();
   }
 
-  still();
+  const stopSystem = watchSystemMedia(still);
   paint();
   const stopColor = subscribe((state) => {
     color = state.grabColor;

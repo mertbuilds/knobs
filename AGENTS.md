@@ -17,6 +17,8 @@ apps/
 packages/
   devknobs/ The `devknobs` npm package: the panel itself. Vanilla TS, zero runtime
           dependencies, built and tested with bun. Its own README and CHANGELOG.
+  extension/ The devknobs Chrome extension (private, not published): the panel on any
+          page, some knobs set for real through `chrome.debugger`.
   ui/     StyleX tokens + Base UI wrappers + Storybook. The devknobs panel's tokens.
   env/    Zod-validated client env schema. All env access goes through here.
   config/ Shared tsconfig base.
@@ -122,6 +124,12 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - Release: in a PR, bump `version` in `packages/devknobs/package.json` and add the `CHANGELOG.md` entry (run `pnpm --filter devknobs build`, then `npm pack --dry-run` from `packages/devknobs` to check the file list). After the merge, `git tag devknobs@X.Y.Z && git push origin devknobs@X.Y.Z`. `.github/workflows/release.yml` checks the tag matches the version, runs devknobs' tests, typecheck and build, and publishes through npm trusted publishing (OIDC, no token, provenance added by npm). A version with `-` goes to the `next` dist-tag. A tag for a version already on npm is a no-op. One-time setup: `npm trust github devknobs --file release.yml --repo mertbuilds/knobs --allow-publish`.
 - `bun run link <app-dir>` / `bun run unlink <app-dir>` (from `packages/devknobs`) copy a local build into another app's `node_modules` to try it there. The site does not need it: it uses the workspace package.
 
+## Extension (`packages/extension`)
+
+- `@knobs/extension`: a Manifest V3 Chrome extension that mounts devknobs on any page and sets some knobs for real (DevTools protocol, `declarativeNetRequest`). Private, not published. Its docs are `packages/extension/README.md`.
+- `pnpm --filter devknobs build` first: it bundles devknobs' `dist/`. Then `pnpm --filter @knobs/extension build` writes `dist/`, which Chrome loads unpacked (`chrome://extensions`, Developer mode, Load unpacked). Work in progress builds elsewhere (`bun scripts/build.ts <dir>`, from `packages/extension`), so `dist/` stays what Chrome has loaded.
+- `pnpm --filter @knobs/extension test` (`bun test`), `typecheck`, and `smoke`: `node scripts/smoke.ts [dir]` loads a build into Playwright's Chromium and drives it on local pages only. CI runs the smoke in the `test` job.
+
 ## Dev workflow
 
 - `pnpm dev` runs mprocs with two panes: web and storybook. Quit with `q`; panes restart individually with `r`.
@@ -132,7 +140,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`, PRs + main): `checks` job = turbo lint/typecheck/build + `format:check` + `skills:check` + react-doctor; `test` job = Chromium story tests + devknobs' `bun test`. Both jobs set up bun for devknobs. Turbo remote cache activates when `TURBO_TOKEN`/`TURBO_TEAM` are configured.
+- **CI** (`.github/workflows/ci.yml`, PRs + main): `checks` job = turbo lint/typecheck/build + `format:check` + `skills:check` + react-doctor; `test` job = Chromium story tests + devknobs' and the extension's `bun test` + the extension's smoke. Both jobs set up bun for devknobs. Turbo remote cache activates when `TURBO_TOKEN`/`TURBO_TEAM` are configured.
 - **Deploy** (`deploy.yml`, push to main): builds devknobs, then wrangler-action builds and deploys `apps/web` to Cloudflare Workers.
 - **Release** (`release.yml`, push of a `devknobs@*` tag): checks the tag matches the version, then tests, typechecks, builds and publishes devknobs to npm through trusted publishing. See the release line under devknobs.
 - **Previews** (`preview.yml`): every PR builds devknobs and the site, uploads a Workers preview version and comments the URL. Previews build without the analytics client id, so preview traffic stays out of the numbers.

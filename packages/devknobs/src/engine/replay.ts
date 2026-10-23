@@ -1,5 +1,6 @@
 import { collect, onDocumentTimeline, targetOf } from "./animations";
 import { walk } from "./tree";
+import { addStyle } from "./style";
 
 /** Marks the boxes whose finished CSS animations replay restarts. */
 const MARK = "data-devknobs-replay";
@@ -71,15 +72,7 @@ function restartFinished(live: Map<Element, Set<string>>): void {
     roots.add(element.getRootNode() as Document | ShadowRoot);
   });
   if (marked.length === 0) return;
-  const styles: HTMLStyleElement[] = [];
-  for (const root of roots) {
-    const style = document.createElement("style");
-    style.setAttribute("data-devknobs", "replay");
-    style.textContent = RESTART;
-    if (root instanceof ShadowRoot) root.append(style);
-    else (document.head ?? document.documentElement).append(style);
-    styles.push(style);
-  }
+  const styles = Array.from(roots, (root) => addStyle(root, RESTART));
   // One forced style pass sees `none`, so the next one starts each animation over.
   void document.documentElement.offsetHeight;
   for (const style of styles) style.remove();

@@ -10,6 +10,7 @@ import {
 } from "./selector";
 import { isShadowRoot, label, type Scope } from "./tree";
 import type { HiddenSheet, RuleOrigin, Specificity } from "./types";
+import { isOwnSheet } from "../engine/style";
 
 /** Something around a rule that must hold now for it to apply. */
 export type Condition =
@@ -271,6 +272,7 @@ function sheetsOf(scope: Scope): CSSStyleSheet[] {
 
 /** devknobs' own: a stylesheet its element brought in, or any in one of its shadow roots. */
 function isOwn(sheet: CSSStyleSheet): boolean {
+  if (isOwnSheet(sheet)) return true;
   const owner = ownerOf(sheet);
   return owner !== null && isDevknobs(owner);
 }
