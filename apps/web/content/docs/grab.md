@@ -233,7 +233,6 @@ of it.
   may not apply
 - an edit made through the CSSOM alone, or to a stylesheet outside the head,
   may show late
-
 - a closed shadow root, a frame's document inside the tree, and a
   `<template>`'s content
 
