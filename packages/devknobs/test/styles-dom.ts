@@ -8,6 +8,7 @@ type Listener = (event: FakeEvent) => void;
 
 export interface FakeEvent {
   key?: string;
+  target?: unknown;
   prevented: boolean;
   preventDefault(): void;
   stopPropagation(): void;
@@ -94,7 +95,7 @@ export class FakeNode {
     this.listeners.get(type)?.delete(listener);
   }
 
-  fire(type: string, more: { key?: string } = {}): FakeEvent {
+  fire(type: string, more: { key?: string; target?: unknown } = {}): FakeEvent {
     const event: FakeEvent = {
       ...more,
       prevented: false,
@@ -118,6 +119,19 @@ export class FakeNode {
 
   focus(): void {
     this.focused = true;
+  }
+
+  remove(): void {
+    const parent = this.parentElement;
+    if (!parent) return;
+    parent.children = parent.children.filter((child) => child !== this);
+    this.parentElement = null;
+  }
+
+  /** The nearest node from this one up with a class, as `closest(".name")`. */
+  closest(selector: string): FakeNode | null {
+    for (let at: FakeNode | null = this; at; at = at.parentElement) if (at.classList.contains(selector.slice(1))) return at;
+    return null;
   }
 
   scrollIntoView(): void {

@@ -88,6 +88,9 @@ export const CSS = `
   --code-kw: #0d22aa;
   --code-attr: #994500;
   --code-com: #236e25;
+  /* An attribute's value in the DOM tree, and the ground of its selected line. */
+  --code-val: #1a1aa6;
+  --pick: #e4ecf8;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --edge: 0px;
   --edge-line: transparent;
@@ -150,6 +153,8 @@ export const CSS = `
     --code-kw: #c58af9;
     --code-attr: #9bbbdc;
     --code-com: #8fbf8f;
+    --code-val: #f29766;
+    --pick: #1e2a38;
   }
 }
 .wrap[data-side="left"] {
@@ -1292,6 +1297,9 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .tok-kw { color: var(--code-kw); }
 .tok-attr { color: var(--code-attr); }
 .tok-com { color: var(--code-com); }
+.tok-val { color: var(--code-val); }
+.tok-text { color: var(--fg); }
+.tok-doc { color: var(--faint); }
 /* Json as a tree: a node a line that opens to what it holds, a step in. */
 .json { padding: 0 var(--view-end) 0 var(--view-start); font: 11px/1.6 var(--mono); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .json-head { display: flex; align-items: baseline; width: 100%; white-space: pre; text-align: left; }
@@ -1375,6 +1383,47 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
    label. The panel is as wide as its edge is dragged to, so nothing here has
    a width of its own: a line wraps, and a name that must stay on one line is
    cut short. */
+/* Inspect's view as the Elements panel: the DOM tree over the styles, the
+   crumbs between them. The tree scrolls in itself, a share of the window's
+   height, and its bottom edge drags for another. A line is a node, a step in
+   for each level, and wraps where it is long, but never narrower than 30
+   characters: past that the tree is wider than its box and scrolls sideways,
+   as deep lines do in the browser's tools. The selected line has a ground of
+   its own, a blue one while the tree has the focus, and ends with a quiet
+   reference to it. A node that changed lights for a moment. */
+.elements { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.dom {
+  position: relative;
+  height: 40vh;
+  min-height: 96px;
+  max-height: 85vh;
+  overflow: auto;
+  resize: vertical;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.dom-tree { width: min-content; min-width: 100%; font: 11px/1.6 var(--mono); }
+.dom-row {
+  display: flex;
+  align-items: flex-start;
+  padding-right: var(--view-end);
+  cursor: default;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.dom-row:hover { background: var(--card); }
+.dom-row.on { background: var(--card); }
+.dom-tree:focus-within .dom-row.on { background: var(--pick); }
+.dom-row > .sect-turn { height: 1.6em; cursor: pointer; }
+.dom-code { flex: 0 1 auto; min-width: 30ch; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.dom-ref { white-space: pre; color: var(--faint); }
+.dom-code > .act { margin-left: var(--col-pad); height: 1.6em; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6em; vertical-align: top; }
+.dom-flash { animation: dom-flash 900ms ease-out; }
+@keyframes dom-flash {
+  from { background: var(--pick); }
+  to { background: transparent; }
+}
 .styles { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 /* One line, which scrolls sideways with no bar, and shows its end. */
 .crumbs {

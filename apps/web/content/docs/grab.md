@@ -186,7 +186,7 @@ can rest the pointer on or reach with the tab key, as is the name of a
 `--custom` declaration: the tooltip says what the element sees for it right
 then, with a swatch for a color and under it the selector that sets it, or
 `not set` and what its fallback comes to. in `advanced` a click on one goes to
-the block that sets it, and no click copies. the crumbs on top are the element's ancestors, each a
+the block that sets it, and no click copies. the crumbs under the tree are the element's ancestors, each a
 click away, and the filter keeps the declarations that have its text in
 their name or value. the view reads the styles again when the element or an
 ancestor changes, when a stylesheet in the head does, when the window is
@@ -194,6 +194,34 @@ resized and when a knob moves. with the width knob's frame up, inspect picks
 in the frame and the styles show in the panel. what a knob of devknobs
 writes on `<html>`, the root size of the text size knob and the
 `color-scheme` of the scheme knob, is left out.
+
+### the elements tree
+
+the view is laid out as the browsers' own Elements panel: the DOM tree on
+top, the element's breadcrumbs under it, and the styles under those. the
+tree is the page's document, or the frame's page with the width knob's frame
+up, from `<!DOCTYPE html>` and `<html>` down, with the element picked
+selected and every node on the way to it open. each line is a node as the
+Elements panel writes it: `<tag attr="value">` in its colors, a triangle on
+what opens, `<tag>…</tag>` for one that is closed, an element's one short
+text inside its line, other text in quotes, `<!-- comments -->`,
+`#shadow-root (open)` for an open shadow root, and `::marker`, `::before`
+and `::after` where they have content. an open element ends on a line of its
+own, `</tag>`. long values and texts are cut short with `…`. past 500
+children a line says `Show all nodes (N more)`. devknobs' own nodes, its
+panel, boxes, frame and styles, are never in it.
+
+the pointer on a line boxes its element on the page, margin and padding as
+the picking draws them. a click selects a line and the styles follow it, and
+a pick on the page or a crumb selects its element in the tree. the arrows
+move as in the Elements panel: up and down a line, right opens a line or goes
+into it, left closes it or goes to its parent, Home and End to the ends. the
+selected line ends with `== $0`, and `$0` on the page's window is that node
+while the view is open, unless the page has a `$0` of its own. its `copy`,
+or cmd or ctrl and c in the tree, copies the node's outer html, as Copy
+element does. the tree follows the page as it changes, and a node that
+changed lights for a moment. drag the tree's bottom corner for more or less
+of it.
 
 ### what inspect cannot show
 
@@ -205,5 +233,8 @@ writes on `<html>`, the root size of the text size knob and the
   may not apply
 - an edit made through the CSSOM alone, or to a stylesheet outside the head,
   may show late
+- a closed shadow root, a frame's document inside the tree, and a
+  `<template>`'s content
 
-it is read only for now, with no line numbers.
+it is read only for now, with no line numbers: no attribute is edited, no
+node is dragged, and the tree has no menu.

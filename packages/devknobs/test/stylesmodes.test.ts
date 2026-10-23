@@ -123,6 +123,7 @@ function start(door: typeof mode = mode): FakeNode {
     page,
   );
   paneBody = new FakeNode("div");
+  paneBody.className = "view-body";
   paneBody.append(fake(view.node));
   return fake(view.node);
 }
