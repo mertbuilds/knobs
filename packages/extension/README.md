@@ -27,6 +27,10 @@ pnpm --filter @knobs/extension build
 
 The content script bundles devknobs' built package, and `dist/` gets its device images. Then in Chrome: `chrome://extensions`, turn on Developer mode, Load unpacked, pick `packages/extension/dist`.
 
+## Store
+
+`pnpm --filter @knobs/extension package` builds `dist/` and zips it to `devknobs-<version>.zip` here (gitignored), the file the Chrome Web Store takes. The version is the manifest's, the devknobs release it bundles. `store/listing.md` holds what the store's dashboard asks for (text, permission justifications, privacy answers), and `store/` the screenshots and the promo tile. The icons are `static/icon-*.png`, from the logo master (see `AGENTS.md`, "Logo"); the 128 is the logo at 96px in 16px of clear space.
+
 ## Checks
 
 - `pnpm --filter @knobs/extension test`: the knob to CDP command mapping (`src/knobs.ts`), the headers and override per ua preset (`src/ua.ts`), what a detach tells the tab (`src/messages.ts`) and the record of a frame's load and the line it gives (`src/refusal.ts`), with `bun test`.
