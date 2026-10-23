@@ -66,6 +66,6 @@ the demo requests under `/api/demo` keep no state and make no request of their o
 
 - the `PARAGLIDE_LOCALE` cookie, the page's language, set on every visit for 400 days.
 - `knobs:tour` in `localStorage`, once you close or finish the tour.
-- the storage demo's `demo-count` (a cookie, `localStorage` and `sessionStorage`), its `knobs-demo` IndexedDB database and its `knobs-demo` Cache Storage, only when you press its buttons.
+- the storage demo's shop, only when you press its buttons: the cart (`knobs-demo:cart` in `localStorage`), what you viewed (`knobs-demo:viewed` in `sessionStorage`), your cookie banner choice (the `knobs-demo-consent` cookie), what you saved for later (the `knobs-demo` IndexedDB database) and its offline copy (the `knobs-demo` Cache Storage).
 
 questions go to the [GitHub issues](https://github.com/mertbuilds/knobs/issues).
