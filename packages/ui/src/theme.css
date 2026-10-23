@@ -67,19 +67,13 @@
   }
 }
 
-/* Links: foreground with underline, never browser blue/purple, and :visited
+/* Links: foreground with no underline, never browser blue/purple, and :visited
    must not diverge. */
 a {
   color: inherit;
-  text-decoration-line: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+  text-decoration-line: none;
 }
 
 a:visited {
   color: inherit;
-}
-
-a:hover {
-  text-decoration-thickness: 2px;
 }
