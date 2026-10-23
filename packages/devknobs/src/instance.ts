@@ -6,11 +6,59 @@
  */
 const OWNER = Symbol.for("devknobs.owner");
 
-/** Take the page for `release`. Another copy that holds it lets go first. */
-export function claim(scope: object, release: () => void): void {
+/**
+ * Beside the way out, what a copy mounted as the page's host leaves, such as
+ * the extension's: a copy the page mounts after it hands its options over
+ * here and does not take over. A copy that knows no hosts never reads it.
+ */
+const HOST = Symbol.for("devknobs.host");
+
+/** A host, as `HOST` holds it. */
+export interface Host {
+  /** The host's way out, the one `OWNER` holds while the host has the page. */
+  release: () => void;
+  /** Take what a copy the page mounts asks for, from its mount options. */
+  adopt: (options: object) => void;
+  /** The host's api, where a copy that defers to it sends its own calls. Older hosts leave none. */
+  api?: object;
+}
+
+function isHost(value: unknown): value is Host {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof Reflect.get(value, "release") === "function" &&
+    typeof Reflect.get(value, "adopt") === "function"
+  );
+}
+
+/**
+ * Take the page for `release`. Another copy that holds it lets go first. With
+ * `adopt`, the copy holds it as the host: copies the page mounts later hand
+ * their options to `adopt`, and their calls to `api`.
+ */
+export function claim(
+  scope: object,
+  release: () => void,
+  adopt?: (options: object) => void,
+  api?: object,
+): void {
   const previous: unknown = Reflect.get(scope, OWNER);
   if (typeof previous === "function" && previous !== release) previous();
   Reflect.set(scope, OWNER, release);
+  if (adopt) Reflect.set(scope, HOST, { release, adopt, api } satisfies Host);
+  else Reflect.deleteProperty(scope, HOST);
+}
+
+/** The host that holds the page now, or null where none does. */
+export function hostOf(scope: object): Host | null {
+  const host: unknown = Reflect.get(scope, HOST);
+  return isHost(host) && host.release === Reflect.get(scope, OWNER) ? host : null;
+}
+
+/** Does any copy of devknobs hold the page now? */
+export function owned(scope: object): boolean {
+  return typeof Reflect.get(scope, OWNER) === "function";
 }
 
 /** Does another copy hold the page now? Then this one has nothing left to undo. */
@@ -22,6 +70,8 @@ export function superseded(scope: object, release: () => void): boolean {
 /** Let the page go, if `release` still holds it. */
 export function free(scope: object, release: () => void): void {
   if (Reflect.get(scope, OWNER) === release) Reflect.deleteProperty(scope, OWNER);
+  const host: unknown = Reflect.get(scope, HOST);
+  if (isHost(host) && host.release === release) Reflect.deleteProperty(scope, HOST);
 }
 
 const PINNED = Symbol.for("devknobs.pinned");

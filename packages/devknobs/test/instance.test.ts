@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { claim, expose, free, pin, superseded, withdraw } from "../src/instance";
+import { pageChoices } from "../src/host";
+import { claim, expose, free, hostOf, owned, pin, superseded, withdraw } from "../src/instance";
 
 /**
  * A copy's way out, shaped as `unmount` is: a copy taken over does nothing,
@@ -49,6 +50,139 @@ describe("claim", () => {
     claim(scope, second);
     claim(scope, copy(scope, "third", calls));
     expect(calls).toEqual(["first", "second"]);
+  });
+});
+
+/**
+ * A copy shaped as `mount` and `unmount` are: where a host holds the page, a
+ * mount hands it the options and claims nothing; else it takes the page,
+ * as the host with `host`. What it undoes is noted in `calls`.
+ */
+function mounting(scope: object, name: string, calls: string[], host = false) {
+  const adopted: object[] = [];
+  const release = copy(scope, name, calls);
+  return {
+    release,
+    adopted,
+    mount(options: object = {}) {
+      const holder = host ? null : hostOf(scope);
+      if (holder) {
+        holder.adopt(options);
+        return;
+      }
+      claim(scope, release, host ? (options) => adopted.push(options) : undefined);
+    },
+  };
+}
+
+describe("a host", () => {
+  test("takes a page copy's options, and the page copy does not take over", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const extension = mounting(scope, "extension", calls, true);
+    const page = mounting(scope, "page", calls);
+    extension.mount();
+    page.mount({ hotkey: "j" });
+    expect(extension.adopted).toEqual([{ hotkey: "j" }]);
+    expect(calls).toEqual([]);
+    expect(hostOf(scope)?.release).toBe(extension.release);
+    expect(superseded(scope, extension.release)).toBe(false);
+  });
+
+  test("stays when the page copy unmounts", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const extension = mounting(scope, "extension", calls, true);
+    const page = mounting(scope, "page", calls);
+    extension.mount();
+    page.mount();
+    page.release();
+    expect(calls).toEqual([]);
+    expect(hostOf(scope)?.release).toBe(extension.release);
+  });
+
+  test("a copy that knows no hosts takes the page from it, and leaves no host behind", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const extension = mounting(scope, "extension", calls, true);
+    extension.mount();
+    // As an older copy claims: the way out and nothing more.
+    claim(scope, copy(scope, "old", calls));
+    expect(calls).toEqual(["extension"]);
+    expect(hostOf(scope)).toBeNull();
+    expect(owned(scope)).toBe(true);
+    // The host takes it back the same way, and the old copy lets go.
+    extension.mount();
+    expect(calls).toEqual(["extension", "old"]);
+    expect(hostOf(scope)?.release).toBe(extension.release);
+  });
+
+  test("a second host takes over from the first, as an updated extension does", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const first = mounting(scope, "first", calls, true);
+    const second = mounting(scope, "second", calls, true);
+    first.mount();
+    second.mount();
+    expect(calls).toEqual(["first"]);
+    expect(hostOf(scope)?.release).toBe(second.release);
+  });
+
+  test("goes with its way out", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const extension = mounting(scope, "extension", calls, true);
+    extension.mount();
+    extension.release();
+    expect(hostOf(scope)).toBeNull();
+    expect(owned(scope)).toBe(false);
+    expect(Object.getOwnPropertySymbols(scope)).toEqual([]);
+  });
+});
+
+describe("with no host", () => {
+  test("a hot update's copy still takes over, and holds the page as no host", () => {
+    const scope = {};
+    const calls: string[] = [];
+    const first = mounting(scope, "first", calls);
+    const second = mounting(scope, "second", calls);
+    first.mount();
+    second.mount();
+    expect(calls).toEqual(["first"]);
+    expect(hostOf(scope)).toBeNull();
+    expect(superseded(scope, second.release)).toBe(false);
+  });
+
+  test("a copy that holds the page with no host drops the host it took over from", () => {
+    const scope = {};
+    const extension = mounting(scope, "extension", [], true);
+    extension.mount();
+    claim(scope, () => {});
+    expect(hostOf(scope)).toBeNull();
+  });
+});
+
+describe("pageChoices", () => {
+  test("keeps the keys, grab, open and grab's color, and nothing else", () => {
+    expect(
+      pageChoices({
+        hotkey: "j",
+        grabKey: "alt+shift+g",
+        grab: false,
+        open: true,
+        grabColor: "blue",
+        handle: true,
+        native: {},
+        persist: false,
+        state: { scheme: "dark" },
+        host: true,
+      }),
+    ).toEqual({ hotkey: "j", grabKey: "alt+shift+g", grab: false, open: true, grabColor: "blue" });
+  });
+
+  test("drops what is not of its kind, a color grab does not draw in too", () => {
+    expect(pageChoices({ hotkey: 1, grab: "no", open: null, grabColor: "nope" })).toEqual({});
+    expect(pageChoices({})).toEqual({});
   });
 });
 
