@@ -1482,12 +1482,13 @@ describe("the request tones", () => {
   });
 
   test("the code colors are set for both schemes, and read as body text on the ground and on a card", () => {
-    const code = ["--code-key", "--code-str", "--code-num", "--code-kw", "--code-attr", "--code-com"];
+    const code = ["--code-key", "--code-str", "--code-num", "--code-kw", "--code-attr", "--code-com", "--code-val"];
     for (const scheme of [light, dark]) {
       for (const name of code) {
         const color = scheme.get(name) ?? "";
         expect([name, color]).toEqual([name, expect.stringMatching(/^#[0-9a-f]{6}$/)]);
-        for (const ground of ["--bg", "--card"]) {
+        // The DOM tree's selected line is on --pick.
+        for (const ground of ["--bg", "--card", "--pick"]) {
           expect([name, ground, contrast(color, scheme.get(ground) ?? "") >= 4.5]).toEqual([name, ground, true]);
         }
       }
@@ -1497,6 +1498,9 @@ describe("the request tones", () => {
       for (const name of ["--fg", "--faint"]) {
         expect(contrast(scheme.get(name) ?? "", scheme.get("--bg") ?? "")).toBeGreaterThanOrEqual(4.5);
       }
+      // A text node on the selected line of the DOM tree, and its quiet `== $0`, as large text is.
+      expect(contrast(scheme.get("--fg") ?? "", scheme.get("--pick") ?? "")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(scheme.get("--faint") ?? "", scheme.get("--pick") ?? "")).toBeGreaterThanOrEqual(3);
     }
   });
 

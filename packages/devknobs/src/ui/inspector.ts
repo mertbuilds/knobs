@@ -17,7 +17,7 @@ import type { InspectControl } from "../grab/inspect";
 import { label } from "../styles/tree";
 import { onPane, openPane, paneView, retitlePane, showPane } from "./pane";
 import type { LivePrefs } from "./prefs";
-import type { createStylesView, StylesView } from "./stylesview";
+import type { StylesContext, StylesView } from "./stylesview";
 import type { Tips } from "./tooltip";
 
 /** The id of the styles view in the panel, and what its head says before a pick. */
@@ -26,8 +26,11 @@ export const STYLES_VIEW = "styles";
 /** What the button that starts the picking is called. */
 export const SELECT = "select an element";
 
-/** Loads the styles view, the first time inspect turns on. */
-export type LoadStyles = () => Promise<{ createStylesView: typeof createStylesView }>;
+/** What builds the view: the Elements panel's tree over the styles. */
+export type MakeView = (context: StylesContext) => StylesView;
+
+/** Loads the view, the first time inspect turns on. */
+export type LoadStyles = () => Promise<{ createStylesView: MakeView }>;
 
 export interface Inspector {
   /**
@@ -72,7 +75,7 @@ export function createInspector(
     /** Inspect's key as it is now, for the select button to say. */
     key?: () => string;
   },
-  load: LoadStyles = () => import("./stylesview"),
+  load: LoadStyles = () => import("./elementsview").then(({ createElementsView }) => ({ createStylesView: createElementsView })),
   pane: PaneDoor = PANE,
 ): Inspector {
   const { inspect, tips, prefs } = context;
@@ -109,7 +112,7 @@ export function createInspector(
     if (inspect.isOn()) view?.focus();
   }
 
-  function open(make: typeof createStylesView): void {
+  function open(make: MakeView): void {
     if (pane.paneView() === STYLES_VIEW) {
       // Open already, and out of sight where the panel closed over it.
       pane.showPane(STYLES_VIEW);
