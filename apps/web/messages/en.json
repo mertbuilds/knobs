@@ -1,7 +1,10 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_name": "knobs",
-  "tagline": "devtools for design engineers",
+  "hero_line": "See your site on an iPhone or a Pixel, tomorrow morning, in Arabic or in dark mode, from a panel inside the page",
+  "extension_cta": "Add to Chrome",
+  "extension_line": "works on any site, no code to add",
+  "install_app": "or add it to your app",
   "install_command": "npm i -D devknobs",
   "copy_done": "Copied",
   "copy_install": "Copy install command",

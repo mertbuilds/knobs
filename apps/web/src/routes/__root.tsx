@@ -77,7 +77,7 @@ export const Route = createRootRoute({
       // oxlint-disable-next-line text-encoding-identifier-case -- HTML meta charset must be "utf-8"
       { charSet: 'utf-8' },
       { content: 'width=device-width, initial-scale=1', name: 'viewport' },
-      { content: m.tagline(), name: 'description' },
+      { content: m.hero_line(), name: 'description' },
       { title: m.app_name() },
     ],
   }),

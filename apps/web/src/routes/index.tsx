@@ -1,10 +1,11 @@
-import { colors, font, spacing } from '@knobs/ui/tokens.stylex';
+import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, defaultMarker, props, type StyleXStyles, when } from '@stylexjs/stylex';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { StarIcon } from 'lucide-react';
 import { lazy, Suspense, useEffect } from 'react';
 import { Stage } from '../demo/stage.tsx';
-import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
+import { track } from '../lib/analytics.ts';
+import { ChromeMark, GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
 import { CodeBox } from '../lib/code-box.tsx';
 import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
@@ -51,6 +52,15 @@ const WIDE = '@media (min-width: 640px)';
 
 const DOCS = '/docs';
 
+const EXTENSION_DOCS = '/docs/extension';
+
+// Where the hero's "Add to Chrome" goes. The docs page while the store listing is in review;
+// it becomes the Chrome Web Store URL once the listing is approved.
+const EXTENSION_URL = EXTENSION_DOCS;
+
+const onExtension = (placement: 'footer' | 'hero') => () =>
+  track('extension_clicked', { placement });
+
 const NOTICES =
   'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
@@ -67,6 +77,63 @@ const styles = create({
   credit: {
     color: colors.muted,
     marginInlineStart: 'auto',
+  },
+  // The hero's call to action: the extension button, its one line beside it, wrapping under it
+  // on a narrow screen.
+  cta: {
+    alignItems: 'center',
+    columnGap: spacing.s3,
+    display: 'flex',
+    flexWrap: 'wrap',
+    rowGap: spacing.s2,
+  },
+  // The page's one filled button, ink on the page's ground turned around. Its label's color is
+  // on `ctaLabel`: the theme's global `a` rules outrank StyleX's.
+  ctaButton: {
+    alignItems: 'center',
+    backgroundColor: colors.fg,
+    borderRadius: radius.row,
+    columnGap: spacing.s2,
+    display: 'inline-flex',
+    flexShrink: 0,
+    fontWeight: font.weightMedium,
+    opacity: {
+      ':hover': {
+        '@media (hover: hover)': 0.88,
+        default: null,
+      },
+      default: 1,
+    },
+    outlineColor: colors.muted,
+    outlineOffset: 2,
+    outlineStyle: {
+      ':focus-visible': 'solid',
+      default: 'none',
+    },
+    outlineWidth: 1,
+    paddingBlock: spacing.s2,
+    paddingInline: spacing.s4,
+    textDecoration: 'none',
+    transitionDuration: '120ms',
+    transitionProperty: 'opacity',
+    transitionTimingFunction: 'ease-out',
+  },
+  ctaLabel: {
+    alignItems: 'center',
+    color: colors.bg,
+    columnGap: spacing.s2,
+    display: 'inline-flex',
+  },
+  // The page's 16px icon, in rem, so it grows with the text.
+  glyph: {
+    height: '1rem',
+    width: '1rem',
+  },
+  // The extension first, then the ways into an app's own code.
+  start: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.s3,
   },
   // A button sizes to its content; this one fills the row it sits in.
   fill: {
@@ -246,8 +313,20 @@ function Landing() {
           </h1>
           <GitHubButton />
         </div>
-        <p {...props(styles.text)}>{m.tagline()}</p>
-        {installChoices()}
+        <p {...props(styles.text)}>{m.hero_line()}</p>
+        <div {...props(styles.start)}>
+          <div {...props(styles.cta)}>
+            <a href={EXTENSION_URL} onClick={onExtension('hero')} {...props(styles.ctaButton)}>
+              <span {...props(styles.ctaLabel)}>
+                <ChromeMark style={styles.glyph} />
+                {m.extension_cta()}
+              </span>
+            </a>
+            <span {...props(styles.hint)}>{m.extension_line()}</span>
+          </div>
+          <p {...props(styles.hint)}>{m.install_app()}</p>
+          {installChoices()}
+        </div>
         <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
@@ -263,7 +342,7 @@ function Landing() {
         <a href={DOCS} {...props(styles.link)}>
           {m.link_docs()}
         </a>
-        <a href="/docs/extension" {...props(styles.link)}>
+        <a href={EXTENSION_DOCS} onClick={onExtension('footer')} {...props(styles.link)}>
           {m.link_extension()}
         </a>
         <a
