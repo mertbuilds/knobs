@@ -100,6 +100,45 @@ describe("a request the browser timed too", () => {
     });
   });
 
+  test("and the phases Resource Timing gives, a hidden one as 0", async () => {
+    page.clock.tick(100);
+    await fetch("/api/a");
+    await settle();
+    FakeObserver.emit(
+      timed("http://app.test/api/a", 102, {
+        initiatorType: "fetch",
+        fetchStart: 102,
+        domainLookupStart: 103,
+        domainLookupEnd: 104,
+        connectStart: 104,
+        secureConnectionStart: 105,
+        connectEnd: 108,
+        requestStart: 108.5,
+      }),
+    );
+    expect(page.row().phases).toEqual({
+      startTime: 102,
+      workerStart: 0,
+      redirectStart: 0,
+      redirectEnd: 0,
+      fetchStart: 102,
+      domainLookupStart: 103,
+      domainLookupEnd: 104,
+      connectStart: 104,
+      secureConnectionStart: 105,
+      connectEnd: 108,
+      requestStart: 108.5,
+      responseStart: 114,
+      responseEnd: 122,
+    });
+  });
+
+  test("an EventSource's connection, which Chromium says `other` made", () => {
+    new EventSource("/api/events");
+    FakeObserver.emit(timed("http://app.test/api/events", 2, { initiatorType: "other" }));
+    expect(page.row()).toMatchObject({ kind: "eventsource", sizes: { decoded: 4000 } });
+  });
+
   test("an XMLHttpRequest's row too", () => {
     const xhr = new XMLHttpRequest();
     xhr.open("GET", "/api/items");

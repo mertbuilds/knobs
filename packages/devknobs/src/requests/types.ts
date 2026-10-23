@@ -4,8 +4,14 @@ export const RING_SIZE = 300;
 /** How much of a body the log keeps, in bytes. What the panel shows of it is its own matter. */
 export const BODY_CAP = 64 * 1024;
 
-/** Who made the request: a script, through `fetch` or `XMLHttpRequest`, or the page as it loaded. */
-export type RequestKind = "fetch" | "xhr" | "resource" | "navigation";
+/** How many messages of an event stream the log keeps. The oldest goes as one more comes in. */
+export const MESSAGES_KEPT = 200;
+
+/** How much of a message's data the log keeps, in bytes. */
+export const MESSAGE_CAP = 4 * 1024;
+
+/** Who made the request: a script, through `fetch`, `XMLHttpRequest` or `EventSource`, or the page as it loaded. */
+export type RequestKind = "fetch" | "xhr" | "eventsource" | "resource" | "navigation";
 
 /**
  * How much the log knows. A script's request is seen whole. What the page
@@ -66,6 +72,40 @@ export interface RequestTiming {
   duration: number | null;
 }
 
+/**
+ * The phases of a request as Resource Timing gives them, each in ms since
+ * its page began to load, as `RequestTiming.at` counts. A phase the browser
+ * keeps to itself, as for a server on another origin that sends no
+ * `Timing-Allow-Origin`, or a connection used again, reads 0.
+ */
+export interface RequestPhases {
+  startTime: number;
+  workerStart: number;
+  redirectStart: number;
+  redirectEnd: number;
+  fetchStart: number;
+  domainLookupStart: number;
+  domainLookupEnd: number;
+  connectStart: number;
+  secureConnectionStart: number;
+  connectEnd: number;
+  requestStart: number;
+  responseStart: number;
+  responseEnd: number;
+}
+
+/** One message of an event stream, as the page heard it. */
+export interface StreamMessage {
+  /** The event's type: `message` unless the server named another. */
+  type: string;
+  /** Its data, at most `MESSAGE_CAP` bytes of it. */
+  data: string;
+  /** The last event id, or empty. */
+  id: string;
+  /** When it came, in epoch ms. */
+  time: number;
+}
+
 /** One request in the log. Plain data: it can be copied, posted and printed as it is. */
 export interface RequestEntry {
   /** Unlike any other in the log, the frame's included. */
@@ -97,6 +137,10 @@ export interface RequestEntry {
   /** From Resource Timing, or null where the browser has given none yet. */
   sizes: RequestSizes | null;
   timing: RequestTiming;
+  /** From Resource Timing, or null where the browser has given none, as while the request runs. */
+  phases: RequestPhases | null;
+  /** What an event stream the log reads has sent so far, the last `MESSAGES_KEPT` of it. */
+  messages: StreamMessage[];
   /** The call that made the request: stack frames, one a line. Empty on a light row. */
   initiator: string;
   /** What Resource Timing says loaded it, such as `img` or `css`. Empty on a full row it has not reached. */

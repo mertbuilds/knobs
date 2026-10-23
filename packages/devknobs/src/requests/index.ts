@@ -1,5 +1,6 @@
 import { realNow } from "../engine/clock";
 import { isDevknobsFrame } from "../engine/frame";
+import { patchEventSource } from "./eventsource";
 import { type Fetch, wrapFetch } from "./fetch";
 import { install, type Patch, restore } from "./patch";
 import { absolute, type Clock, createLog } from "./record";
@@ -16,12 +17,14 @@ export type {
   RequestDetail,
   RequestEntry,
   RequestKind,
+  RequestPhases,
   RequestSizes,
   RequestSource,
   RequestState,
   RequestTiming,
+  StreamMessage,
 } from "./types";
-export { BODY_CAP, RING_SIZE } from "./types";
+export { BODY_CAP, MESSAGES_KEPT, RING_SIZE } from "./types";
 
 /**
  * The requests log: what a page's scripts ask for through `fetch` and
@@ -76,6 +79,8 @@ function adopted(entry: RequestEntry): RequestEntry {
     responseBody: entry.responseBody && { ...entry.responseBody },
     sizes: entry.sizes && { ...entry.sizes },
     timing: { ...entry.timing },
+    phases: entry.phases && { ...entry.phases },
+    messages: entry.messages.map((message) => ({ ...message })),
   };
 }
 
@@ -162,6 +167,7 @@ export function createRecorder(options: RecorderOptions): Shared {
 
   install<Fetch>(patches, globalThis, "fetch", (original) => wrapFetch(original, log, options.readFor));
   patchXhr(patches, log);
+  patchEventSource(patches, log);
   const unobserve = observe();
   if (options.above) {
     store.subscribe(forward);

@@ -153,6 +153,41 @@ export class FakeObserver {
   }
 }
 
+/** The browser's own `EventSource`: it connects when the test says, and sends what the test sends. */
+export class FakeEventSource extends EventTarget {
+  static made: FakeEventSource[] = [];
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readyState = 0;
+  constructor(
+    readonly url: string,
+    readonly init?: EventSourceInit,
+  ) {
+    super();
+    FakeEventSource.made.push(this);
+  }
+
+  close(): void {
+    this.readyState = 2;
+  }
+
+  open(): void {
+    this.readyState = 1;
+    this.dispatchEvent(new Event("open"));
+  }
+
+  send(type: string, data: string, id = ""): void {
+    this.dispatchEvent(new MessageEvent(type, { data, lastEventId: id }));
+  }
+
+  /** The connection went: the browser connects again, or gives up for good with `closed`. */
+  drop(closed = false): void {
+    this.readyState = closed ? 2 : 0;
+    this.dispatchEvent(new Event("error"));
+  }
+}
+
 /** A timing entry as the browser makes them, with the fields Resource Timing adds. */
 export function timed(name: string, startTime: number, more: Record<string, unknown> = {}): PerformanceEntry {
   const entry = {
@@ -216,18 +251,20 @@ export interface Page {
 }
 
 const realFetch = globalThis.fetch;
-const GLOBALS = ["document", "location", "XMLHttpRequest", "PerformanceObserver"];
+const GLOBALS = ["document", "location", "XMLHttpRequest", "PerformanceObserver", "EventSource"];
 const realGlobals = GLOBALS.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
 
 /** A page with the browser's parts faked, before any recorder patches it. */
 export function fakePage(): FakeFetch {
   const net = fakeFetch();
   FakeXHR.sent = [];
+  FakeEventSource.made = [];
   FakeObserver.live.clear();
   FakeObserver.buffered = [];
   Object.defineProperty(globalThis, "document", { configurable: true, value: { baseURI: BASE } });
   Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: ORIGIN } });
   Object.defineProperty(globalThis, "XMLHttpRequest", { configurable: true, writable: true, value: FakeXHR });
+  Object.defineProperty(globalThis, "EventSource", { configurable: true, writable: true, value: FakeEventSource });
   Object.defineProperty(globalThis, "PerformanceObserver", {
     configurable: true,
     writable: true,

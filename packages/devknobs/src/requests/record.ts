@@ -1,5 +1,15 @@
+import { clipText } from "./body";
 import type { RequestStore } from "./store";
-import type { BodyRecord, HeaderList, RequestEntry, RequestKind, RequestSource } from "./types";
+import {
+  type BodyRecord,
+  type HeaderList,
+  MESSAGE_CAP,
+  MESSAGES_KEPT,
+  type RequestEntry,
+  type RequestKind,
+  type RequestSource,
+  type StreamMessage,
+} from "./types";
 
 /** The real time a page's requests are stamped with. */
 export interface Clock {
@@ -25,12 +35,14 @@ export interface Log {
   /** False once devknobs let the page go, and while a request of its own goes out. */
   active(): boolean;
   /** A request goes out. Returns its row's id. */
-  start(kind: "fetch" | "xhr", request: Started): string;
+  start(kind: "fetch" | "xhr" | "eventsource", request: Started): string;
   set(id: string, patch: Partial<RequestEntry>): void;
   /** The answer's headers are in. */
   responded(id: string, patch: Partial<RequestEntry>): void;
   /** The request is over, however it went. */
   ended(id: string, patch: Partial<RequestEntry>): void;
+  /** An event stream sent a message. Its data is cut to `MESSAGE_CAP` bytes, and the oldest goes past `MESSAGES_KEPT`. */
+  message(id: string, message: Omit<StreamMessage, "time">): void;
 }
 
 /** `url` in full, from the page's own address. One that does not read stays as it is. */
@@ -58,7 +70,7 @@ export function blank(
   return {
     id,
     kind,
-    detail: kind === "fetch" || kind === "xhr" ? "full" : "light",
+    detail: kind === "resource" || kind === "navigation" ? "light" : "full",
     source,
     method: "",
     url: "",
@@ -75,6 +87,8 @@ export function blank(
     contentType: "",
     sizes: null,
     timing: { start: clock.origin + at, at, response: null, end: null, duration: null },
+    phases: null,
+    messages: [],
     initiator: "",
     initiatorType: "",
     protocol: "",
@@ -116,6 +130,12 @@ export function createLog(
       // Resource Timing may have said when it ended already, and knows better.
       const duration = timing.duration ?? clock.now() - timing.at;
       store.update(id, { ...patch, timing: { ...timing, end: timing.start + duration, duration } });
+    },
+    message(id, message) {
+      const messages = store.get(id)?.messages;
+      if (!messages) return;
+      const kept = { ...message, data: clipText(message.data, "", MESSAGE_CAP).text, time: clock.origin + clock.now() };
+      store.update(id, { messages: [...messages.slice(1 - MESSAGES_KEPT), kept] });
     },
   };
 }

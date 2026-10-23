@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { early as earlyClock, NativeDate, takeOver } from "../src/engine/clock";
 import { DEFAULT_STATE } from "../src/engine/store";
 import { createRecorder, pageClock, requestLog, start, stop } from "../src/requests";
-import { share, type Shared, shared } from "../src/requests/shared";
+import { SHARED_VERSION, share, type Shared, shared } from "../src/requests/shared";
 import {
   type FakeFetch,
   FakeObserver,
@@ -99,7 +99,7 @@ describe("the early script and the full one", () => {
     Reflect.set(globalThis, SHARED, { version: 0, uninstall: () => let_go++ });
     start();
     expect(let_go).toBe(1);
-    expect(shared()?.version).toBe(1);
+    expect(shared()?.version).toBe(SHARED_VERSION);
     expect(globalThis.fetch).not.toBe(net.native);
   });
 });
