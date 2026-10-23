@@ -69,6 +69,9 @@ const styles = create({
   flip: { transform: 'scaleX(-1)' },
   grid: { stroke: SCENE.grid, strokeWidth: 1 },
   hand: { stroke: colors.fg, strokeLinecap: 'round' },
+  inset: { fill: SCENE.sea },
+  insetDot: { fill: colors.accent, stroke: colors.raised, strokeWidth: 1 },
+  insetLand: { fill: SCENE.land },
   land: { fill: SCENE.land },
   line: {
     alignItems: 'baseline',
@@ -601,6 +604,15 @@ const TIMEOUT = 3;
 // A position this many degrees from the last is a jump, which starts a new trail.
 const JUMP = 0.5;
 const TRAIL = 400;
+// A move shorter than this, or than either fix's accuracy, is a device's jitter, not a step of a route.
+const STEADY = 25;
+const METERS_PER_DEGREE = 111_320;
+
+/** About how far apart two positions are, in meters: plenty for the few meters a step takes. */
+function metersBetween([lngA, latA]: Point, [lngB, latB]: Point): number {
+  const across = (lngB - lngA) * Math.cos((((latA + latB) / 2) * Math.PI) / 180);
+  return Math.hypot(across, latB - latA) * METERS_PER_DEGREE;
+}
 
 /**
  * Asks for the position, and keeps hearing where it is, so a route in the geo
@@ -623,14 +635,17 @@ function watchPlace(): void {
   });
   watching = navigator.geolocation.watchPosition(
     ({ coords }) => {
-      const trail = place.read()?.trail ?? [];
+      const now = place.read();
+      const trail = now?.trail ?? [];
       const point: Point = [coords.longitude, coords.latitude];
       const end = trail.at(-1);
       const near =
         end !== undefined &&
         Math.abs(end[0] - point[0]) < JUMP &&
         Math.abs(end[1] - point[1]) < JUMP;
-      const same = end !== undefined && end[0] === point[0] && end[1] === point[1];
+      const same =
+        end !== undefined &&
+        metersBetween(end, point) <= Math.max(STEADY, coords.accuracy, now?.fix?.accuracy ?? 0);
       place.set({
         code: 0,
         fix: { accuracy: coords.accuracy, lat: coords.latitude, lng: coords.longitude },
@@ -682,8 +697,8 @@ function viewOf(read: Place | null): View {
   if (trail.length < 2) {
     return { ...pin, ...clamp(fix.lat, fix.lng, AROUND) };
   }
-  const lngs = trail.map(([lng]) => lng);
-  const lats = trail.map(([, lat]) => lat);
+  const lngs = [...trail.map(([lng]) => lng), fix.lng];
+  const lats = [...trail.map(([, lat]) => lat), fix.lat];
   const [west, east, south, north] = [
     Math.min(...lngs),
     Math.max(...lngs),
@@ -765,6 +780,40 @@ function useGlide(target: View, inView: boolean): View {
   return shown;
 }
 
+// Closer than this many degrees the 1:110m land says little, so a small world beside it shows where the map is.
+const INSET_FROM = 8;
+const INSET = { gap: 6, height: 36, width: 72 };
+
+/**
+ * The whole world, small, in a corner of the map, with a dot where the pin is:
+ * the bottom right, or the top left when the pin is under that corner.
+ */
+function WorldInset({ lat, lng, x, y }: { lat: number; lng: number; x: number; y: number }) {
+  const { gap, height, width } = INSET;
+  const right = WIDTH - gap - width;
+  const bottom = HEIGHT - gap - height;
+  const covered = x > right - gap && y > bottom - gap;
+  const left = covered ? gap : right;
+  const top = covered ? gap : bottom;
+  const k = width / 360;
+  return (
+    <g aria-hidden="true">
+      <rect {...props(styles.inset)} height={height} rx={4} width={width} x={left} y={top} />
+      <path
+        {...props(styles.insetLand)}
+        d={LAND}
+        transform={`translate(${left + width / 2} ${top + height / 2}) scale(${k / 4})`}
+      />
+      <circle
+        {...props(styles.insetDot)}
+        cx={left + width / 2 + lng * k}
+        cy={top + height / 2 - lat * k}
+        r={2.5}
+      />
+    </g>
+  );
+}
+
 const STEPS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 45];
 
 /** Lines of longitude and latitude, a few across the frame, so a pan shows at any zoom. */
@@ -797,10 +846,13 @@ function PlaceMap({ read }: { read: Place | null }) {
   const looking = status === 'asking' || (status === 'failed' && read?.code === TIMEOUT);
   const showPin = read?.fix !== null && read?.fix !== undefined && !failed;
   const [x, y] = at(view.pinLng, view.pinLat);
-  const reach = showPin && read?.fix ? (read.fix.accuracy / 111_320) * k : 0;
+  const reach = showPin && read?.fix ? (read.fix.accuracy / METERS_PER_DEGREE) * k : 0;
   const [startX, startY] = at(...(read?.trail[0] ?? [0, 0]));
   // The trail ends where the pin is drawn, which glides behind the last position heard.
-  const trail = [...(read?.trail ?? []).slice(0, -1).map(([lng, lat]) => at(lng, lat)), [x, y]]
+  const path = read?.trail ?? [];
+  const end = path.at(-1);
+  const heard = end !== undefined && end[0] === read?.fix?.lng && end[1] === read.fix.lat;
+  const trail = [...(heard ? path.slice(0, -1) : path).map(([lng, lat]) => at(lng, lat)), [x, y]]
     .map((point) => point.join(','))
     .join(' ');
   const note =
@@ -847,6 +899,9 @@ function PlaceMap({ read }: { read: Place | null }) {
         {looking ? <circle {...props(styles.ring)} cx={x} cy={y} r={6} /> : null}
         {showPin || looking ? (
           <circle {...props(styles.pin, looking && styles.faded)} cx={x} cy={y} r={5} />
+        ) : null}
+        {showPin && view.span < INSET_FROM ? (
+          <WorldInset lat={view.pinLat} lng={view.pinLng} x={x} y={y} />
         ) : null}
       </svg>
       {note === null ? null : (
