@@ -30,6 +30,8 @@ async function proxy({ request }: { request: Request }): Promise<Response> {
   );
   const headers = new Headers(request.headers);
   headers.set('host', upstream.host);
+  // The site's cookies are not the analytics host's business.
+  headers.delete('cookie');
   // The visitor's address, or OpenPanel counts every visit as one device.
   const ip = request.headers.get('cf-connecting-ip');
   if (ip !== null) {
