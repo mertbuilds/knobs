@@ -77,9 +77,15 @@ importers:
       evlog:
         specifier: ^2.28.0
         version: 2.28.0(@orpc/server@1.15.0(@opentelemetry/api@1.9.1)(fastify@5.12.1)(ws@8.21.3))(@tanstack/start-client-core@1.170.27)(fastify@5.12.1)(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+      highlight.js:
+        specifier: 11.12.0
+        version: 11.12.0
       lucide-react:
         specifier: ^1.39.0
         version: 1.39.0(react@19.2.8)
+      marked:
+        specifier: 18.1.0
+        version: 18.1.0
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -3264,6 +3270,10 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
+  highlight.js@11.12.0:
+    resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
+    engines: {node: '>=12.0.0'}
+
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
@@ -3571,6 +3581,11 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  marked@18.1.0:
+    resolution: {integrity: sha512-PamYXWWWg2nboG3oX5Ffzpy3EFZROqZJK9hSlMmUnekp7TxPs5DcT95vwd46m73/exfKCRVMtgXoPMI4FEJL6w==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
@@ -7096,6 +7111,8 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
+  highlight.js@11.12.0: {}
+
   html-encoding-sniffer@6.0.0(@noble/hashes@2.4.0):
     dependencies:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
@@ -7351,6 +7368,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  marked@18.1.0: {}
 
   mdn-data@2.27.1:
     optional: true

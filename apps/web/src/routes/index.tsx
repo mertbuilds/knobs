@@ -1,15 +1,16 @@
-import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
+import { colors, font, spacing } from '@knobs/ui/tokens.stylex';
 import { create, defaultMarker, props, type StyleXStyles, when } from '@stylexjs/stylex';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { CheckIcon, CopyIcon, StarIcon } from 'lucide-react';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { StarIcon } from 'lucide-react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Stage } from '../demo/stage.tsx';
-import { track } from '../lib/analytics.ts';
 import { GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
+import { CodeBox } from '../lib/code-box.tsx';
+import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
 import { withKeys } from '../lib/keys.tsx';
+import { type PanelTour, usePanel } from '../lib/panel.ts';
 import { m } from '../paraglide/messages.js';
-import { mountKnobs, unmountKnobs } from '../tour/knobs.ts';
 import { openTour, watchKnobs } from '../tour/progress.ts';
 import { Tour } from '../tour/tour.tsx';
 
@@ -48,35 +49,7 @@ function DevPage() {
 // that size, so these columns collapse the way they do on a real phone.
 const WIDE = '@media (min-width: 640px)';
 
-/** True once a visitor has turned a knob in this tab, so the stored state should apply at once. */
-function hasStoredKnobs(): boolean {
-  try {
-    return sessionStorage.getItem('devknobs') !== null;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Runs `task` when the browser is idle, at most a second after it is asked.
- * Safari has no `requestIdleCallback`, so a short timer stands in.
- */
-function whenIdle(task: () => void): () => void {
-  if ('requestIdleCallback' in window) {
-    const id = requestIdleCallback(task, { timeout: 1000 });
-    return () => cancelIdleCallback(id);
-  }
-  const id = setTimeout(task, 200);
-  return () => clearTimeout(id);
-}
-
-// The devknobs host element. Its shadow root is open, so a click inside the
-// panel still reaches `document` with the real button in its composed path.
-const PANEL = '[data-devknobs="panel"]';
-
-const REPO = 'https://github.com/mertbuilds/knobs';
-
-const DOCS = 'https://github.com/mertbuilds/knobs/tree/main/packages/devknobs#readme';
+const DOCS = '/docs';
 
 const NOTICES =
   'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
@@ -88,104 +61,6 @@ const styles = create({
     columnGap: spacing.s4,
     display: 'flex',
     justifyContent: 'space-between',
-  },
-  // A code box is a panel field: the card ground, 8 round, and the copy
-  // button 4 inside it, so 4 round.
-  code: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.card,
-    borderRadius: radius.row,
-    columnGap: spacing.s1,
-    display: 'flex',
-    padding: spacing.s1,
-  },
-  codeText: {
-    flexGrow: 1,
-    fontFamily: font.mono,
-    fontSize: '0.78125rem',
-    lineHeight: '1.375rem',
-    margin: 0,
-    minWidth: 0,
-    overflowX: 'auto',
-    paddingBlock: 0,
-    paddingInline: '8px',
-    whiteSpace: 'pre',
-  },
-  // A box that is all one copy button: no button chrome, and the copy button's focus ring.
-  codeButton: {
-    borderStyle: 'none',
-    color: 'inherit',
-    cursor: 'pointer',
-    outlineColor: colors.muted,
-    outlineOffset: -1,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    textAlign: 'start',
-  },
-  // Words in place of the code: the page's font, not the code's, and a step larger.
-  codeLabel: {
-    fontFamily: font.family,
-    fontSize: font.sizeSm,
-  },
-  // A second choice beside a first: the faint text, like the copy button.
-  codeQuiet: {
-    color: colors.muted,
-  },
-  // A long text, such as the install prompt, breaks instead of scrolling.
-  codeWrap: {
-    overflowWrap: 'anywhere',
-    whiteSpace: 'pre-wrap',
-  },
-  // The panel's small icon button: faint, and the track ground on hover. One code line tall, so it
-  // sits on the first line, and in rem, so it grows with the text.
-  copy: {
-    alignItems: 'center',
-    backgroundColor: {
-      ':hover': colors.track,
-      default: 'transparent',
-    },
-    borderRadius: radius.base,
-    borderStyle: 'none',
-    color: {
-      ':hover': colors.fg,
-      default: colors.muted,
-    },
-    cursor: 'pointer',
-    display: 'flex',
-    flexShrink: 0,
-    height: '1.375rem',
-    justifyContent: 'center',
-    outlineColor: colors.muted,
-    outlineOffset: -1,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    padding: 0,
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color, color',
-    transitionTimingFunction: 'ease-out',
-    width: '1.375rem',
-  },
-  // The page's 16px icon, in rem, so it grows with the text.
-  glyph: {
-    height: '1rem',
-    width: '1rem',
-  },
-  // The copy button's icon inside a box that is the button: its hover ground follows the box's.
-  copyIcon: {
-    backgroundColor: {
-      default: 'transparent',
-      [when.ancestor(':hover')]: colors.track,
-    },
-    color: {
-      default: colors.muted,
-      [when.ancestor(':hover')]: colors.fg,
-    },
   },
   // The maker, at the footer's right end, also on a line of its own where the links fill the width.
   // Only the name is the link; the words around it are muted, plain text.
@@ -207,45 +82,6 @@ const styles = create({
     fontSize: '0.8125rem',
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
-  },
-  // The header's GitHub button: the chip's hairline box around the mark, and the track ground on hover.
-  github: {
-    alignItems: 'center',
-    backgroundColor: {
-      ':hover': colors.track,
-      default: 'transparent',
-    },
-    borderColor: colors.border,
-    borderRadius: '0.25rem',
-    borderStyle: 'solid',
-    borderWidth: 1,
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexShrink: 0,
-    height: '1.75rem',
-    justifyContent: 'center',
-    outlineColor: colors.muted,
-    outlineOffset: 2,
-    outlineStyle: {
-      ':focus-visible': 'solid',
-      default: 'none',
-    },
-    outlineWidth: 1,
-    transitionDuration: '120ms',
-    transitionProperty: 'background-color',
-    transitionTimingFunction: 'ease-out',
-    width: '1.75rem',
-  },
-  // The mark's color, here and not on the link: the theme's global `a` rules outrank StyleX's.
-  githubMark: {
-    color: {
-      default: colors.muted,
-      [when.ancestor(':hover')]: colors.fg,
-    },
-    display: 'flex',
-    transitionDuration: '120ms',
-    transitionProperty: 'color',
-    transitionTimingFunction: 'ease-out',
   },
   hint: {
     color: colors.muted,
@@ -274,7 +110,7 @@ const styles = create({
     maxWidth: '100%',
     minWidth: 0,
   },
-  // The footer's links' focus ring. Their color and underline are set in app.css, past the theme's
+  // The footer's links' focus ring. Their color is set in app.css, past the theme's
   // global `a` rules.
   link: {
     outlineColor: colors.muted,
@@ -284,15 +120,6 @@ const styles = create({
       default: 'none',
     },
     outlineWidth: 1,
-  },
-  // Read by screen readers, never drawn.
-  live: {
-    clipPath: 'inset(50%)',
-    height: 1,
-    overflow: 'hidden',
-    position: 'absolute',
-    whiteSpace: 'nowrap',
-    width: 1,
   },
   page: {
     backgroundColor: colors.bg,
@@ -370,119 +197,6 @@ const styles = create({
   },
 });
 
-/**
- * A code box with a copy button at its right edge. The code stays plain text,
- * selectable by hand. Where the clipboard refuses the write (an insecure
- * context, an old browser), the code is selected instead, ready to copy.
- * With `label`, the box shows the label in place of code too long to show,
- * the whole box one copy button, and shows the code only where the clipboard
- * refuses it. `quiet` draws it as the second choice beside a first one: its
- * text faint.
- */
-function CodeBox({
-  code,
-  copyLabel,
-  label,
-  name,
-  quiet = false,
-  style,
-  wrap = false,
-}: {
-  code: string;
-  copyLabel: string;
-  label?: string;
-  name: string;
-  quiet?: boolean;
-  style?: StyleXStyles;
-  wrap?: boolean;
-}) {
-  const [copied, setCopied] = useState(false);
-  // How many times the clipboard refused the code, each one selecting it once it shows.
-  const [refused, setRefused] = useState(0);
-  const showCode = label === undefined || refused > 0;
-  const text = useRef<HTMLPreElement>(null);
-  const copyButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timer = setTimeout(() => setCopied(false), 1500);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  // The label button is gone once the code shows, so focus moves to the copy button that took its place.
-  useEffect(() => {
-    if (refused > 0 && text.current !== null) {
-      copyButton.current?.focus();
-      getSelection()?.selectAllChildren(text.current);
-    }
-  }, [refused]);
-  const copy = () => {
-    track('copy_click', { snippet: name });
-    // Inside a promise, so a missing `navigator.clipboard` rejects too.
-    Promise.resolve()
-      .then(() => navigator.clipboard.writeText(code))
-      .then(
-        () => setCopied(true),
-        () => setRefused((count) => count + 1),
-      );
-  };
-  const icon = copied ? (
-    <CheckIcon {...ICON} {...props(styles.glyph)} />
-  ) : (
-    <CopyIcon {...ICON} {...props(styles.glyph)} />
-  );
-  const live = (
-    <span {...props(styles.live)} aria-live="polite">
-      {copied ? m.copy_done() : ''}
-    </span>
-  );
-  // The label is words, not code, so the whole box is the copy button, named by them.
-  if (!showCode) {
-    return (
-      <>
-        <button
-          {...props(styles.code, styles.codeButton, defaultMarker(), style)}
-          onClick={copy}
-          type="button"
-        >
-          <span
-            {...props(
-              styles.codeText,
-              wrap && styles.codeWrap,
-              styles.codeLabel,
-              quiet && styles.codeQuiet,
-            )}
-          >
-            {label}
-          </span>
-          <span {...props(styles.copy, styles.copyIcon)}>{icon}</span>
-        </button>
-        {live}
-      </>
-    );
-  }
-  return (
-    <div {...props(styles.code, style)}>
-      <pre
-        {...props(styles.codeText, wrap && styles.codeWrap, quiet && styles.codeQuiet)}
-        ref={text}
-      >
-        {code}
-      </pre>
-      <button
-        {...props(styles.copy)}
-        aria-label={copyLabel}
-        onClick={copy}
-        ref={copyButton}
-        type="button"
-      >
-        {icon}
-      </button>
-      {live}
-    </div>
-  );
-}
-
 // The same prompt is in packages/devknobs/README.md under install; change both together.
 function promptBox(name: string, style?: StyleXStyles) {
   return (
@@ -516,90 +230,11 @@ function installChoices() {
   );
 }
 
-/**
- * A composed path is a list of `EventTarget`s: the shadow root, `document` and
- * `window` ride along with the elements. Only the elements answer `matches` and
- * `closest`, and only they carry a node type of their own.
- */
-function asElement(node: EventTarget | undefined): Element | null {
-  const element = node as Element | null | undefined;
-  return element?.nodeType === Node.ELEMENT_NODE ? element : null;
-}
-
-/**
- * Every click on the page, read and reported: the footer links, and which knob
- * of the demo panel a visitor actually turns. It only observes. No
- * `preventDefault`, no `stopPropagation`, so the click behaves as it always did.
- */
-function trackClick(event: MouseEvent) {
-  const path = event.composedPath();
-  const target = asElement(path[0]);
-  if (target === null) {
-    return;
-  }
-  if (path.some((node) => asElement(node)?.matches(PANEL) === true)) {
-    // Buttons, and the search results, which are options rather than buttons.
-    // The fields are inputs, and a click on the panel's own chrome hits nothing.
-    const control = target.closest('button, [role="option"]');
-    if (control === null) {
-      return;
-    }
-    // A row and a result carry their value in a span of its own; the handle,
-    // `×` and the switches carry it as text or an aria-label.
-    const text = (control.querySelector('.row-label, .entry-value') ?? control).textContent?.trim();
-    track('knob_click', {
-      control:
-        (text === undefined || text === '' ? control.getAttribute('aria-label') : text) ??
-        undefined,
-      // The knob inside an open row's editor, or the knob a search result sets.
-      group: (
-        control.closest('.knob')?.querySelector('.knob-label') ??
-        control.querySelector('.entry-knob, .entry-name')
-      )?.textContent?.trim(),
-    });
-    return;
-  }
-  const link = target.closest('a');
-  if (link === null) {
-    return;
-  }
-  track('link_click', {
-    href: link.href,
-    label: link.textContent?.trim() || (link.getAttribute('aria-label') ?? undefined),
-  });
-}
-
-const onGitHub = (placement: 'footer' | 'header') => () => track('github_clicked', { placement });
+// The tour, opened before the panel mounts and watching its knobs once it does.
+const TOUR: PanelTour = { open: openTour, watch: watchKnobs };
 
 function Landing() {
-  // The panel is the demo, so it runs here in every environment, not gated on
-  // dev the way an app embedding devknobs would gate it. Client-only: `mount`
-  // touches `document`, and SSR must never reach it. It starts collapsed to its
-  // edge tab, and stays open across the reloads the device
-  // and locale knobs cause once a visitor opens it. A first visit loads it when
-  // the browser is idle; a reload with knobs already set loads it at once, so
-  // the stored scheme or language does not wait.
-  useEffect(() => {
-    // Before the panel, so the copy of this page in a device's frame finds the
-    // tour on the page above.
-    const closeTour = openTour();
-    const start = () => void mountKnobs().then(watchKnobs);
-    let cancel: (() => void) | undefined;
-    if (hasStoredKnobs()) {
-      start();
-    } else {
-      cancel = whenIdle(start);
-    }
-    // One delegated listener for the whole page, panel included. Passive: it
-    // never cancels the click it is reading.
-    document.addEventListener('click', trackClick, { passive: true });
-    return () => {
-      cancel?.();
-      document.removeEventListener('click', trackClick);
-      closeTour();
-      unmountKnobs();
-    };
-  }, []);
+  usePanel(TOUR);
 
   return (
     <main {...props(styles.page)}>
@@ -609,18 +244,7 @@ function Landing() {
             <KnobsMark size={20} style={styles.logo} />
             {m.app_name()}
           </h1>
-          <a
-            aria-label={m.link_github()}
-            href={REPO}
-            onClick={onGitHub('header')}
-            rel="noreferrer"
-            target="_blank"
-            {...props(styles.github, defaultMarker())}
-          >
-            <span {...props(styles.githubMark)}>
-              <GitHubMark style={styles.glyph} />
-            </span>
-          </a>
+          <GitHubButton />
         </div>
         <p {...props(styles.text)}>{m.tagline()}</p>
         {installChoices()}
@@ -629,15 +253,18 @@ function Landing() {
 
       <Tour install={promptBox('install_prompt_tour', styles.fill)} />
 
-      <section {...props(styles.section)}>
+      <section {...props(styles.section)} id="try">
         <h2 {...props(styles.sectionHeading)}>{m.stage_title()}</h2>
         <p {...props(styles.text)}>{m.stage_line()}</p>
         <Stage />
       </section>
 
       <footer {...props(styles.footer)}>
-        <a href={DOCS} rel="noreferrer" target="_blank" {...props(styles.link)}>
+        <a href={DOCS} {...props(styles.link)}>
           {m.link_docs()}
+        </a>
+        <a href="/docs/extension" {...props(styles.link)}>
+          {m.link_extension()}
         </a>
         <a
           href={REPO}

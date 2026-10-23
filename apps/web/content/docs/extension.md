@@ -1,0 +1,124 @@
+---
+title: chrome extension
+description: The devknobs panel on any site, with text size, offline, the preferences, the viewport and the user agent set for real by Chrome.
+order: 8
+---
+
+## what it does
+
+the extension puts the devknobs panel on any page you open, the same panel as the npm package, with no change to the site's code. every knob, key and view of the panel is devknobs' own. some knobs go to the browser instead of being emulated in the page, so Chrome sets them for real.
+
+the toolbar button opens and closes the panel in the tab. there is no handle on the page's edge, since the button does that job; the panel's [settings](/docs/panel#settings) can show the handle again. `window.devknobs` is on every page for [agents](/docs/agents), as with the npm package.
+
+## install
+
+it is coming to the chrome web store. until then, build it from a clone of the repo and load it unpacked. you need node 24 or later, pnpm and [bun](https://bun.sh).
+
+```sh
+git clone https://github.com/mertbuilds/knobs.git
+cd knobs
+pnpm install
+pnpm --filter devknobs build
+pnpm --filter @knobs/extension build
+```
+
+then in Chrome:
+
+1. open `chrome://extensions`
+2. turn on developer mode
+3. press load unpacked and pick `packages/extension/dist`
+
+tabs open before the install get the panel at their next load.
+
+## how it differs from the npm package
+
+the npm package emulates every knob inside the page: it patches `matchMedia`, rewrites stylesheets and puts the page in a frame. the extension hands these knobs to Chrome instead, through the Chrome DevTools Protocol (`chrome.debugger`):
+
+- **text size**: `Page.setFontSizes` changes the browser's default font size (monospace scales with it), so `rem`, `em` and `em` media queries all follow, with no rewrite of the page and no jump after paint.
+- **offline** (the network knob's `online` field): `Network.emulateNetworkConditions` with `offline: true`. requests fail and `navigator.onLine` is false. the connection type and save data stay in the page.
+- **preferences**: color scheme, contrast, reduced motion and reduced transparency, through `Emulation.setEmulatedMedia`.
+- **viewport**: a plain width, height or ratio, or a device with nothing drawn around the page (mock off, browser off, not a foldable, no vision filter, zoom at fit, frame knob off, not docked), is the tab's own viewport with no frame: `Emulation.setDeviceMetricsOverride` (the size, the ratio, `mobile` for a phone or tablet, whose screen is its viewport), touch emulation with 5 touch points, and touch events from the mouse for the touch pointer knob. the page keeps its state: nothing reloads. one bigger than the tab is scaled down to fit it, and redrawn when the window resizes. anything drawn around the page keeps devknobs' frame exactly as before, and the override is cleared meanwhile, so the two never stack.
+- **user agent** (the ua knob, a device's browser too): what servers see, with no debugger, in in-page mode too. see [what servers see](#what-servers-see). the page's `navigator` keeps devknobs' patches as with the npm package.
+
+the debugger attaches to a tab when text size, offline, the preferences or the viewport leaves its default and detaches when all are back (reset in the panel does that). overrides survive navigation in the tab while attached, so a reload paints with them from the first frame. should a command fail, the tab goes back to its own settings and the debugger leaves, so the next change starts clean.
+
+a tab's knobs win over the page's stored ones, so a page on another origin in the same tab shows what the tab has. the panel keeps your own scheme and motion: the extension reads them outside every tab and hands them to the panel.
+
+## what servers see
+
+with the ua knob on a preset or a custom string, every request of the tab carries it: the page, its fetches, images, scripts, websockets and the device's frame. a session rule (`declarativeNetRequest`, for that tab only) sets `User-Agent` and the client hints:
+
+| preset                                                        | `Sec-CH-UA`                                                  | `Sec-CH-UA-Mobile` | `Sec-CH-UA-Platform` |
+| ------------------------------------------------------------- | ------------------------------------------------------------ | ------------------ | -------------------- |
+| iPhone Safari, iPad Safari, Mac Safari, Linux Firefox, custom | removed                                                      | removed            | removed              |
+| Android Chrome                                                | Chromium, the made up brand, Google Chrome                   | `?1`               | `"Android"`          |
+| Googlebot                                                     | Chromium, the made up brand                                  | `?1`               | `"Android"`          |
+| Mac Chrome                                                    | Chromium, the made up brand, Google Chrome                   | `?0`               | `"macOS"`            |
+| Windows Chrome, Windows Edge                                  | Chromium, the made up brand, Google Chrome or Microsoft Edge | `?0`               | `"Windows"`          |
+
+the high entropy hints (`-Arch`, `-Bitness`, `-Form-Factors`, `-Full-Version`, `-Full-Version-List`, `-Model`, `-Platform-Version`, `-WoW64`) are always removed: Chrome sends them only to a site that asks, which a rule cannot tell. the page's scripts still read them from devknobs' `navigator.userAgentData`.
+
+- what the page's service worker fetches belongs to no tab, so while a tab has the ua knob on, one more rule does the same for that host's service worker. two tabs on one host with different ones: the last set wins there.
+- while the debugger is on the tab, it sets the same user agent, platform and, for a Chromium preset, its client hint metadata, so dedicated workers read it too. it is cleared before the debugger leaves.
+- the device's frame loads, and loads again on a change, only once the rules are in. the tab's own page does not reload: reload it to send the new user agent with the page's load.
+- the rules go with the tab, or once the page's ua knob goes back to system.
+
+## real or in-page
+
+while the debugger is on a tab, Chrome shows its "devknobs started debugging this browser" bar. no extension can hide it. the panel's settings have a switch for it, "real browser settings", on at first:
+
+- **on (real)**: the knobs above go through the debugger, as described. the bar shows while one of them is set.
+- **off (in-page)**: every knob is devknobs' own emulation in the page, exactly as the npm package does it, and the debugger leaves every tab. no bar, unless you press "load without the service worker", which turns the debugger on until the frame closes. the framing rule stays, so the width knob's frame still loads pages that refuse frames.
+
+the switch is kept for every tab and site. flipping it keeps every knob's value and moves it live, with no reload: off, the tab's overrides are cleared and the page emulates the same knobs; on, the page's emulation goes and the debugger takes them back.
+
+closing the bar (its x or cancel) detaches the debugger. the extension takes that as a choice: the switch goes off for every tab, the knobs stay as they are in the page, and the switch says why ("switched to in-page: Chrome's debugger bar was closed"). the tab keeps Chrome's font size from the debugger until its next load; in-page text size counts it as the browser's default, so it is not applied twice.
+
+what in-page costs, as with the npm package:
+
+- text size rewrites the page's root size after it starts, so text can jump on load, and `em` media queries only follow where devknobs rewrites them.
+- offline only flips `navigator.onLine` and fires its `offline` event. requests still go out.
+- the emulated scheme and the rest patch `matchMedia` and the page's stylesheets, which a server-rendered page can see as a hydration mismatch.
+- a plain size or device is devknobs' frame, which loads the page a second time.
+
+## pages that refuse frames
+
+the width knob, or a [pinned panel](/docs/panel#pinning), loads the tab's own page in a frame, which `X-Frame-Options` or a `frame-ancestors` policy refuses. only while devknobs' frame is open, one session rule for the tab has frame loads in that tab, to and from the page's host, lose `X-Frame-Options` and `Content-Security-Policy`. the frame's first load waits for the rule, so a new tab with knobs that frame it loads the first time. the rule goes as the frame closes, as the tab loads another page and with the tab.
+
+where the page's service worker answers the frame's load, that load belongs to no tab, so while a tab has devknobs' frame open on a host, one more rule takes `X-Frame-Options` and `Content-Security-Policy` off what that host's service worker fetches from it. it is gone once no tab has a frame open on the host. the first refusal on a page with a service worker loads the frame again once, at once, after the rule is in.
+
+when the frame is still refused, devknobs' notice says why in a line under it, such as `x.com/i/flow/login answered 200 with X-Frame-Options: DENY (from a service worker)` or `redirected to another site: accounts.google.com`, with a "copy details" button for the whole record as json. the extension reads that from the tab's frame loads while the debugger is on. with no knob keeping the debugger on, the line says it was not watching, and "find out why" puts it on, loads the frame again and takes it off once it finds that load. in in-page mode, the line says to turn real browser settings on.
+
+a service worker that answers the frame from its own cache sends the refused page itself, which no rule reaches. on such a page the notice offers "load without the service worker (shows Chrome's bar)": the debugger goes on the tab, the tab's loads skip service workers, and the frame loads again. once the frame goes, service workers answer again and the debugger leaves, unless a knob keeps it.
+
+a link, form or script in the frame that goes to another origin (a sign-in provider, say, which refuses frames anyway) takes the whole tab there, as it would with no frame; the knobs wait on the page's origin for the way back. a server's redirect to another host still gets devknobs' notice, whose button closes the frame.
+
+## permissions
+
+| permission                                                         | what it is for                                                                                                                                                                     |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debugger`                                                         | the knobs set for real, through the DevTools protocol, finding out why a frame was refused, and a frame's load past a service worker                                               |
+| `declarativeNetRequestWithHostAccess` and `<all_urls>` host access | the framing rule, which removes response headers, and the user agent rules, which set request headers. both need host access                                                       |
+| `offscreen`                                                        | a document outside every tab that reads your own scheme and motion for the panel                                                                                                   |
+| `storage`                                                          | each tab's knobs, which tabs have a frame open on which host, and each tab's user agent with its page's host, in session storage, and the real or in-page switch, in local storage |
+| `webNavigation`                                                    | drops a tab's framing rules as it loads another page, with the frame they were for                                                                                                 |
+
+the content scripts run on every page (`<all_urls>`, at `document_start`), so the panel is there before the page's own scripts. see [privacy](/docs/privacy#the-chrome-extension) for what the extension keeps.
+
+## limits
+
+- Chrome and Edge only (`chrome.debugger`).
+- the user agent goes to the whole tab, the page under the device's frame too, and to its host's service worker in every tab. servers can still tell Chrome by other means: its TLS and HTTP/2 fingerprints, the order of its headers, and features a script tries. a site that asks for the high entropy client hints gets none. without the debugger, a worker of the page reads Chrome's own `navigator.userAgent`; with it on a Safari preset, a worker still has a `navigator.userAgentData`, empty, where Safari has none.
+- while a knob is on in real mode, Chrome shows its "started debugging this browser" bar. in-page mode has none, unless you press "load without the service worker", which turns the debugger on until the frame closes.
+- while devknobs' frame is open in a tab, every frame of the page's own host in that tab loses `X-Frame-Options` and its CSP, not only devknobs' frame: a rule cannot tell them apart. a frame the page sandboxes through its CSP is not sandboxed then. with no frame of devknobs open, nothing is removed.
+- the framed copy of a page loses its whole Content Security Policy, not only `frame-ancestors`: a rule cannot edit part of a header. the page in the tab itself keeps it.
+- while a frame is open on a host, what that host's service worker fetches loses `X-Frame-Options` and its CSP, in every tab. a service worker that answers from its cache needs the debugger, and with it Chrome's bar, to be passed by.
+- a frame led to another host, a subdomain of the page's host aside, is refused.
+- any script of a page can flip the real or in-page switch, as the panel does. the switch is kept for every tab, so the worst it does is a mode change, and Chrome's bar, in the tabs with knobs on. nothing else a page sends reaches the extension unchecked: only what devknobs sends passes, each field read and the sizes held to devknobs' bounds, and a tab acts on its own id and host alone.
+- pages Chrome does not let extensions reach (`chrome://`, the web store) get no panel.
+- the panel and grab keep the system's scheme and motion. the panel has no styles for contrast or transparency, so those knobs do not change it either. inside a device's frame, the cursor dot and grab's box still follow the motion knob.
+- a page whose Content Security Policy leaves out `data:` images (`img-src`) loses the frame's zoom chevron and vision filters, and the pictures the fold and the frame's snapshot draw of the page. the panel and every sheet of devknobs' are constructed stylesheets, which `style-src` does not block.
+- under a real viewport the panel lives in the page, so it is fixed within the emulated viewport: as narrow as the phone, and scaled with it when the tab is smaller. docking it beside the page is a later step.
+- a phone's viewport is Chrome's mobile layout: a page with no `<meta name="viewport">` lays out at 980px, as on a real phone, where devknobs' frame gives it the device's width. `ontouchstart` is set in the page, since Chrome adds it only on a load.
+- a tab's viewport follows the page's own size knobs: it is not carried to a page on another origin the way text size and preferences are.
+- a page that tries to break out of the frame (`top.location = location`) cannot: devknobs' sandbox lets the frame move the tab only on a click.

@@ -1,4 +1,4 @@
-import { mountKnobs } from '../tour/knobs.ts';
+import { mountKnobs } from '../lib/panel.ts';
 
 type Knobs = typeof import('devknobs');
 type Browser = ReturnType<Knobs['getState']>['browser'];
