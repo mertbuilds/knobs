@@ -1,11 +1,8 @@
 # changelog
 
-## unreleased
-
-- renamed from devknobs to @vinena/knobs
-
 ## 0.5.0
 
+- first release as @vinena/knobs (was devknobs)
 - a click on a row's `×` puts the row back to its default and keeps it listed; press and hold it for a second to take the row off the list, as a click did before. the `×` fills while held, letting go early or moving off cancels, and enter or space held on it for a second does the same. its label says `reset <row> (hold to remove)`
 - inspect's view is laid out as the browser's Elements panel: the DOM tree on top, the breadcrumbs under it, then the styles. each line is a node in the panel's words and colors, `<tag attr="value">`, a triangle on what opens, `<tag>…</tag>` closed and `</tag>` on its own line open, text in quotes, comments, `<!DOCTYPE html>`, `#shadow-root (open)`, and `::marker`, `::before` and `::after` with content. a pick reveals its element, a click on a line shows its styles, the pointer on one boxes it on the page, and the arrows, Home and End move as in the panel. the selected line ends with `== $0`, and `$0` is that node on the page's window while the view is open, unless the page has its own. `copy`, or cmd or ctrl and c, copies its outer html. the tree follows the page as it changes and lights what changed, reads a node's children only once it opens, shows 500 children before `Show all nodes (N more)`, and never shows devknobs' own nodes. with the width knob's frame up, it is the frame's page
 
