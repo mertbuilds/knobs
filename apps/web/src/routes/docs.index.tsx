@@ -7,7 +7,7 @@ import { DocPage } from '../docs/layout.tsx';
 // oxlint-disable perfectionist/sort-objects
 export const Route = createFileRoute('/docs/')({
   loader: () => loadDoc(FIRST),
-  head: ({ loaderData }) => docHead(loaderData),
+  head: ({ loaderData }) => docHead(loaderData, FIRST),
   component: () => <DocPage slug={FIRST} />,
 });
 // oxlint-enable perfectionist/sort-objects

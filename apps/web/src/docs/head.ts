@@ -1,4 +1,5 @@
 import { notFound } from '@tanstack/react-router';
+import { shareMeta } from '../lib/share.ts';
 import { m } from '../paraglide/messages.js';
 
 /** The page `/docs` shows. */
@@ -20,14 +21,20 @@ export async function loadDoc(slug: string): Promise<DocMeta> {
   return { description: page.description, title: page.title };
 }
 
-/** The `<head>` of a docs page: its title and its description, from its frontmatter. */
-export function docHead(doc: DocMeta | undefined) {
+/** The `<head>` of a docs page: its title and its description, from its frontmatter, its share card, and the text for agents. */
+export function docHead(doc: DocMeta | undefined, slug: string) {
   return doc === undefined
     ? {}
     : {
+        links: [{ href: '/llms.txt', rel: 'alternate', title: 'llms.txt', type: 'text/plain' }],
         meta: [
           { title: m.docs_title({ title: doc.title }) },
           { content: doc.description, name: 'description' },
+          ...shareMeta({
+            description: doc.description,
+            path: `/docs/${slug}`,
+            title: m.docs_title({ title: doc.title }),
+          }),
         ],
       };
 }
