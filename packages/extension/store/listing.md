@@ -9,19 +9,19 @@ code: a new permission or a new request the extension makes changes the answers 
 **Name**
 
 ```
-devknobs
+knobs
 ```
 
 **Summary** (the manifest's `description`, at most 132 characters)
 
 ```
-The devknobs panel on any page, with text size, offline, media preferences, viewport and user agent set for real by Chrome.
+The knobs panel on any page, with text size, offline, media preferences, viewport and user agent set for real by Chrome.
 ```
 
 **Description**
 
 ```
-devknobs puts a small panel on any page you open, so you can see how the page behaves under other settings without changing its code: text size, light and dark, contrast, reduced motion and transparency, offline, the viewport and phone sizes, the user agent, the locale, the time zone, the clock and more. It is the same panel as the devknobs npm package.
+knobs puts a small panel on any page you open, so you can see how the page behaves under other settings without changing its code: text size, light and dark, contrast, reduced motion and transparency, offline, the viewport and phone sizes, the user agent, the locale, the time zone, the clock and more. It is the same panel as the @vinena/knobs npm package.
 
 Some knobs are set for real by Chrome instead of being imitated inside the page:
 
@@ -72,7 +72,7 @@ browser settings" switch.
 **Single purpose**
 
 ```
-devknobs puts a developer panel on the page you are building, so you can see how it behaves under other browser settings (text size, color scheme, contrast, motion, offline, viewport, user agent and more), with some of those settings applied for real by Chrome to that tab.
+knobs puts a developer panel on the page you are building, so you can see how it behaves under other browser settings (text size, color scheme, contrast, motion, offline, viewport, user agent and more), with some of those settings applied for real by Chrome to that tab.
 ```
 
 **Permission justifications**

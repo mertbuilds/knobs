@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "devknobs",
+  "name": "knobs",
   "version": "0.5.0",
-  "description": "The devknobs panel on any page, with text size, offline, media preferences, viewport and user agent set for real by Chrome.",
+  "description": "The knobs panel on any page, with text size, offline, media preferences, viewport and user agent set for real by Chrome.",
   "homepage_url": "https://knobs.dev",
   "permissions": [
     "debugger",
@@ -14,7 +14,7 @@
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
-    "default_title": "devknobs",
+    "default_title": "knobs",
     "default_icon": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png" }
   },
   "content_scripts": [
