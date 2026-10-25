@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { track } from './analytics.ts';
 import { GitHubMark } from './brand-marks.tsx';
 
-export const REPO = 'https://github.com/mertbuilds/knobs';
+export const REPO = 'https://github.com/vinenastudio/knobs';
 
 const styles = create({
   // The header's GitHub button: the chip's hairline box around the mark, and the track ground on hover.

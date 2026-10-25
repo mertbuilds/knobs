@@ -38,4 +38,4 @@ four of the demo's request buttons leave the site on purpose, and only when pres
 
 the site keeps the `PARAGLIDE_LOCALE` cookie for 400 days, `knobs:tour` in `localStorage`, and the storage demo's data only when you press its buttons.
 
-questions go to the [GitHub issues](https://github.com/mertbuilds/knobs/issues).
+questions go to the [GitHub issues](https://github.com/vinenastudio/knobs/issues).

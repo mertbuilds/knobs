@@ -19,7 +19,7 @@ if (packageVersion !== manifestVersion) {
   );
 }
 
-await $`pnpm --filter devknobs build`.cwd(root);
+await $`pnpm --filter @vinena/knobs build`.cwd(root);
 await $`bun ${join(root, 'scripts/build.ts')}`;
 
 const { version } = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8')) as {

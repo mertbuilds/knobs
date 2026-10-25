@@ -48,7 +48,7 @@ jobs:
       # Storybook stories and devknobs' bun tests.
       - run: pnpm test
       # The extension loaded into the same Chromium (playwright-core 1.62.1), on local pages only.
-      - run: pnpm --filter devknobs build && pnpm --filter @knobs/extension build && pnpm --filter @knobs/extension smoke
+      - run: pnpm --filter @vinena/knobs build && pnpm --filter @knobs/extension build && pnpm --filter @knobs/extension smoke
       # The smoke's screenshots, the two that differ among them.
       - if: failure()
         uses: actions/upload-artifact@v4

@@ -147,7 +147,7 @@ any page. it works on the page itself, so it needs no framework: the script tag 
 
 ### does it need react?
 
-no. devknobs is vanilla typescript with zero runtime dependencies, and react is optional (`devknobs/react`). react matters to [grab](/docs/grab) only: the component names and source places it copies come from react. without them, grab falls back to the element's html and a selector.
+no. devknobs is vanilla typescript with zero runtime dependencies, and react is optional (`@vinena/knobs/react`). react matters to [grab](/docs/grab) only: the component names and source places it copies come from react. without them, grab falls back to the element's html and a selector.
 
 ### the extension or the npm package?
 

@@ -1,16 +1,19 @@
 {
-  "name": "devknobs",
+  "name": "@vinena/knobs",
   "version": "0.5.0",
   "private": false,
   "license": "MIT",
   "author": "Mert Düzgün",
   "description": "drop-in dev panel for emulating browser preferences, locale, geolocation and layout knobs from inside the page",
   "homepage": "https://knobs.dev",
-  "bugs": "https://github.com/mertbuilds/knobs/issues",
+  "bugs": "https://github.com/vinenastudio/knobs/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mertbuilds/knobs.git",
+    "url": "git+https://github.com/vinenastudio/knobs.git",
     "directory": "packages/devknobs"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "types": "./dist/index.d.ts",

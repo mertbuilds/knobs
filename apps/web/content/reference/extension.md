@@ -15,10 +15,10 @@ the toolbar button opens and closes the panel in the tab. there is no handle on 
 it is coming to the chrome web store. until then, build it from a clone of the repo and load it unpacked. you need node 24 or later, pnpm and [bun](https://bun.sh).
 
 ```sh
-git clone https://github.com/mertbuilds/knobs.git
+git clone https://github.com/vinenastudio/knobs.git
 cd knobs
 pnpm install
-pnpm --filter devknobs build
+pnpm --filter @vinena/knobs build
 pnpm --filter @knobs/extension build
 ```
 

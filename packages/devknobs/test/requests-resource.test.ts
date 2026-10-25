@@ -273,10 +273,10 @@ describe("devknobs' own requests", () => {
   });
 
   test("a picture of its own is left out every time it loads", () => {
-    hush("http://app.test/node_modules/devknobs/dist/bezels/phone.webp");
-    FakeObserver.emit(timed("http://app.test/node_modules/devknobs/dist/bezels/phone.webp", 10));
+    hush("http://app.test/node_modules/@vinena/knobs/dist/bezels/phone.webp");
+    FakeObserver.emit(timed("http://app.test/node_modules/@vinena/knobs/dist/bezels/phone.webp", 10));
     page.clock.tick(60_000);
-    FakeObserver.emit(timed("http://app.test/node_modules/devknobs/dist/bezels/phone.webp", 60_010));
+    FakeObserver.emit(timed("http://app.test/node_modules/@vinena/knobs/dist/bezels/phone.webp", 60_010));
     expect(page.rows()).toEqual([]);
   });
 

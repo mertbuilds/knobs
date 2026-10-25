@@ -23,7 +23,7 @@ jobs:
           bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
       # The site bundles devknobs from its dist.
-      - run: pnpm --filter devknobs build
+      - run: pnpm --filter @vinena/knobs build
       # No VITE_OPENPANEL_CLIENT_ID: preview traffic stays out of the analytics.
       - run: pnpm --filter @knobs/web build
       - name: Upload preview version

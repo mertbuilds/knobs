@@ -87,7 +87,7 @@ button and the buttons are the image's own. it loads from `dist/bezels` the
 first time the device is shown with the mock on, the drawn mock standing in
 its place until then, and the drawn mock stays where an image does not load.
 the Duo's fold frames load with it, from `dist/bezels/duo-fold`, about 2.7 MB.
-the images are not under this project's license, see [THIRD_PARTY_NOTICES.md](https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md):
+the images are not under this project's license, see [THIRD_PARTY_NOTICES.md](https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md):
 delete `assets/bezels` and run `bun run build`, which then names no image, and
 every phone draws its own mock again.
 
@@ -232,5 +232,5 @@ within about 10 degrees of the current angle, and 10 more ahead, are decoded,
 about 55 MB at most, and at rest the Duo is Apple's bezel picture.
 
 thanks to jadon7: the scene, the fold rig and the screen projection come from
-jadon7's iphone-duo, MIT. see [THIRD_PARTY_NOTICES.md](https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md), and
-[`scripts/render-duo-fold/README.md`](https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/scripts/render-duo-fold/README.md) to render the frames again.
+jadon7's iphone-duo, MIT. see [THIRD_PARTY_NOTICES.md](https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md), and
+[`scripts/render-duo-fold/README.md`](https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/scripts/render-duo-fold/README.md) to render the frames again.

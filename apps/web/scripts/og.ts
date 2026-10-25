@@ -17,7 +17,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { crc32 } from 'node:zlib';
-import type {} from 'devknobs';
+import type {} from '@vinena/knobs';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import messages from '../messages/en.json' with { type: 'json' };
 

@@ -9,7 +9,7 @@ import {
   setNative,
   setState,
   setSystemMedia,
-} from 'devknobs';
+} from '@vinena/knobs';
 import { DEFAULT_STATE, type KnobState, patchOf, sameState } from './knobs.ts';
 import {
   type Answer,

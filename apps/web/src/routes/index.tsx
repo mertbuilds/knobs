@@ -8,6 +8,7 @@ import { track } from '../lib/analytics.ts';
 import { ChromeMark, GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
 import { CANONICAL_ORIGIN } from '../lib/canonical.ts';
 import { CodeBox } from '../lib/code-box.tsx';
+import { CraftedAtVinena } from '../lib/crafted-at-vinena.tsx';
 import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
 import { type PanelTour, usePanel } from '../lib/panel.ts';
@@ -63,7 +64,7 @@ const onExtension = (placement: 'footer' | 'hero') => () =>
   track('extension_clicked', { placement });
 
 const NOTICES =
-  'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
+  'https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
 const styles = create({
   // The wordmark, and the way to the code at the end of its row.
@@ -73,10 +74,8 @@ const styles = create({
     display: 'flex',
     justifyContent: 'space-between',
   },
-  // The maker, at the footer's right end, also on a line of its own where the links fill the width.
-  // Only the name is the link; the words around it are muted, plain text.
+  // The studio, at the footer's right end, also on a line of its own where the links fill the width.
   credit: {
-    color: colors.muted,
     marginInlineStart: 'auto',
   },
   // The hero's two ways in, one row of equal height: the extension, then the setup prompt. On a
@@ -314,7 +313,7 @@ function Landing() {
           {m.link_star()}
         </a>
         <a
-          href="https://www.npmjs.com/package/devknobs"
+          href="https://www.npmjs.com/package/@vinena/knobs"
           rel="noreferrer"
           target="_blank"
           {...props(styles.link, styles.withIcon)}
@@ -326,18 +325,7 @@ function Landing() {
         <a href={NOTICES} rel="noreferrer" target="_blank" {...props(styles.link)}>
           {m.link_notices()}
         </a>
-        <span {...props(styles.credit)}>
-          {m.link_mertbuilds_before()}{' '}
-          <a
-            href="https://mertbuilds.com/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer"
-            rel="noreferrer"
-            target="_blank"
-            {...props(styles.link)}
-          >
-            {m.link_mertbuilds()}
-          </a>{' '}
-          {m.link_mertbuilds_after()}
-        </span>
+        <CraftedAtVinena style={[styles.link, styles.credit]} />
       </footer>
     </main>
   );

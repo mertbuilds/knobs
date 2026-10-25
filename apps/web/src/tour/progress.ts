@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { track } from '../lib/analytics.ts';
 import { DUO, grabbing, IPHONE, openBrowse } from './targets.ts';
 
-export type Knobs = Pick<typeof import('devknobs'), 'PRESETS' | 'getState' | 'setState'>;
+export type Knobs = Pick<typeof import('@vinena/knobs'), 'PRESETS' | 'getState' | 'setState'>;
 
 /** The stops of the tour, in the order it asks for them. */
 export const STOPS = ['open', 'duo', 'scroll', 'unfold', 'iphone', 'mat', 'grab'] as const;

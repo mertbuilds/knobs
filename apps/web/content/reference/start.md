@@ -1,6 +1,6 @@
 ---
 title: start
-description: Install devknobs, mount it in development only, and load the early script where the page needs it.
+description: Install @vinena/knobs, mount it in development only, and load the early script where the page needs it.
 order: 1
 ---
 
@@ -8,23 +8,23 @@ devknobs is a dev-only panel for flipping browser preferences from inside the pa
 
 ## two ways to use it
 
-- **the npm package, in your app.** you add `devknobs` to the project and mount it in development only. the knobs are emulated inside the page, in any browser. the rest of this page sets it up.
+- **the npm package, in your app.** you add `@vinena/knobs` to the project and mount it in development only. the knobs are emulated inside the page, in any browser. the rest of this page sets it up.
 - **the chrome extension, on any site.** it puts the same panel on every page you open, with some knobs set for real by the browser, no code changed. see [chrome extension](/docs/extension).
 
 ## install
 
-with an ai agent: paste this setup prompt into claude code, codex or cursor, and it installs devknobs and mounts it in development only. it is the copy setup prompt button on the home page too.
+with an ai agent: paste this setup prompt into claude code, codex or cursor, and it installs @vinena/knobs and mounts it in development only. it is the copy setup prompt button on the home page too.
 
 ```
-Install devknobs in this project. It is a dev-only panel that emulates browser preferences from inside the page. Docs: https://knobs.dev/docs
+Install @vinena/knobs in this project. It is a dev-only panel that emulates browser preferences from inside the page. Docs: https://knobs.dev/docs
 
-1. Detect the package manager from the lockfile and add devknobs as a dev dependency (npm i -D devknobs, or the pnpm, yarn or bun equivalent).
+1. Detect the package manager from the lockfile and add @vinena/knobs as a dev dependency (npm i -D @vinena/knobs, or the pnpm, yarn or bun equivalent).
 2. Mount it once, on the client, in development only:
-- Next.js: make a small client component (the file starts with "use client"). In it, import dynamic from "next/dynamic", then const DevKnobs = process.env.NODE_ENV === "development" ? dynamic(() => import("devknobs/react").then((m) => m.DevKnobs), { ssr: false }) : null; and render {DevKnobs && <DevKnobs />}. Render that component once in app/layout (App Router) or pages/_app (Pages Router).
-- Everything else with a bundler (Vite, TanStack Start, React Router, SvelteKit): call if (import.meta.env.DEV) import("devknobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
-- A plain page with no bundler: skip the npm install and add <script src="//unpkg.com/devknobs/dist/index.global.js"></script> to the page. It mounts itself. Keep it out of the deployed page.
+- Next.js: make a small client component (the file starts with "use client"). In it, import dynamic from "next/dynamic", then const DevKnobs = process.env.NODE_ENV === "development" ? dynamic(() => import("@vinena/knobs/react").then((m) => m.DevKnobs), { ssr: false }) : null; and render {DevKnobs && <DevKnobs />}. Render that component once in app/layout (App Router) or pages/_app (Pages Router).
+- Everything else with a bundler (Vite, TanStack Start, React Router, SvelteKit): call if (import.meta.env.DEV) import("@vinena/knobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
+- A plain page with no bundler: skip the npm install and add <script src="//unpkg.com/@vinena/knobs/dist/index.global.js"></script> to the page. It mounts itself. Keep it out of the deployed page.
 3. Keep devknobs out of production builds. A static import stays in the bundle even behind a dev check, so gate the import itself as above. If the project has a build script, run it and check that the output has no devknobs.
-4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/devknobs/dist/early.global.js"></script>
+4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/@vinena/knobs/dist/early.global.js"></script>
 5. Change nothing else in the project.
 6. Then tell me what you changed and how to open the panel: press Shift+K or click the handle on the right edge of the window. In the open panel, / searches the knobs. Shift+G grabs an element.
 ```
@@ -32,7 +32,7 @@ Install devknobs in this project. It is a dev-only panel that emulates browser p
 or by hand:
 
 ```sh
-npm i -D devknobs
+npm i -D @vinena/knobs
 ```
 
 ## usage
@@ -42,7 +42,7 @@ three ways in. all of them are meant for dev only, so gate them yourself.
 script tag:
 
 ```html
-<script src="//unpkg.com/devknobs/dist/index.global.js"></script>
+<script src="//unpkg.com/@vinena/knobs/dist/index.global.js"></script>
 ```
 
 the global build mounts itself on load and puts the api on `window.devknobs`.
@@ -50,7 +50,7 @@ the global build mounts itself on load and puts the api on `window.devknobs`.
 import:
 
 ```js
-import { mount } from 'devknobs';
+import { mount } from '@vinena/knobs';
 
 if (import.meta.env.DEV) mount();
 ```
@@ -58,7 +58,7 @@ if (import.meta.env.DEV) mount();
 react, one element:
 
 ```jsx
-import { DevKnobs } from 'devknobs/react';
+import { DevKnobs } from '@vinena/knobs/react';
 
 export function Root({ children }) {
   return (
@@ -81,7 +81,7 @@ import dynamic from 'next/dynamic';
 
 const DevKnobs =
   process.env.NODE_ENV === 'development'
-    ? dynamic(() => import('devknobs/react').then((m) => m.DevKnobs), {
+    ? dynamic(() => import('@vinena/knobs/react').then((m) => m.DevKnobs), {
         ssr: false,
       })
     : null;
@@ -155,10 +155,10 @@ with a `setting`, `{ label, hint, change }`, the panel's settings show a switch 
 optional. a page that reads a media query or the time while it boots, before devknobs mounts (a theme script, a module that checks `prefers-reduced-motion` once, a store that stamps `Date.now()`), only sees the knob if the patch is already in place. put the early script first in `<head>`:
 
 ```html
-<script src="//unpkg.com/devknobs/dist/early.global.js"></script>
+<script src="//unpkg.com/@vinena/knobs/dist/early.global.js"></script>
 ```
 
-it is also `devknobs/early` in the package. what it does:
+it is also `@vinena/knobs/early` in the package. what it does:
 
 - it applies the stored scheme, motion, contrast and transparency on the spot, and in a device's frame its pointer and hover, with no panel: the `matchMedia` and `matches` patches, `color-scheme` on `<html>`, and the stylesheet rewrite as sheets arrive.
 - it sets the stored clock the same way, through `Date` and `Temporal.Now`, and the stored user agent on `navigator`, so a page that sniffs it while it boots sees the preset.

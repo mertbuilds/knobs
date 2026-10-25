@@ -23,7 +23,7 @@ jobs:
           bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
       # The site bundles devknobs from its dist.
-      - run: pnpm --filter devknobs build
+      - run: pnpm --filter @vinena/knobs build
       - name: Build and deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         env:

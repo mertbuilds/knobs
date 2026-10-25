@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { track } from './analytics.ts';
 
-type Knobs = typeof import('devknobs');
+type Knobs = typeof import('@vinena/knobs');
 
 let loading: Promise<Knobs> | undefined;
 let mounted = false;
@@ -13,7 +13,7 @@ let mounted = false;
  * run in the order they were asked for.
  */
 export function mountKnobs(): Promise<Knobs> {
-  loading ??= import('devknobs').catch((error: unknown) => {
+  loading ??= import('@vinena/knobs').catch((error: unknown) => {
     // A failed load is not kept, so the next mount tries again.
     loading = undefined;
     throw error;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type NativeUa, PRESETS } from 'devknobs';
+import { type NativeUa, PRESETS } from '@vinena/knobs';
 import { CLIENT_HINTS, type HeaderChange, uaCommand, uaHeaders } from '../src/ua.ts';
 
 const UA_PRESETS = PRESETS.ua;

@@ -95,6 +95,9 @@ describe("the elements view", () => {
     destroy: () => undefined,
   };
 
+  const GLOBALS = ["window", "document", "MutationObserver"] as const;
+  const saved = GLOBALS.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+
   beforeEach(() => {
     jest.useFakeTimers();
     revealed = [];
@@ -122,6 +125,11 @@ describe("the elements view", () => {
     view?.destroy();
     view = null;
     jest.useRealTimers();
+    GLOBALS.forEach((name, index) => {
+      const descriptor = saved[index];
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    });
   });
 
   function start(): FakeNode {

@@ -297,7 +297,7 @@ function urlsOf(file: string): string[] {
   if (script !== null) add(() => new URL(`bezels/${file}`, script ?? "").href);
   else if (BEZEL_URLS[file]) {
     add(() => BEZEL_URLS[file]?.());
-    add(() => new URL(`/node_modules/devknobs/dist/bezels/${file}`, location.href).href);
+    add(() => new URL(`/node_modules/@vinena/knobs/dist/bezels/${file}`, location.href).href);
   }
   // Devknobs' own pictures, which the requests log leaves out.
   for (const url of urls) hush(url);
