@@ -510,8 +510,9 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   color: var(--faint);
   border-radius: 4px;
 }
-/* The grip shows on hover or focus, or always where there is no hover, in
-   place of the icon under it, so nothing moves on hover. */
+/* The grip shows only while the pointer is over its row, or the row is
+   dragged, or the grip has the keys' focus, in place of the icon under it,
+   so nothing moves on hover. */
 .grip {
   z-index: 1;
   opacity: 0;
@@ -522,15 +523,13 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   transition: opacity 120ms ease-out, color 120ms ease-out;
 }
 .grip:hover { color: var(--fg); }
-.row:hover .grip, .row:focus-within .grip, .row.lifted .grip { opacity: 1; }
-@media (hover: none) {
-  .grip { opacity: 1; }
+@media (hover: hover) {
+  .row:hover .grip { opacity: 1; }
+  .row:hover > .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
 }
+.row.lifted .grip, .grip:focus-visible { opacity: 1; }
 .line > .grip + .main > .glyph { transition: opacity 120ms ease-out; }
-.row:is(:hover, :focus-within, .lifted) > .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
-@media (hover: none) {
-  .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
-}
+.row:is(.lifted, :has(> .line > .grip:focus-visible)) > .line > .grip:not([hidden]) + .main > .glyph { opacity: 0; }
 /* While a row is dragged the others make way for it, and it rides above them. */
 .rows.reordering .row { transition: transform 150ms ease-out, background-color 120ms ease-out; }
 .rows.reordering .row.lifted {
