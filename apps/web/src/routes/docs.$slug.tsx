@@ -7,7 +7,7 @@ import { DocPage, DocsNotFound } from '../docs/layout.tsx';
 // oxlint-disable perfectionist/sort-objects
 export const Route = createFileRoute('/docs/$slug')({
   loader: ({ params }) => loadDoc(params.slug),
-  head: ({ loaderData }) => docHead(loaderData),
+  head: ({ loaderData, params }) => docHead(loaderData, params.slug),
   component: Doc,
   notFoundComponent: DocsNotFound,
 });

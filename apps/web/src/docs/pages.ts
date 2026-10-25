@@ -1,6 +1,7 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import { Marked, type Token, type TokensList } from 'marked';
+import { frontmatter, slugify } from './frontmatter.ts';
 import { highlight } from './highlight.ts';
 
 /**
@@ -108,14 +109,6 @@ export const prose = create({
 
 const cls = (style: StyleXStyles) => props(style).className ?? '';
 
-/** The heading id rule the content's own links are written against. */
-export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replaceAll(' ', '-')
-    .replaceAll(/[^a-z0-9-]/g, '');
-}
-
 const markdown = new Marked({
   gfm: true,
   renderer: {
@@ -202,26 +195,9 @@ function render(body: string): { headings: Array<Heading>; segments: Array<Segme
   return { headings, segments };
 }
 
-/** The three frontmatter keys every page has, read by hand: no yaml parser for three lines. */
 function parse(slug: string, source: string): Page {
-  const match = /^---\n([\s\S]*?)\n---\n/.exec(source);
-  if (match === null) {
-    throw new Error(`docs: ${slug}.md has no frontmatter`);
-  }
-  const fields = new Map<string, string>();
-  for (const line of (match[1] ?? '').split('\n')) {
-    const colon = line.indexOf(':');
-    if (colon > 0) {
-      fields.set(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
-    }
-  }
-  const title = fields.get('title');
-  const description = fields.get('description');
-  const order = Number(fields.get('order'));
-  if (title === undefined || description === undefined || !Number.isFinite(order)) {
-    throw new Error(`docs: ${slug}.md needs title, description and order`);
-  }
-  return { description, order, slug, title, ...render(source.slice(match[0].length)) };
+  const { body, description, order, title } = frontmatter(slug, source);
+  return { description, order, slug, title, ...render(body) };
 }
 
 const files = import.meta.glob<string>('../../content/docs/*.md', {
