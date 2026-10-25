@@ -111,14 +111,14 @@ const QUIET = `
 `;
 
 // The words, over the mat on the left, in the site's system stack, all in the
-// top half: X lays the site's name over the bottom left corner. A popover,
+// upper two thirds: X lays the site's name over the bottom left corner. A popover,
 // so it sits in the top layer with devknobs' own layers.
 const OVERLAY = `
 <style>
   .og {
     position: fixed; inset: 0 auto 0 0; margin: 0; border: 0; background: none; overflow: visible;
     box-sizing: border-box; width: 560px; height: 100%; padding: 72px 0 0 80px;
-    display: flex; flex-direction: column; gap: 84px;
+    display: flex; flex-direction: column; gap: 168px;
     pointer-events: none; color: #f4f6fb;
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
