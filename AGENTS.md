@@ -95,7 +95,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### The landing
 
-- `src/routes/index.tsx` is one screen: the header (wordmark, GitHub button, the hero line `hero_line`, also the meta description; the "Add to Chrome" button with its one line, the hero's one filled button, whose target is `EXTENSION_URL` in `index.tsx`, `/docs/extension` until the Chrome Web Store listing is approved; then, under "or add it to your app", the install boxes; the `⇧K` hint), the guided tour, the "try it here" stage (`id="try"`), and the footer (with `/docs` and `/docs/extension` among its links).
+- `src/routes/index.tsx` is one screen: the header (wordmark, GitHub button, the hero line `hero_line`, also the meta description; then one row of two controls of equal height: the "Add to Chrome" button, the hero's one filled button, whose target is `EXTENSION_URL` in `index.tsx`, `/docs/extension` until the Chrome Web Store listing is approved, and the setup prompt's copy box; the npm command is in `/docs/start`, and the tour's first stop and the panel's handle teach `⇧K`), the guided tour, the "try it here" stage (`id="try"`), and the footer (with `/docs` and `/docs/extension` among its links).
 - The panel mounts through `usePanel()` (`src/lib/panel.ts`), which every page that shows the panel calls: idle on a first visit, at once when knobs are stored, with the click analytics listener. The landing passes the tour to it (`openTour` and `watchKnobs` from `src/tour/progress.ts`): the tour opens before the panel mounts, so the copy of the page in a device's frame finds it on the page above, and watches the knobs once the panel is on the page.
 
 ### Docs
