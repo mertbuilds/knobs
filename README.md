@@ -77,7 +77,7 @@ and add the `CHANGELOG.md` entry. After the merge, tag it:
 git tag knobs@X.Y.Z && git push origin knobs@X.Y.Z
 ```
 
-The Release workflow publishes it to npm through trusted publishing (no token). One-time setup:
+The Release workflow publishes it to npm through trusted publishing (no token). One-time setup (npm 11.15 or later):
 `npm trust github @vinena/knobs --file release.yml --repo vinenastudio/knobs --allow-publish`.
 
 ## Going to production: accounts checklist
