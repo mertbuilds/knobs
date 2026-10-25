@@ -51,6 +51,7 @@
  * view holds.
  */
 import { boxTint } from "../grab/colors";
+import { HOLD } from "./hold";
 
 export const CSS = `
 .wrap {
@@ -585,6 +586,31 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .row-button:hover { color: var(--fg); background: var(--track); }
 /* One that is a toggle, while it is on. */
 .row-button[aria-pressed="true"] { color: var(--fg); }
+/* A button with a hold, as a row's x: no menu or selection on a long touch,
+   and a fill from its leading edge while the hold runs. With reduced motion
+   the fill is there at once, and the hold still counts. */
+.hold {
+  position: relative;
+  isolation: isolate;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.hold.holding { color: var(--hot); }
+.hold.holding::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--hot) 16%, transparent);
+  transform-origin: left;
+  animation: hold-fill ${HOLD}ms linear;
+}
+@keyframes hold-fill {
+  from { transform: scaleX(0); }
+}
 
 /* An open row's editor folds out under its line and pushes the rows below it
    down. The fold eases between none and all of the editor's height, and clips

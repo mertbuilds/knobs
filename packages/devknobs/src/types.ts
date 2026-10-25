@@ -191,7 +191,7 @@ export interface PanelValue {
   handle: boolean;
   /**
    * Ids of the rows set from the panel. Each stays in the list, back at its
-   * default too, until its `×` takes it off. Reset all lists the default rows
+   * default too, until a hold on its `×` takes it off. Reset all lists the default rows
    * again.
    */
   pinned: string[];
