@@ -605,11 +605,13 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   z-index: -1;
   border-radius: inherit;
   background: color-mix(in srgb, var(--hot) 16%, transparent);
-  transform-origin: left;
   animation: hold-fill ${HOLD}ms linear;
 }
+/* A clip, not a scale: a scaled fill squeezes its corners and spills past the
+   button's round ones. */
 @keyframes hold-fill {
-  from { transform: scaleX(0); }
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0); }
 }
 
 /* An open row's editor folds out under its line and pushes the rows below it
