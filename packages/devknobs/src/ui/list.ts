@@ -19,12 +19,12 @@ import {
 /**
  * Which rows the panel lists, and what they say. A row is listed while a knob
  * of it is off its default, and once set or added from the panel it stays
- * listed, back at its default too, until its `×` or reset all takes it off. A fresh panel,
+ * listed, back at its default too, until a hold on its `×` or reset all takes it off. A fresh panel,
  * and reset all, lists the default rows.
  *
  * An action's row goes by the same rules, with nothing here that tells the
  * two apart: it is listed while its mode is on, as a knob set from outside
- * the panel is, and once run from the panel it stays listed until its `×`.
+ * the panel is, and once run from the panel it stays listed until its `×` is held.
  * So a key alone lists a mode only while it is on, and pins nothing.
  */
 
@@ -129,9 +129,17 @@ function undo(knob: Knob, state: DevknobsState): DevknobsStatePatch {
 }
 
 /**
- * The patch a row's `×` sends: its knobs back to their defaults, and the row
- * off the list. A value another knob brought stays, so the viewport's `×`
- * leaves a device its size.
+ * The patch a click on a row's `×` sends: its knobs back to their defaults,
+ * and the row pinned, so it stays listed. A value another knob brought stays,
+ * so the viewport's `×` leaves a device its size.
+ */
+export function resetRowPatch(state: DevknobsState, row: Row): DevknobsStatePatch {
+  return pinPatch(state, row.id, combine(row.knobs.map((id) => undo(knobOf(id), state))));
+}
+
+/**
+ * The patch a hold on a row's `×` sends: its knobs back as a click puts them,
+ * and the row off the list.
  */
 export function removePatch(state: DevknobsState, row: Row): DevknobsStatePatch {
   const pinned = state.panel.pinned.filter((id) => id !== row.id);

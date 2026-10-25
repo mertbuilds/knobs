@@ -15,7 +15,17 @@ import { button, center, el, firstControl, reveal, rowBox, rowButton } from "./d
 import { createEditors, set, type Update } from "./editors";
 import { icon, rowIcon } from "./icons";
 import type { Keys } from "./keys";
-import { arrange, isListed, listedOrder, movePatch, removePatch, rowOrder, rowText } from "./list";
+import { type Held, holdButton } from "./hold";
+import {
+  arrange,
+  isListed,
+  listedOrder,
+  movePatch,
+  removePatch,
+  resetRowPatch,
+  rowOrder,
+  rowText,
+} from "./list";
 import { between, DRAG_SLOP } from "./place";
 import type { Tips } from "./tooltip";
 
@@ -40,8 +50,8 @@ export interface RowLine {
 /**
  * Build a row's line from its catalog entry: the grip in its column,
  * its icon and name, what it says, then its x. An action's ends with its key
- * as the footer shows a key, and its x takes it off the list where a knob
- * row's puts its knobs back too.
+ * as the footer shows a key. A click on the x puts the row back, and a hold
+ * takes it off the list too.
  */
 export function rowLine(row: Row): RowLine {
   const grip = button("grip", "");
@@ -51,7 +61,8 @@ export function rowLine(row: Row): RowLine {
   const main = button("main", "");
   const value = el("span", "row-value");
   const key = row.action?.binding ? el("kbd", "hint-key row-key") : null;
-  const clear = rowButton("clear", icon("x"), `${row.action ? "remove" : "reset"} ${row.label}`);
+  const clear = rowButton("clear", icon("x"), `reset ${row.label} (hold to remove)`);
+  clear.title = "reset (hold to remove)";
   const { box } = rowBox({
     main,
     grip,
@@ -85,7 +96,7 @@ const ROW_SCROLL = 8;
 /** What the rows need from the panel. */
 export interface RowsContext {
   /** The panel's shadow root, which knows the focus. */
-  root: ShadowRoot;
+  root: Pick<ShadowRoot, "activeElement">;
   /** The box the rows stand in. */
   rows: HTMLElement;
   /** The live region that says where a row moved to, and why a value was not taken. */
@@ -141,6 +152,8 @@ export function createRows(context: RowsContext): Rows {
     field?.focus({ preventScroll: true });
   }
 
+  const holds: Held[] = [];
+
   const views: RowView[] = ROWS.map((row) => {
     const line = rowLine(row);
     const { box, grip, main, clear } = line;
@@ -165,11 +178,20 @@ export function createRows(context: RowsContext): Rows {
       if (action) runAction(action);
       else openEditor(openRow === row.id ? null : row.id);
     });
-    clear.addEventListener("click", () => {
-      if (openRow === row.id) openRow = null;
-      if (action) stopAction(action);
-      engine.setState(removePatch(engine.getState(), row));
-    });
+    // A click puts the row back and keeps it listed; a hold takes it off too.
+    holds.push(
+      holdButton(clear, {
+        press: () => {
+          if (action) stopAction(action);
+          engine.setState(resetRowPatch(engine.getState(), row));
+        },
+        hold: () => {
+          if (openRow === row.id) openRow = null;
+          if (action) stopAction(action);
+          engine.setState(removePatch(engine.getState(), row));
+        },
+      }),
+    );
     grip.addEventListener("pointerdown", (event: PointerEvent) => startReorder(event, row.id));
     grip.addEventListener("pointermove", onReorderMove);
     grip.addEventListener("pointerup", (event: PointerEvent) => {
@@ -482,6 +504,7 @@ export function createRows(context: RowsContext): Rows {
     endReorder,
     destroy(): void {
       cancelAnimationFrame(following);
+      for (const held of holds) held.cancel();
       editors.destroy();
     },
   };

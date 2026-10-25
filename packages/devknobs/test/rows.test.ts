@@ -1,12 +1,18 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from "bun:test";
+import * as engine from "../src/engine";
+import { DEFAULT_PINNED, DEFAULT_STATE, merge } from "../src/engine/store";
+import type { GrabControl } from "../src/grab/control";
 import { BINDINGS, type LiveKeys } from "../src/ui/bindings";
 import { type Action, actionRow, ROWS, type Row, type RowId } from "../src/ui/catalog";
 import { rowBox, rowButton, rowsLabel } from "../src/ui/dom";
+import { HOLD } from "../src/ui/hold";
 import { defaultKeys } from "../src/ui/keys";
+import { isListed } from "../src/ui/list";
 import { viewHead } from "../src/ui/pane";
 import type { LivePrefs } from "../src/ui/prefs";
-import { rowLine } from "../src/ui/rows";
+import { createRows, type Rows, rowLine } from "../src/ui/rows";
 import { createSettings, type Settings, type SettingsContext } from "../src/ui/settings";
+import { stage } from "../src/ui/stage";
 import { CSS } from "../src/ui/styles";
 import type { Tips } from "../src/ui/tooltip";
 import { FakeNode, fake, leave, page, rules } from "./kit-dom";
@@ -169,7 +175,7 @@ describe("a row's line", () => {
     expect(parts(fake(line.box).children[0])).toEqual(["lead grip", "main", "row-button clear"]);
     expect(parts(line.main)).toEqual(["glyph", "row-label", "row-value"]);
     expect(line.key).toBeNull();
-    expect(fake(line.clear).attributes.get("aria-label")).toBe("reset device");
+    expect(fake(line.clear).attributes.get("aria-label")).toBe("reset device (hold to remove)");
     expect(fake(line.grip).attributes.get("aria-label")).toBe("move device");
   });
 
@@ -183,10 +189,10 @@ describe("a row's line", () => {
     expect(parts(fake(line.box).children[0])).toEqual(parts(fake(knob.box).children[0]));
     expect(parts(line.main)).toEqual(["glyph", "row-label", "row-value", "hint-key row-key"]);
     expect(fake(line.main).children[1]?.textContent).toBe("grab");
-    expect(fake(line.clear).attributes.get("aria-label")).toBe("remove grab");
+    expect(fake(line.clear).attributes.get("aria-label")).toBe("reset grab (hold to remove)");
   });
 
-  test("inspect's row is that line too: its icon, its name, its key, and an x that removes it", () => {
+  test("inspect's row is that line too: its icon, its name, its key, and an x that resets it and removes it held", () => {
     const grab = rowLine(row("grab"));
     const line = rowLine(row("inspect"));
     expect(line.box.dataset.row).toBe("inspect");
@@ -194,18 +200,18 @@ describe("a row's line", () => {
     expect(parts(fake(line.box).children[0])).toEqual(["lead grip", "main", "row-button clear"]);
     expect(parts(line.main)).toEqual(["glyph", "row-label", "row-value", "hint-key row-key"]);
     expect(fake(line.main).children[1]?.textContent).toBe("inspect");
-    expect(fake(line.clear).attributes.get("aria-label")).toBe("remove inspect");
+    expect(fake(line.clear).attributes.get("aria-label")).toBe("reset inspect (hold to remove)");
     expect(fake(line.grip).attributes.get("aria-label")).toBe("move inspect");
   });
 
-  test("the requests' row is that line too: its icon, its name, off or on, its key, and an x that removes it", () => {
+  test("the requests' row is that line too: its icon, its name, off or on, its key, and an x that resets it and removes it held", () => {
     const line = rowLine(row("requests"));
     expect(line.box.className).toBe(rowLine(row("device")).box.className);
     expect(line.box.dataset.row).toBe("requests");
     expect(parts(fake(line.box).children[0])).toEqual(["lead grip", "main", "row-button clear"]);
     expect(parts(line.main)).toEqual(["glyph", "row-label", "row-value", "hint-key row-key"]);
     expect(fake(line.main).children[1]?.textContent).toBe("requests");
-    expect(fake(line.clear).attributes.get("aria-label")).toBe("remove requests");
+    expect(fake(line.clear).attributes.get("aria-label")).toBe("reset requests (hold to remove)");
     expect(fake(line.grip).attributes.get("aria-label")).toBe("move requests");
   });
 
@@ -228,6 +234,91 @@ describe("a row's line", () => {
     expect(rowLine(actionRow({ ...entry, binding: "reset" })).key?.className).toBe(
       "hint-key row-key",
     );
+  });
+});
+
+describe("an action row's x in the rows", () => {
+  const tips: Tips = {
+    show: () => {},
+    hide: () => false,
+    hideAfter: () => {},
+    isFor: () => false,
+    tooltip: () => {},
+    destroy: () => {},
+  };
+  let rows: Rows;
+  let on: boolean;
+  /** The knobs, kept here in place of the engine's, which would set them on the page. */
+  let state = DEFAULT_STATE;
+  let spies: { mockRestore(): void }[] = [];
+
+  /** Grab's switch, on as a test sets it. */
+  const grab: GrabControl = {
+    isOn: () => on,
+    set(next) {
+      on = next;
+    },
+    subscribe: () => () => {},
+    destroy: () => {},
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    for (const name of ["requestAnimationFrame", "cancelAnimationFrame"]) {
+      Object.defineProperty(globalThis, name, { configurable: true, value: () => 0 });
+    }
+    on = true;
+    stage.grab = grab;
+    state = merge(DEFAULT_STATE, { panel: { pinned: [...DEFAULT_PINNED, "grab"] } });
+    spies = [
+      spyOn(engine, "getState").mockImplementation(() => state),
+      spyOn(engine, "setState").mockImplementation((patch) => {
+        state = merge(state, patch);
+        return state;
+      }),
+    ];
+    rows = createRows({
+      root: { activeElement: null },
+      rows: node("div"),
+      said: node("div"),
+      tips,
+      render: () => {},
+      dragging: () => false,
+      mac: true,
+    });
+  });
+
+  afterEach(() => {
+    rows.destroy();
+    for (const spy of spies) spy.mockRestore();
+    stage.grab = null;
+    for (const name of ["requestAnimationFrame", "cancelAnimationFrame"]) {
+      Reflect.deleteProperty(globalThis, name);
+    }
+    jest.useRealTimers();
+  });
+
+  /** The x of grab's row. */
+  function clear(): FakeNode {
+    const view = rows.viewOf("grab");
+    if (!view) throw new Error("no row grab");
+    return fake(view.clear);
+  }
+
+  test("a click turns its mode off and keeps the row listed", () => {
+    clear().fire("click");
+    expect(on).toBe(false);
+    expect(isListed(row("grab"), state)).toBe(true);
+  });
+
+  test("a hold turns its mode off and takes the row off, open or not", () => {
+    rows.openEditor("grab");
+    expect(rows.openRow()).toBe("grab");
+    clear().fire("pointerdown", { button: 0, pointerId: 1 } as object);
+    jest.advanceTimersByTime(HOLD);
+    expect(on).toBe(false);
+    expect(isListed(row("grab"), state)).toBe(false);
+    expect(rows.openRow()).toBeNull();
   });
 });
 

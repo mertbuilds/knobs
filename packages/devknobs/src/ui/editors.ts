@@ -58,7 +58,7 @@ export function set(knob: Knob, value: string): void {
 /** What the editors need from the panel. */
 export interface EditorsContext {
   /** The panel's shadow root, which knows the focus. */
-  root: ShadowRoot;
+  root: Pick<ShadowRoot, "activeElement">;
   /** A value picked from a long list, which may open its row too. */
   pickOption(knob: Knob, option: Option): void;
   /** The live region that says why a value was not taken. */

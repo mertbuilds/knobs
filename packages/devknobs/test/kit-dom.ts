@@ -13,6 +13,16 @@ export interface FakeEvent {
   /** Whether a listener took the event's default away. */
   prevented: boolean;
   preventDefault(): void;
+  /** Whether a listener kept the event from going on to the next node. */
+  stopped: boolean;
+  stopPropagation(): void;
+}
+
+/** Whether a listener hears an event on its way down, before the node it was sent to. */
+type ListenOptions = boolean | { capture?: boolean };
+
+function capturing(options?: ListenOptions): boolean {
+  return typeof options === "boolean" ? options : options?.capture === true;
 }
 
 /** What has the focus in the fake page. */
@@ -20,6 +30,20 @@ let active: FakeNode | null = null;
 
 export function focused(): FakeNode | null {
   return active;
+}
+
+/** A node's inline style, the custom properties set on it. */
+class FakeStyle {
+  transform = "";
+  properties = new Map<string, string>();
+
+  setProperty(name: string, value: string): void {
+    this.properties.set(name, value);
+  }
+
+  removeProperty(name: string): void {
+    this.properties.delete(name);
+  }
 }
 
 export class FakeNode {
@@ -39,9 +63,12 @@ export class FakeNode {
   isConnected = true;
   shadowRoot = null;
   dataset: Record<string, string> = {};
+  style = new FakeStyle();
   children: FakeNode[] = [];
+  parent: FakeNode | null = null;
   attributes = new Map<string, string>();
   listeners = new Map<string, Set<Listener>>();
+  captures = new Map<string, Set<Listener>>();
   classList = {
     contains: (name: string) => this.classes().includes(name),
     add: (name: string) => this.classList.toggle(name, true),
@@ -63,12 +90,16 @@ export class FakeNode {
   append(...nodes: (FakeNode | string)[]): void {
     for (const node of nodes) {
       if (typeof node === "string") this.textContent += node;
-      else this.children.push(node);
+      else {
+        this.children.push(node);
+        node.parent = this;
+      }
     }
   }
 
   replaceChildren(...nodes: FakeNode[]): void {
     this.children = [...nodes];
+    for (const node of nodes) node.parent = this;
   }
 
   /** Put a node before another of this one's, or last, taking it from where it stood here. */
@@ -77,10 +108,24 @@ export class FakeNode {
     const at = before ? this.children.indexOf(before) : -1;
     if (at < 0) this.children.push(node);
     else this.children.splice(at, 0, node);
+    node.parent = this;
   }
 
   removeChild(node: FakeNode): void {
     this.children = this.children.filter((child) => child !== node);
+    node.parent = null;
+  }
+
+  /** A fake node holds no pointer: a touch there takes none. */
+  hasPointerCapture(): boolean {
+    return false;
+  }
+
+  releasePointerCapture(): void {}
+
+  /** The node at the top of the tree this one stands in. */
+  getRootNode(): FakeNode {
+    return this.parent ? this.parent.getRootNode() : this;
   }
 
   getClientRects(): unknown[] {
@@ -105,13 +150,21 @@ export class FakeNode {
     return this.attributes.get(name) ?? null;
   }
 
-  addEventListener(type: string, listener: Listener): void {
-    const set = this.listeners.get(type) ?? new Set();
+  addEventListener(type: string, listener: Listener, options?: ListenOptions): void {
+    const all = capturing(options) ? this.captures : this.listeners;
+    const set = all.get(type) ?? new Set();
     set.add(listener);
-    this.listeners.set(type, set);
+    all.set(type, set);
   }
 
-  /** Send an event here. It is heard here and up the tree, as one that bubbles is. */
+  removeEventListener(type: string, listener: Listener, options?: ListenOptions): void {
+    (capturing(options) ? this.captures : this.listeners).get(type)?.delete(listener);
+  }
+
+  /**
+   * Send an event here. It is heard on its way down the tree by the nodes
+   * that capture it, then here and up the tree, as one that bubbles is.
+   */
   fire(type: string, more: Partial<FakeEvent> = {}, root?: FakeNode): FakeEvent {
     const event: FakeEvent = {
       type,
@@ -120,17 +173,35 @@ export class FakeNode {
       preventDefault() {
         event.prevented = true;
       },
+      stopped: false,
+      stopPropagation() {
+        event.stopped = true;
+      },
       ...more,
     };
     const path = root ? pathTo(root, this) : [this];
-    for (const node of [...path].reverse()) {
-      for (const listener of [...(node.listeners.get(type) ?? [])]) listener(event);
+    const heard = [
+      ...path.map((node) => node.captures),
+      ...[...path].reverse().map((node) => node.listeners),
+    ];
+    for (const listeners of heard) {
+      if (event.stopped) break;
+      for (const listener of [...(listeners.get(type) ?? [])]) listener(event);
     }
     return event;
   }
 
   focus(): void {
     active = this;
+  }
+
+  /** The nodes under this one a class selector finds, as `.items` is. */
+  querySelectorAll(selector: string): FakeNode[] {
+    return this.children.flatMap((child) => child.find(selector.replace(/^\./, "")));
+  }
+
+  querySelector(selector: string): FakeNode | null {
+    return this.querySelectorAll(selector)[0] ?? null;
   }
 
   /** Every node under this one with a class, itself included, in the order they stand. */

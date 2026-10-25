@@ -22,7 +22,7 @@ export const NOT_A_COLOR = "use a hex such as #1e90ff, or rgb()";
 /** What the swatch list needs from the editors. */
 export interface SwatchesContext {
   /** The panel's shadow root, which knows the focus. */
-  root: ShadowRoot;
+  root: Pick<ShadowRoot, "activeElement">;
   /** The colors the user added. */
   colors: LiveColors;
   /** Set the knob from the panel. */

@@ -13,7 +13,7 @@ the panel starts closed, as a handle on the right edge of the window. click it o
 
 ## rows and search
 
-the panel lists the knobs that are off their default, one row each. click a row to open its editor, and `×` puts it back to its default. drag a row by its six dots to move it.
+the panel lists the knobs that are off their default, one row each. click a row to open its editor, `×` puts it back to its default, and holding `×` for a second takes the row off. drag a row by its six dots to move it.
 
 the add knob button opens a search. type `dark`, `390`, `+2d`, `tokyo` or `offline`, and enter sets the first result.
 
