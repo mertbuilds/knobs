@@ -1,4 +1,4 @@
-import type { DevknobsStatePatch, NativeMedia, NativeViewport, TextValue } from 'devknobs';
+import type { DevknobsStatePatch, NativeMedia, NativeViewport, TextValue } from '@vinena/knobs';
 
 /** The knobs devknobs hands its native driver, as one tab's state. */
 export interface KnobState extends NativeMedia {

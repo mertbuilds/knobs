@@ -1,6 +1,6 @@
 import { mountKnobs } from '../lib/panel.ts';
 
-type Knobs = typeof import('devknobs');
+type Knobs = typeof import('@vinena/knobs');
 type Browser = ReturnType<Knobs['getState']>['browser'];
 
 /**

@@ -1,5 +1,9 @@
 # changelog
 
+## unreleased
+
+- renamed from devknobs to @vinena/knobs
+
 ## 0.5.0
 
 - a click on a row's `×` puts the row back to its default and keeps it listed; press and hold it for a second to take the row off the list, as a click did before. the `×` fills while held, letting go early or moving off cancels, and enter or space held on it for a second does the same. its label says `reset <row> (hold to remove)`

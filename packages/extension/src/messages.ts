@@ -1,4 +1,4 @@
-import type { NativeUa, NativeViewport, SystemMedia, UaBrand, UaHints } from 'devknobs';
+import type { NativeUa, NativeViewport, SystemMedia, UaBrand, UaHints } from '@vinena/knobs';
 import type { KnobState } from './knobs.ts';
 import type { FrameLoad } from './refusal.ts';
 

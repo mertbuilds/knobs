@@ -12,7 +12,7 @@ Playwright `page.evaluate`, Chrome DevTools MCP `evaluate_script`, or similar.
 ## Before you start
 
 devknobs must be installed in the app. See the install section of the
-devknobs README (`node_modules/devknobs/README.md`).
+devknobs README (`node_modules/@vinena/knobs/README.md`).
 
 Check that devknobs is mounted:
 

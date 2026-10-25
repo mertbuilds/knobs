@@ -1,4 +1,4 @@
-import type { NativeUa, UaBrand } from 'devknobs';
+import type { NativeUa, UaBrand } from '@vinena/knobs';
 import type { Command } from './knobs.ts';
 
 /** A request header a rule sets or removes. */

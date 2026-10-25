@@ -3,9 +3,9 @@
  * a local build there, and takes it out again. A symlink does not do: Turbopack
  * refuses a package linked from outside the app's root, and other bundlers take
  * the real path for the app's own source. The installed copy waits beside it,
- * as node_modules/.devknobs-installed, until the unlink moves it back. The
- * local copy is made whole in node_modules/.devknobs-linking, then moved into
- * place. Nothing outside those three folders is touched.
+ * as node_modules/@vinena/.devknobs-installed, until the unlink moves it back.
+ * The local copy is made whole in node_modules/@vinena/.devknobs-linking, then
+ * moved into place. Nothing outside those three folders is touched.
  *
  *   bun run link <app-dir>
  *   bun run unlink <app-dir>
@@ -31,12 +31,15 @@ import { basename, dirname, join, resolve } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 
 /** The package's name, and its folder in node_modules. */
-export const NAME = "devknobs";
+export const NAME = "@vinena/knobs";
 
-/** The folder in node_modules where the installed copy waits. */
+/** The scope's folder in node_modules, which holds the package's folder and the two below, so a relative link moved between them still points where it did. */
+const SCOPE = dirname(NAME);
+
+/** The folder in the scope's folder where the installed copy waits. */
 export const KEPT = ".devknobs-installed";
 
-/** The folder in node_modules where a local copy is made before it takes the package's place, and where the one it replaces goes. */
+/** The folder in the scope's folder where a local copy is made before it takes the package's place, and where the one it replaces goes. */
 export const STAGING = ".devknobs-linking";
 
 /** What marks a version as a local copy's. */
@@ -58,13 +61,19 @@ export function appDir(typed: string, cwd: string, home: string = homedir()): st
 /** The app's node_modules, the package's folder in it, where the installed copy waits and where a local copy is made. */
 export function linkPaths(app: string): { modules: string; target: string; kept: string; staging: string } {
   const modules = join(app, "node_modules");
-  return { modules, target: join(modules, NAME), kept: join(modules, KEPT), staging: join(modules, STAGING) };
+  const scope = join(modules, SCOPE);
+  return { modules, target: join(modules, NAME), kept: join(scope, KEPT), staging: join(scope, STAGING) };
 }
 
-/** Whether a path is the package's folder, the kept copy or the staging folder in a node_modules, the only three a removal may take. */
+/** Whether a path is the package's folder, the kept copy or the staging folder in a node_modules' scope folder, the only three a removal may take. */
 export function removable(path: string): boolean {
   const name = basename(path);
-  return (name === NAME || name === KEPT || name === STAGING) && basename(dirname(path)) === "node_modules";
+  const scope = dirname(path);
+  return (
+    (name === basename(NAME) || name === KEPT || name === STAGING) &&
+    basename(scope) === SCOPE &&
+    basename(dirname(scope)) === "node_modules"
+  );
 }
 
 /** The version a local copy carries, new each second, so a cache keyed on the version sees a new one. */

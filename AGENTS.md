@@ -1,6 +1,6 @@
 # knobs
 
-The `devknobs` npm package and its site, <https://knobs.dev>, in one pnpm + turbo monorepo.
+The `@vinena/knobs` npm package and its site, <https://knobs.dev>, in one pnpm + turbo monorepo.
 
 The site is a copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) stripped to the
 layers a landing page needs: no database, no auth, no billing, and only a stateless demo api. Keep it that way:
@@ -16,7 +16,7 @@ apps/
           proxy, `/api/demo/$`, what the demo request buttons ask for, and
           `/llms.txt` and `/llms-full.txt`, the docs for agents.
 packages/
-  devknobs/ The `devknobs` npm package: the panel itself. Vanilla TS, zero runtime
+  devknobs/ The `@vinena/knobs` npm package: the panel itself. Vanilla TS, zero runtime
           dependencies, built and tested with bun. Its own README and CHANGELOG.
   extension/ The devknobs Chrome extension (private, not published): the panel on any
           page, some knobs set for real through `chrome.debugger`.
@@ -74,10 +74,10 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### devknobs in dev
 
-- `apps/web` depends on `devknobs` as `workspace:*`. The dev server runs it from source, so the site is its test bed: `vite.config.ts` aliases `devknobs` to `packages/devknobs/src/index.ts` (only under `vite dev`), and edits there reload the page with no build.
-- Types, `vite build`, CI and prod use the package's `dist`, which turbo builds first (`^build`). A fresh clone needs `pnpm --filter devknobs build` (or `pnpm build`) once before `tsc` or a lone `pnpm --filter @knobs/web build` sees its types and files.
+- `apps/web` depends on `@vinena/knobs` as `workspace:*`. The dev server runs it from source, so the site is its test bed: `vite.config.ts` aliases `@vinena/knobs` to `packages/devknobs/src/index.ts` (only under `vite dev`), and edits there reload the page with no build.
+- Types, `vite build`, CI and prod use the package's `dist`, which turbo builds first (`^build`). A fresh clone needs `pnpm --filter @vinena/knobs build` (or `pnpm build`) once before `tsc` or a lone `pnpm --filter @knobs/web build` sees its types and files.
 - Device images come from `packages/devknobs/assets/bezels` (a dev middleware maps the source's `src/engine/bezels/` URLs there).
-- The early script (`devknobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, in place of the `script[data-devknobs-early]` slot `__root.tsx` renders, so each head script hydrates onto its own). The slot needs both `dangerouslySetInnerHTML={{ __html: '' }}` and `suppressHydrationWarning`: without the first, React finds the server's script text in an element it expects empty, fails hydration and renders the whole document again on the client; the second silences the dev warning that the text differs. Builds inline the package's `dist/early.global.js`; under `vite dev` the plugin bundles its `src/early.ts` instead and rebuilds it when its sources change.
+- The early script (`@vinena/knobs/early?raw`) goes first in `<head>` through `src/server.ts` (HTMLRewriter, in place of the `script[data-devknobs-early]` slot `__root.tsx` renders, so each head script hydrates onto its own). The slot needs both `dangerouslySetInnerHTML={{ __html: '' }}` and `suppressHydrationWarning`: without the first, React finds the server's script text in an element it expects empty, fails hydration and renders the whole document again on the client; the second silences the dev warning that the text differs. Builds inline the package's `dist/early.global.js`; under `vite dev` the plugin bundles its `src/early.ts` instead and rebuilds it when its sources change.
 
 ### Tuning the fold (dev)
 
@@ -126,7 +126,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### Deploy
 
-- `pnpm --filter @knobs/web deploy` = `pnpm build`, which needs devknobs' `dist` (`pnpm --filter devknobs build` first), then `wrangler deploy`. The Cloudflare vite plugin writes the deploy-time config to `dist/server/wrangler.json` and points `.wrangler/deploy/config.json` at it, so wrangler ships the built config rather than `wrangler.jsonc` itself. Push to main does the same from CI (`deploy.yml`); the command is for a one-off.
+- `pnpm --filter @knobs/web deploy` = `pnpm build`, which needs devknobs' `dist` (`pnpm --filter @vinena/knobs build` first), then `wrangler deploy`. The Cloudflare vite plugin writes the deploy-time config to `dist/server/wrangler.json` and points `.wrangler/deploy/config.json` at it, so wrangler ships the built config rather than `wrangler.jsonc` itself. Push to main does the same from CI (`deploy.yml`); the command is for a one-off.
 - `wrangler.jsonc` carries `account_id` and two custom domains: `knobs.dev` (canonical) and `www.knobs.dev`. `canonicalRedirect` (`src/lib/canonical.ts`, called from `src/server.ts`) answers `www` with a 301 to the apex, path and query kept.
 
 ### i18n lint
@@ -135,17 +135,17 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ## devknobs (`packages/devknobs`)
 
-- The `devknobs` npm package, moved here from mertbuilds/devknobs with its git history. Vanilla TS, zero runtime dependencies, React optional (`devknobs/react`). Its user docs are `apps/web/content/docs` on the site (knobs.dev/docs); its README is short and links there. Its release notes are `packages/devknobs/CHANGELOG.md`.
+- The `@vinena/knobs` npm package, moved here from mertbuilds/devknobs with its git history. Vanilla TS, zero runtime dependencies, React optional (`@vinena/knobs/react`). Its user docs are `apps/web/content/docs` on the site (knobs.dev/docs); its README is short and links there. Its release notes are `packages/devknobs/CHANGELOG.md`.
 - It keeps bun as its build and test runner, so bun must be installed (CI pins the version in `oven-sh/setup-bun`). Its dev dependencies install through pnpm with the rest of the workspace; there is no `bun.lock`.
-- `pnpm --filter devknobs build` writes `dist/` (`scripts/bezelurls.ts` regenerates `src/engine/bezelurls.ts` first; `scripts/tunefree.ts` fails a build that holds the fold tuning tools). `pnpm --filter devknobs test` runs `bun test`, `pnpm --filter devknobs typecheck` runs its own `tsc` (TypeScript 5, not the root's 7). turbo runs all three with the rest.
+- `pnpm --filter @vinena/knobs build` writes `dist/` (`scripts/bezelurls.ts` regenerates `src/engine/bezelurls.ts` first; `scripts/tunefree.ts` fails a build that holds the fold tuning tools). `pnpm --filter @vinena/knobs test` runs `bun test`, `pnpm --filter @vinena/knobs typecheck` runs its own `tsc` (TypeScript 5, not the root's 7). turbo runs all three with the rest.
 - Root oxlint and oxfmt, and the lefthook pre-commit jobs, skip `packages/devknobs`: it has its own style (double quotes, long lines) and its own checks. Do not reformat it to the root's rules.
-- Release: in a PR, bump `version` in `packages/devknobs/package.json` and add the `CHANGELOG.md` entry (run `pnpm --filter devknobs build`, then `npm pack --dry-run` from `packages/devknobs` to check the file list). After the merge, `git tag devknobs@X.Y.Z && git push origin devknobs@X.Y.Z`. `.github/workflows/release.yml` checks the tag matches the version, runs devknobs' tests, typecheck and build, and publishes through npm trusted publishing (OIDC, no token, provenance added by npm). A version with `-` goes to the `next` dist-tag. A tag for a version already on npm is a no-op. One-time setup: `npm trust github devknobs --file release.yml --repo mertbuilds/knobs --allow-publish`.
+- Release: in a PR, bump `version` in `packages/devknobs/package.json` and add the `CHANGELOG.md` entry (run `pnpm --filter @vinena/knobs build`, then `npm pack --dry-run` from `packages/devknobs` to check the file list). After the merge, `git tag knobs@X.Y.Z && git push origin knobs@X.Y.Z`. `.github/workflows/release.yml` checks the tag matches the version, runs devknobs' tests, typecheck and build, and publishes through npm trusted publishing (OIDC, no token, provenance added by npm). A version with `-` goes to the `next` dist-tag. A tag for a version already on npm is a no-op. One-time setup: `npm trust github @vinena/knobs --file release.yml --repo vinenastudio/knobs --allow-publish`.
 - `bun run link <app-dir>` / `bun run unlink <app-dir>` (from `packages/devknobs`) copy a local build into another app's `node_modules` to try it there. The site does not need it: it uses the workspace package.
 
 ## Extension (`packages/extension`)
 
 - `@knobs/extension`: a Manifest V3 Chrome extension that mounts devknobs on any page and sets some knobs for real (DevTools protocol, `declarativeNetRequest`). Private, not published. Its user docs are `/docs/extension` on the site (`apps/web/content/docs/extension.md`); its README is short and links there.
-- `pnpm --filter devknobs build` first: it bundles devknobs' `dist/`. Then `pnpm --filter @knobs/extension build` writes `dist/`, which Chrome loads unpacked (`chrome://extensions`, Developer mode, Load unpacked). Work in progress builds elsewhere (`bun scripts/build.ts <dir>`, from `packages/extension`), so `dist/` stays what Chrome has loaded.
+- `pnpm --filter @vinena/knobs build` first: it bundles devknobs' `dist/`. Then `pnpm --filter @knobs/extension build` writes `dist/`, which Chrome loads unpacked (`chrome://extensions`, Developer mode, Load unpacked). Work in progress builds elsewhere (`bun scripts/build.ts <dir>`, from `packages/extension`), so `dist/` stays what Chrome has loaded.
 - The extension's copy of devknobs mounts as the page's host (`mount({ host: true })`): a copy the page mounts itself hands it its keys and grab and takes no panel. See the extension's README, "How it fits together".
 - `pnpm --filter @knobs/extension test` (`bun test`), `typecheck`, and `smoke`: `node scripts/smoke.ts [dir]` loads a build into Playwright's Chromium and drives it on local pages only. CI runs the smoke in the `test` job.
 - Chrome Web Store: `pnpm --filter @knobs/extension package` zips a fresh `dist/` to `devknobs-<version>.zip` (gitignored); the listing's text, permission justifications and screenshots are in `packages/extension/store/`, and `static/icon-{16,32,48,128}.png` come from the logo master as the favicons do (the 128 with 16px of clear space), so a logo change redoes them too.
@@ -162,7 +162,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 - **CI** (`.github/workflows/ci.yml`, PRs + main): `checks` job = turbo lint/typecheck/build + `format:check` + `skills:check` + react-doctor; `test` job = Chromium story tests + devknobs' and the extension's `bun test` + the extension's smoke. Both jobs set up bun for devknobs. Turbo remote cache activates when `TURBO_TOKEN`/`TURBO_TEAM` are configured.
 - **Deploy** (`deploy.yml`, push to main): builds devknobs, then wrangler-action builds and deploys `apps/web` to Cloudflare Workers.
-- **Release** (`release.yml`, push of a `devknobs@*` tag): checks the tag matches the version, then tests, typechecks, builds and publishes devknobs to npm through trusted publishing. See the release line under devknobs.
+- **Release** (`release.yml`, push of a `knobs@*` tag): checks the tag matches the version, then tests, typechecks, builds and publishes `@vinena/knobs` to npm through trusted publishing. See the release line under devknobs.
 - **Previews** (`preview.yml`): every PR builds devknobs and the site, uploads a Workers preview version and comments the URL. Previews build without the analytics client id, so preview traffic stays out of the numbers.
 - Required repo config lives in README's "Going to production" checklist. CI must be green before merge.
 

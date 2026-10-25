@@ -40,7 +40,7 @@ What servers see: nothing changes until you set a knob. The user agent knob chan
 Privacy: the extension sends nothing to the developer or any third party, and has no analytics. The panel's only requests go to the page you are on: its bundles and source maps for grab, its fonts, and a second load of the page in the frame. The device images ship in the extension. The extension keeps its settings in Chrome's storage on your computer, and the panel keeps its settings under devknobs keys in that page's own storage. Privacy policy: https://knobs.dev/docs/privacy
 
 Docs: https://knobs.dev/docs/extension
-Source: https://github.com/mertbuilds/knobs
+Source: https://github.com/vinenastudio/knobs
 ```
 
 **Category**: Developer Tools
@@ -65,7 +65,7 @@ browser settings" switch.
 
 **Homepage URL**: https://knobs.dev
 
-**Support URL**: https://github.com/mertbuilds/knobs/issues
+**Support URL**: https://github.com/vinenastudio/knobs/issues
 
 ## Privacy practices
 

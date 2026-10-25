@@ -34,7 +34,7 @@ function write(path: string, text: string): void {
 /** A checkout with a package.json and a README, and no build yet. */
 function fakeRoot(): string {
   const root = temp();
-  write(join(root, "package.json"), JSON.stringify({ name: "devknobs", version: "1.2.3", files: ["dist", "CHANGELOG.md"] }));
+  write(join(root, "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "1.2.3", files: ["dist", "CHANGELOG.md"] }));
   write(join(root, "README.md"), "readme");
   write(join(root, "CHANGELOG.md"), "changes");
   write(join(root, "scripts", "link.ts"), "not published");
@@ -49,8 +49,8 @@ function fakeBuild(root: string): () => void {
 /** An app with the package installed from the registry. */
 function fakeApp(): string {
   const app = temp();
-  write(join(app, "node_modules", "devknobs", "package.json"), JSON.stringify({ name: "devknobs", version: "1.0.0" }));
-  write(join(app, "node_modules", "devknobs", "dist", "index.js"), "installed");
+  write(join(app, "node_modules", "@vinena", "knobs", "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "1.0.0" }));
+  write(join(app, "node_modules", "@vinena", "knobs", "dist", "index.js"), "installed");
   write(join(app, "node_modules", "other", "index.js"), "other");
   return app;
 }
@@ -58,20 +58,21 @@ function fakeApp(): string {
 /** An app with the package installed the pnpm way: a relative link into a store in its node_modules. */
 function fakePnpmApp(version = "1.0.0"): string {
   const app = temp();
-  write(join(storeOf(app, version), "package.json"), JSON.stringify({ name: "devknobs", version }));
+  write(join(storeOf(app, version), "package.json"), JSON.stringify({ name: "@vinena/knobs", version }));
   write(join(storeOf(app, version), "dist", "index.js"), "installed");
+  mkdirSync(join(app, "node_modules", "@vinena"));
   symlinkSync(storeLink(version), linkPaths(app).target);
   return app;
 }
 
 /** The store folder for a version in a pnpm app. */
 function storeOf(app: string, version: string): string {
-  return join(app, "node_modules", storeLink(version));
+  return join(app, "node_modules", "@vinena", storeLink(version));
 }
 
-/** What the pnpm link for a version says. */
+/** What the pnpm link for a version says, from the scope's folder. */
 function storeLink(version: string): string {
-  return join(".pnpm", `devknobs@${version}`, "node_modules", "devknobs");
+  return join("..", ".pnpm", `@vinena+knobs@${version}`, "node_modules", "@vinena", "knobs");
 }
 
 /** A copy that writes what comes before `file`, then fails as a full disk does. */
@@ -104,30 +105,34 @@ describe("link paths", () => {
   test("the three folders are in the app's node_modules", () => {
     expect(linkPaths("/apps/site")).toEqual({
       modules: "/apps/site/node_modules",
-      target: "/apps/site/node_modules/devknobs",
-      kept: `/apps/site/node_modules/${KEPT}`,
-      staging: `/apps/site/node_modules/${STAGING}`,
+      target: "/apps/site/node_modules/@vinena/knobs",
+      kept: `/apps/site/node_modules/@vinena/${KEPT}`,
+      staging: `/apps/site/node_modules/@vinena/${STAGING}`,
     });
   });
 
   test("only the package's folder, the kept copy and the staging folder in a node_modules may be removed", () => {
-    expect(removable("/apps/site/node_modules/devknobs")).toBe(true);
-    expect(removable("/apps/site/node_modules/devknobs/")).toBe(true);
+    expect(removable("/apps/site/node_modules/@vinena/knobs")).toBe(true);
+    expect(removable("/apps/site/node_modules/@vinena/knobs/")).toBe(true);
     expect(removable("/apps/site/node_modules")).toBe(false);
+    expect(removable("/apps/site/node_modules/@vinena")).toBe(false);
     expect(removable("/apps/site/node_modules/react")).toBe(false);
-    expect(removable("/apps/site/node_modules/devknobs/dist")).toBe(false);
-    expect(removable("/apps/site/node_modules/@scope/devknobs")).toBe(false);
-    expect(removable("/apps/devknobs")).toBe(false);
-    expect(removable(`/apps/site/node_modules/${KEPT}`)).toBe(true);
-    expect(removable(`/apps/site/node_modules/${KEPT}/dist`)).toBe(false);
+    expect(removable("/apps/site/node_modules/@vinena/knobs/dist")).toBe(false);
+    expect(removable("/apps/site/node_modules/knobs")).toBe(false);
+    expect(removable("/apps/site/node_modules/@scope/knobs")).toBe(false);
+    expect(removable("/apps/@vinena/knobs")).toBe(false);
+    expect(removable(`/apps/site/node_modules/@vinena/${KEPT}`)).toBe(true);
+    expect(removable(`/apps/site/node_modules/@vinena/${KEPT}/dist`)).toBe(false);
+    expect(removable(`/apps/site/node_modules/${KEPT}`)).toBe(false);
     expect(removable(`/apps/site/node_modules/@scope/${KEPT}`)).toBe(false);
     expect(removable(`/apps/${KEPT}`)).toBe(false);
-    expect(removable(`/apps/site/node_modules/${STAGING}`)).toBe(true);
-    expect(removable(`/apps/site/node_modules/${STAGING}/dist`)).toBe(false);
+    expect(removable(`/apps/site/node_modules/@vinena/${STAGING}`)).toBe(true);
+    expect(removable(`/apps/site/node_modules/@vinena/${STAGING}/dist`)).toBe(false);
+    expect(removable(`/apps/site/node_modules/${STAGING}`)).toBe(false);
     expect(removable(`/apps/site/node_modules/@scope/${STAGING}`)).toBe(false);
     expect(removable(`/apps/${STAGING}`)).toBe(false);
-    expect(removable(`/apps/site/node_modules/${STAGING}x`)).toBe(false);
-    expect(removable("/apps/site/node_modules/.devknobs")).toBe(false);
+    expect(removable(`/apps/site/node_modules/@vinena/${STAGING}x`)).toBe(false);
+    expect(removable("/apps/site/node_modules/@vinena/.devknobs")).toBe(false);
     expect(removable("/")).toBe(false);
   });
 
@@ -224,7 +229,7 @@ describe("link and unlink", () => {
     const { target, kept } = linkPaths(app);
     link(app, fakeBuild(root), root, 5_000);
     rmSync(target, { recursive: true });
-    write(join(target, "package.json"), JSON.stringify({ name: "devknobs", version: "2.0.0" }));
+    write(join(target, "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "2.0.0" }));
 
     const said = unlink(app);
     expect(said[0]).toContain("newer");
@@ -239,7 +244,7 @@ describe("link and unlink", () => {
     const { target, kept } = linkPaths(app);
     link(app, fakeBuild(root), root, 5_000);
     rmSync(target, { recursive: true });
-    write(join(storeOf(app, "2.0.0"), "package.json"), JSON.stringify({ name: "devknobs", version: "2.0.0" }));
+    write(join(storeOf(app, "2.0.0"), "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "2.0.0" }));
     symlinkSync(storeLink("2.0.0"), target);
 
     expect(unlink(app)[0]).toContain("newer");
@@ -256,7 +261,7 @@ describe("link and unlink", () => {
     const { target, kept } = linkPaths(app);
     link(app, fakeBuild(root), root, 5_000);
     rmSync(target, { recursive: true });
-    write(join(target, "package.json"), JSON.stringify({ name: "devknobs", version: "2.0.0" }));
+    write(join(target, "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "2.0.0" }));
 
     link(app, fakeBuild(root), root, 9_000);
     expect(versionAt(target)).toBe("1.2.3-local.9");
@@ -272,7 +277,7 @@ describe("link and unlink", () => {
     const { target, kept } = linkPaths(app);
     link(app, fakeBuild(root), root, 5_000);
     rmSync(target, { recursive: true });
-    write(join(storeOf(app, "2.0.0"), "package.json"), JSON.stringify({ name: "devknobs", version: "2.0.0" }));
+    write(join(storeOf(app, "2.0.0"), "package.json"), JSON.stringify({ name: "@vinena/knobs", version: "2.0.0" }));
     symlinkSync(storeLink("2.0.0"), target);
 
     link(app, fakeBuild(root), root, 9_000);
@@ -292,7 +297,7 @@ describe("link and unlink", () => {
     expect(versionAt(linkPaths(app).target)).toBe("1.0.0");
   });
 
-  test("an app that is missing, has no node_modules or no devknobs is an error, before any build", () => {
+  test("an app that is missing, has no node_modules or no @vinena/knobs is an error, before any build", () => {
     const root = fakeRoot();
     const build = (): void => {
       throw new Error("built");
@@ -302,8 +307,8 @@ describe("link and unlink", () => {
     expect(() => link(empty, build, root)).toThrow("no node_modules");
     expect(() => unlink(empty)).toThrow("no node_modules");
     mkdirSync(join(empty, "node_modules"));
-    expect(() => link(empty, build, root)).toThrow("does not depend on devknobs");
-    expect(() => unlink(empty)).toThrow("does not depend on devknobs");
+    expect(() => link(empty, build, root)).toThrow("does not depend on @vinena/knobs");
+    expect(() => unlink(empty)).toThrow("does not depend on @vinena/knobs");
   });
 
   test("a build that fails leaves the app as it was", () => {

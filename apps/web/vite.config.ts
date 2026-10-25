@@ -9,7 +9,7 @@ import { tuneEndpoint } from './vite.tune.ts';
 
 // The dev server runs devknobs from its source in packages/devknobs, so an edit
 // there reloads the page with no build. Builds use the package's dist, which
-// turbo builds first. The early script (`devknobs/early?raw`) is built from the
+// turbo builds first. The early script (`@vinena/knobs/early?raw`) is built from the
 // current source too.
 function devknobsSource(): Plugin {
   const root = resolve(import.meta.dirname, '../../packages/devknobs');
@@ -17,7 +17,9 @@ function devknobsSource(): Plugin {
   return {
     apply: (_config, { command, isPreview }) => command === 'serve' && !isPreview,
     config: () => ({
-      resolve: { alias: [{ find: /^devknobs$/, replacement: resolve(root, 'src/index.ts') }] },
+      resolve: {
+        alias: [{ find: /^@vinena\/knobs$/, replacement: resolve(root, 'src/index.ts') }],
+      },
     }),
     configureServer(server) {
       // The source asks for its device images beside src/engine, where the
@@ -60,7 +62,7 @@ function devknobsSource(): Plugin {
       return `export default ${JSON.stringify(chunk.code)};`;
     },
     name: 'devknobs-source',
-    resolveId: (id) => (id === 'devknobs/early?raw' ? early : undefined),
+    resolveId: (id) => (id === '@vinena/knobs/early?raw' ? early : undefined),
   };
 }
 

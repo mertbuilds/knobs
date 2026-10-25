@@ -83,8 +83,8 @@ ${pages
 
 ## Optional
 
-- [npm](https://www.npmjs.com/package/devknobs): the devknobs package
-- [GitHub](https://github.com/mertbuilds/knobs): the source of the package, the extension and this site
+- [npm](https://www.npmjs.com/package/@vinena/knobs): the @vinena/knobs package
+- [GitHub](https://github.com/vinenastudio/knobs): the source of the package, the extension and this site
 `;
 
 export const llmsFullTxt = `${header}

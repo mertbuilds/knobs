@@ -1,12 +1,12 @@
 # knobs
 
-The `devknobs` npm package and its site, <https://knobs.dev>, in one monorepo:
+The `@vinena/knobs` npm package and its site, <https://knobs.dev>, in one monorepo:
 
-| Path                 | What                                                               |
-| -------------------- | ------------------------------------------------------------------ |
-| `packages/devknobs/` | The `devknobs` npm package ([README](packages/devknobs/README.md)) |
-| `apps/web/`          | The site, knobs.dev                                                |
-| `packages/ui/`       | The site's StyleX components                                       |
+| Path                 | What                                                                    |
+| -------------------- | ----------------------------------------------------------------------- |
+| `packages/devknobs/` | The `@vinena/knobs` npm package ([README](packages/devknobs/README.md)) |
+| `apps/web/`          | The site, knobs.dev                                                     |
+| `packages/ui/`       | The site's StyleX components                                            |
 
 The site is a copy of [mertbuilds/web-starter](https://github.com/mertbuilds/web-starter) with everything a
 landing page does not need taken out: no api, no database, no auth, no billing, no e2e. What is
@@ -74,11 +74,11 @@ the page. To release a new version: in a PR, bump `version` in `packages/devknob
 and add the `CHANGELOG.md` entry. After the merge, tag it:
 
 ```sh
-git tag devknobs@X.Y.Z && git push origin devknobs@X.Y.Z
+git tag knobs@X.Y.Z && git push origin knobs@X.Y.Z
 ```
 
 The Release workflow publishes it to npm through trusted publishing (no token). One-time setup:
-`npm trust github devknobs --file release.yml --repo mertbuilds/knobs --allow-publish`.
+`npm trust github @vinena/knobs --file release.yml --repo vinenastudio/knobs --allow-publish`.
 
 ## Going to production: accounts checklist
 

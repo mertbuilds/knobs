@@ -63,7 +63,7 @@ const onExtension = (placement: 'footer' | 'hero') => () =>
   track('extension_clicked', { placement });
 
 const NOTICES =
-  'https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
+  'https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md';
 
 const styles = create({
   // The wordmark, and the way to the code at the end of its row.
@@ -314,7 +314,7 @@ function Landing() {
           {m.link_star()}
         </a>
         <a
-          href="https://www.npmjs.com/package/devknobs"
+          href="https://www.npmjs.com/package/@vinena/knobs"
           rel="noreferrer"
           target="_blank"
           {...props(styles.link, styles.withIcon)}

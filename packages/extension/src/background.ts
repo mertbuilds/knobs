@@ -1,4 +1,4 @@
-import type { NativeUa, SystemMedia } from 'devknobs';
+import type { NativeUa, SystemMedia } from '@vinena/knobs';
 import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from './knobs.ts';
 import {
   type Answer,

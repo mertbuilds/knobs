@@ -1,4 +1,4 @@
-# devknobs
+# @vinena/knobs
 
 a dev-only panel for flipping browser preferences from inside the page. one
 script tag and the knobs are there. no css to add, no code to change. zero
@@ -7,21 +7,21 @@ runtime dependencies.
 ## install
 
 with an ai agent: paste this setup prompt into claude code, codex or cursor, and
-it installs devknobs and mounts it in development only. it is the copy setup
+it installs @vinena/knobs and mounts it in development only. it is the copy setup
 prompt button on https://knobs.dev too.
 
 <!-- the same text is the install_prompt message in apps/web/messages/en.json; change both together. -->
 
 ```
-Install devknobs in this project. It is a dev-only panel that emulates browser preferences from inside the page. Docs: https://knobs.dev/docs
+Install @vinena/knobs in this project. It is a dev-only panel that emulates browser preferences from inside the page. Docs: https://knobs.dev/docs
 
-1. Detect the package manager from the lockfile and add devknobs as a dev dependency (npm i -D devknobs, or the pnpm, yarn or bun equivalent).
+1. Detect the package manager from the lockfile and add @vinena/knobs as a dev dependency (npm i -D @vinena/knobs, or the pnpm, yarn or bun equivalent).
 2. Mount it once, on the client, in development only:
-- Next.js: make a small client component (the file starts with "use client"). In it, import dynamic from "next/dynamic", then const DevKnobs = process.env.NODE_ENV === "development" ? dynamic(() => import("devknobs/react").then((m) => m.DevKnobs), { ssr: false }) : null; and render {DevKnobs && <DevKnobs />}. Render that component once in app/layout (App Router) or pages/_app (Pages Router).
-- Everything else with a bundler (Vite, TanStack Start, React Router, SvelteKit): call if (import.meta.env.DEV) import("devknobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
-- A plain page with no bundler: skip the npm install and add <script src="//unpkg.com/devknobs/dist/index.global.js"></script> to the page. It mounts itself. Keep it out of the deployed page.
+- Next.js: make a small client component (the file starts with "use client"). In it, import dynamic from "next/dynamic", then const DevKnobs = process.env.NODE_ENV === "development" ? dynamic(() => import("@vinena/knobs/react").then((m) => m.DevKnobs), { ssr: false }) : null; and render {DevKnobs && <DevKnobs />}. Render that component once in app/layout (App Router) or pages/_app (Pages Router).
+- Everything else with a bundler (Vite, TanStack Start, React Router, SvelteKit): call if (import.meta.env.DEV) import("@vinena/knobs").then(({ mount }) => mount()); in the client entry, or in a mount effect of the root component in an SSR app. Use the bundler's own dev flag where import.meta.env.DEV does not exist.
+- A plain page with no bundler: skip the npm install and add <script src="//unpkg.com/@vinena/knobs/dist/index.global.js"></script> to the page. It mounts itself. Keep it out of the deployed page.
 3. Keep devknobs out of production builds. A static import stays in the bundle even behind a dev check, so gate the import itself as above. If the project has a build script, run it and check that the output has no devknobs.
-4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/devknobs/dist/early.global.js"></script>
+4. If the app reads media queries, the time or the user agent while it boots, or renders with React, add the early script as the first element in <head>, in development only: <script src="//unpkg.com/@vinena/knobs/dist/early.global.js"></script>
 5. Change nothing else in the project.
 6. Then tell me what you changed and how to open the panel: press Shift+K or click the handle on the right edge of the window. In the open panel, / searches the knobs. Shift+G grabs an element.
 ```
@@ -29,7 +29,7 @@ Install devknobs in this project. It is a dev-only panel that emulates browser p
 or by hand:
 
 ```
-npm i -D devknobs
+npm i -D @vinena/knobs
 ```
 
 ## usage
@@ -37,7 +37,7 @@ npm i -D devknobs
 all of it is for dev only, so gate it yourself:
 
 ```js
-import { mount } from "devknobs";
+import { mount } from "@vinena/knobs";
 
 if (import.meta.env.DEV) mount();
 ```
@@ -45,7 +45,7 @@ if (import.meta.env.DEV) mount();
 or with no bundler, a script tag that mounts itself:
 
 ```html
-<script src="//unpkg.com/devknobs/dist/index.global.js"></script>
+<script src="//unpkg.com/@vinena/knobs/dist/index.global.js"></script>
 ```
 
 press `⇧K`, or click the handle on the right edge of the window, to open the
@@ -53,7 +53,7 @@ panel. react, next.js and the early script are in the docs.
 
 ## docs
 
-- [start](https://knobs.dev/docs/start): install devknobs and mount it in
+- [start](https://knobs.dev/docs/start): install @vinena/knobs and mount it in
   development only
 - [the panel](https://knobs.dev/docs/panel): open it, move it, search it, pin
   it and set its keys
@@ -90,7 +90,7 @@ a relative path is from the devknobs folder; absolute and `~` paths work too.
 the app may use any package manager: a pnpm app's link into its store is kept
 and put back as it was.
 
-`link` builds, then copies the package into the app's `node_modules/devknobs`
+`link` builds, then copies the package into the app's `node_modules/@vinena/knobs`
 and keeps the installed one beside it for `unlink` to put back. it is a copy,
 not a symlink: Turbopack refuses a package linked from outside the app, and
 other bundlers treat the real path as app source. restart the app's dev server

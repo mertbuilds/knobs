@@ -313,7 +313,7 @@ describe("loadBezel", () => {
     expect(loadBezel("iphone-18-pro.webp", () => told++)).toBe("loading");
     await Bun.sleep(0);
     expect(told).toBe(1);
-    const linked = "https://app.test/node_modules/devknobs/dist/bezels/iphone-18-pro.webp";
+    const linked = "https://app.test/node_modules/@vinena/knobs/dist/bezels/iphone-18-pro.webp";
     expect(asked).toEqual([
       new URL("../src/engine/bezels/iphone-18-pro.webp", import.meta.url).href,
       linked,
@@ -497,7 +497,7 @@ describe("the Duo's fold frames", () => {
     fakeLoading((src) => src.includes("node_modules") || src.endsWith("fold-006.webp"), asked);
     const images = await loadAll(["duo-fold/fold-000.webp", "duo-fold/fold-006.webp"]);
     expect(images.map((image) => image.src)).toEqual([
-      "https://app.test/node_modules/devknobs/dist/bezels/duo-fold/fold-000.webp",
+      "https://app.test/node_modules/@vinena/knobs/dist/bezels/duo-fold/fold-000.webp",
       new URL("../src/engine/bezels/duo-fold/fold-006.webp", import.meta.url).href,
     ]);
     expect(asked).toHaveLength(3);

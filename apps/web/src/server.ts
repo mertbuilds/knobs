@@ -1,5 +1,5 @@
 import handler from '@tanstack/react-start/server-entry';
-import earlyScript from 'devknobs/early?raw';
+import earlyScript from '@vinena/knobs/early?raw';
 import { initWorkersLogger } from 'evlog/workers';
 import { canonicalRedirect } from './lib/canonical.ts';
 import { paraglideMiddleware } from './paraglide/server.js';

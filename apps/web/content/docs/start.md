@@ -1,6 +1,6 @@
 ---
 title: start
-description: Install devknobs and mount it in development only.
+description: Install @vinena/knobs and mount it in development only.
 order: 1
 ---
 
@@ -11,7 +11,7 @@ want it on any site with no install? use the [chrome extension](/docs/extension)
 ## install
 
 ```sh
-npm i -D devknobs
+npm i -D @vinena/knobs
 ```
 
 or let your agent do it: the copy setup prompt button on the home page gives claude code, codex or cursor the steps to install it and mount it in development only.
@@ -23,16 +23,16 @@ pick one. all of them are for dev only, so gate them yourself.
 a plain page, no bundler. it mounts itself:
 
 ```html
-<script src="//unpkg.com/devknobs/dist/index.global.js"></script>
+<script src="//unpkg.com/@vinena/knobs/dist/index.global.js"></script>
 ```
 
 with a bundler:
 
 ```js
-if (import.meta.env.DEV) import('devknobs').then(({ mount }) => mount());
+if (import.meta.env.DEV) import('@vinena/knobs').then(({ mount }) => mount());
 ```
 
-in react, render `<DevKnobs />` from `devknobs/react` once, in development only. it renders nothing and mounts the knobs on its first effect. a static import stays in the production bundle even behind a dev check, so in next.js load it with `dynamic()` behind the check.
+in react, render `<DevKnobs />` from `@vinena/knobs/react` once, in development only. it renders nothing and mounts the knobs on its first effect. a static import stays in the production bundle even behind a dev check, so in next.js load it with `dynamic()` behind the check.
 
 ## open it
 
@@ -45,7 +45,7 @@ the knobs live in `sessionStorage`, so they survive reloads and go away with the
 a page that reads a media query, the time or the user agent while it boots, before devknobs mounts, only sees the knob if the patch is already in place. put this first in `<head>`, in development only:
 
 ```html
-<script src="//unpkg.com/devknobs/dist/early.global.js"></script>
+<script src="//unpkg.com/@vinena/knobs/dist/early.global.js"></script>
 ```
 
 ## from code

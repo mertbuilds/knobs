@@ -4,8 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 const root = join(import.meta.dir, '..');
 // `dist/` is what Chrome loads; a work in progress builds elsewhere: `bun scripts/build.ts <dir>`.
 const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
-// devknobs' built package: run `pnpm --filter devknobs build` first (turbo does).
-const devknobs = dirname(Bun.resolveSync('devknobs', root));
+// devknobs' built package: run `pnpm --filter @vinena/knobs build` first (turbo does).
+const devknobs = dirname(Bun.resolveSync('@vinena/knobs', root));
 
 await rm(dist, { force: true, recursive: true });
 

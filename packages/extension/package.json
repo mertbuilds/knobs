@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "devknobs": "workspace:*"
+    "@vinena/knobs": "workspace:*"
   },
   "devDependencies": {
     "@knobs/config": "workspace:*",

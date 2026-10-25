@@ -83,7 +83,7 @@ file can, the place is looked up in the source the map carries.
 grab is adapted from [react-grab](https://github.com/aidenybai/react-grab) and
 reads React's internals through [bippy](https://github.com/aidenybai/bippy),
 both by Aiden Bai and MIT, see
-[THIRD_PARTY_NOTICES.md](https://github.com/mertbuilds/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md).
+[THIRD_PARTY_NOTICES.md](https://github.com/vinenastudio/knobs/blob/main/packages/devknobs/THIRD_PARTY_NOTICES.md).
 
 ## migrating from react-grab
 

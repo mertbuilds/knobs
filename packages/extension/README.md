@@ -21,7 +21,7 @@ What it does, how to install it, what Chrome sets for real and the permissions a
 ## Build and load
 
 ```sh
-pnpm --filter devknobs build
+pnpm --filter @vinena/knobs build
 pnpm --filter @knobs/extension build
 ```
 

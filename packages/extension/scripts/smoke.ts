@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { type DevknobsStatePatch, PRESETS } from 'devknobs';
+import { type DevknobsStatePatch, PRESETS } from '@vinena/knobs';
 import { type Browser, chromium, type Page, type Worker } from 'playwright-core';
 import type { KnobState } from '../src/knobs.ts';
 
@@ -1437,7 +1437,7 @@ async function pageOwnCopy() {
   const forwarded = await tab.evaluate(async () => {
     // The page's url for the module build, which TypeScript cannot resolve from here.
     const at = '/devknobs/index.js';
-    const own: typeof import('devknobs') = await import(at);
+    const own: typeof import('@vinena/knobs') = await import(at);
     const before = window.devknobs!.getState().scheme;
     own.setState({ scheme: 'dark' });
     const ready = await own.ready().then(
