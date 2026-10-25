@@ -299,5 +299,6 @@
   "docs_previous": "previous",
   "docs_next": "next",
   "docs_not_found": "There is no docs page here.",
-  "docs_not_found_link": "Go to the start"
+  "docs_not_found_link": "Go to the start",
+  "docs_full_reference": "full reference for agents"
 }

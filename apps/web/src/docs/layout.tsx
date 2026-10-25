@@ -17,6 +17,10 @@ const NAV = '@media (min-width: 800px)';
 const TOC = '@media (min-width: 1200px)';
 
 const styles = create({
+  // The way to the whole text, set apart below the pages.
+  agents: {
+    marginTop: spacing.s4,
+  },
   body: {
     columnGap: spacing.s8,
     display: {
@@ -229,7 +233,7 @@ const styles = create({
   },
 });
 
-/** One list of the pages, the open one marked by its ground, not its weight. */
+/** One list of the pages, the open one marked by its ground, not its weight, then the full text. */
 function PageList({ current, menu = false }: { current: string | undefined; menu?: boolean }) {
   return (
     <ul {...props(styles.list, menu && styles.menuList)}>
@@ -248,6 +252,12 @@ function PageList({ current, menu = false }: { current: string | undefined; menu
           </li>
         );
       })}
+      {/* A text file, not a route: a plain link, out of the app. */}
+      <li {...props(styles.agents)}>
+        <a href="/llms-full.txt" {...props(styles.item, defaultMarker())}>
+          <span {...props(styles.itemText)}>{m.docs_full_reference()}</span>
+        </a>
+      </li>
     </ul>
   );
 }

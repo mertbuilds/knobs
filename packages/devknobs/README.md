@@ -53,25 +53,29 @@ panel. react, next.js and the early script are in the docs.
 
 ## docs
 
-- [start](https://knobs.dev/docs/start): install, usage, the api, options and
-  the early script
-- [the panel](https://knobs.dev/docs/panel): rows, search, keys, pinning,
-  settings, shortcuts and fresh mode
-- [knobs](https://knobs.dev/docs/knobs): every knob and how it is emulated, the
-  frame, and the clock on your server
-- [devices](https://knobs.dev/docs/devices): presets, mocks and bezels, the
-  phone's browser, touch, and how the iphone duo folds
-- [grab and inspect](https://knobs.dev/docs/grab): copy an element for an
-  agent, migrate from react-grab, see an element's css
-- [requests and storage](https://knobs.dev/docs/requests-and-storage): what
-  the page asks for and what it keeps, and storage presets
-- [agents](https://knobs.dev/docs/agents): drive the knobs from a coding agent,
-  and the agent skill
+- [start](https://knobs.dev/docs/start): install devknobs and mount it in
+  development only
+- [the panel](https://knobs.dev/docs/panel): open it, move it, search it, pin
+  it and set its keys
+- [knobs](https://knobs.dev/docs/knobs): every knob devknobs has and what it
+  does to the page
+- [devices](https://knobs.dev/docs/devices): phone, tablet and laptop presets,
+  with mocks, bezels and the phone's browser drawn around the page
+- [grab and inspect](https://knobs.dev/docs/grab): grab an element for a coding
+  agent, or inspect its box and css in the panel
+- [requests and storage](https://knobs.dev/docs/requests-and-storage): see
+  every request the page makes, and read, edit and save what it keeps
+- [agents](https://knobs.dev/docs/agents): let a coding agent drive the knobs,
+  wait for the page, grab what broke and fix it
 - [chrome extension](https://knobs.dev/docs/extension): the panel on any site,
-  with some knobs set for real
-- [limits and faq](https://knobs.dev/docs/limits): what cannot be faked from
-  inside a page
-- [privacy](https://knobs.dev/docs/privacy): what is kept and what is sent
+  with some knobs set for real by Chrome
+- [limits and faq](https://knobs.dev/docs/limits): what devknobs cannot fake
+  from inside a page, and common questions
+- [privacy](https://knobs.dev/docs/privacy): what the npm package, the
+  extension and knobs.dev keep, and what they send
+
+the full reference, every detail in one file, is at
+<https://knobs.dev/llms-full.txt>.
 
 ## development
 

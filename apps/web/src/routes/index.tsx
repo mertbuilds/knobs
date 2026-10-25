@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
 import { ChromeMark, GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
+import { CANONICAL_ORIGIN } from '../lib/canonical.ts';
 import { CodeBox } from '../lib/code-box.tsx';
 import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
@@ -16,6 +17,7 @@ import { Tour } from '../tour/tour.tsx';
 
 export const Route = createFileRoute('/')({
   component: import.meta.env.DEV ? DevPage : Landing,
+  head: () => ({ meta: [{ content: `${CANONICAL_ORIGIN}/`, property: 'og:url' }] }),
 });
 
 // Dev-only: a reference image in place of the page (`src/dev/reference.tsx`),

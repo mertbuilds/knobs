@@ -1,5 +1,5 @@
 /** The one host the site answers on. Everything else is sent here. */
-const CANONICAL_ORIGIN = 'https://knobs.dev';
+export const CANONICAL_ORIGIN = 'https://knobs.dev';
 const WWW_HOST = 'www.knobs.dev';
 
 /**

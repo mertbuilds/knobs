@@ -9,6 +9,7 @@
     "cf-typegen": "wrangler types",
     "deploy": "pnpm build && wrangler deploy",
     "dev": "vite dev",
+    "og": "node scripts/og.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
@@ -35,6 +36,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "devknobs": "workspace:*",
     "oxc-transform-react": "^0.148.0",
+    "playwright-core": "1.62.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "wrangler": "^4.128.0"
