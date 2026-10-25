@@ -48,10 +48,6 @@ const styles = create({
     fontFamily: font.family,
     fontSize: font.sizeSm,
   },
-  // A second choice beside a first: the faint text, like the copy button.
-  codeQuiet: {
-    color: colors.muted,
-  },
   // A long text, such as the install prompt, breaks instead of scrolling.
   codeWrap: {
     overflowWrap: 'anywhere',
@@ -122,8 +118,7 @@ const styles = create({
  * context, an old browser), the code is selected instead, ready to copy.
  * With `label`, the box shows the label in place of code too long to show,
  * the whole box one copy button, and shows the code only where the clipboard
- * refuses it. `quiet` draws it as the second choice beside a first one: its
- * text faint. `html` draws the code highlighted (the repo's own markup, never
+ * refuses it. `html` draws the code highlighted (the repo's own markup, never
  * a visitor's); the copy button still copies `code`.
  */
 export function CodeBox({
@@ -132,7 +127,6 @@ export function CodeBox({
   html,
   label,
   name,
-  quiet = false,
   style,
   wrap = false,
 }: {
@@ -141,7 +135,6 @@ export function CodeBox({
   html?: string | undefined;
   label?: string;
   name: string;
-  quiet?: boolean;
   style?: StyleXStyles;
   wrap?: boolean;
 }) {
@@ -194,14 +187,7 @@ export function CodeBox({
           onClick={copy}
           type="button"
         >
-          <span
-            {...props(
-              styles.codeText,
-              wrap && styles.codeWrap,
-              styles.codeLabel,
-              quiet && styles.codeQuiet,
-            )}
-          >
+          <span {...props(styles.codeText, wrap && styles.codeWrap, styles.codeLabel)}>
             {label}
           </span>
           <span {...props(styles.copy, styles.copyIcon)}>{icon}</span>
@@ -213,7 +199,7 @@ export function CodeBox({
   return (
     <div {...props(styles.code, style)}>
       <pre
-        {...props(styles.codeText, wrap && styles.codeWrap, quiet && styles.codeQuiet)}
+        {...props(styles.codeText, wrap && styles.codeWrap)}
         ref={text}
         {...(html === undefined
           ? { children: code }

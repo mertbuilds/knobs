@@ -9,7 +9,6 @@ import { ChromeMark, GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.t
 import { CodeBox } from '../lib/code-box.tsx';
 import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
-import { withKeys } from '../lib/keys.tsx';
 import { type PanelTour, usePanel } from '../lib/panel.ts';
 import { m } from '../paraglide/messages.js';
 import { openTour, watchKnobs } from '../tour/progress.ts';
@@ -78,25 +77,26 @@ const styles = create({
     color: colors.muted,
     marginInlineStart: 'auto',
   },
-  // The hero's call to action: the extension button, its one line beside it, wrapping under it
-  // on a narrow screen.
+  // The hero's two ways in, one row of equal height: the extension, then the setup prompt. On a
+  // narrow screen the prompt goes under the extension.
   cta: {
-    alignItems: 'center',
-    columnGap: spacing.s3,
+    alignItems: 'stretch',
     display: 'flex',
     flexWrap: 'wrap',
-    rowGap: spacing.s2,
+    gap: spacing.s2,
   },
-  // The page's one filled button, ink on the page's ground turned around. Its label's color is
-  // on `ctaLabel`: the theme's global `a` rules outrank StyleX's.
+  // The page's one filled button, ink on the page's ground turned around, the copy box's size: its
+  // padding, its text size and its line. Its label's color is on `ctaLabel`: the theme's global
+  // `a` rules outrank StyleX's.
   ctaButton: {
     alignItems: 'center',
     backgroundColor: colors.fg,
     borderRadius: radius.row,
-    columnGap: spacing.s2,
     display: 'inline-flex',
     flexShrink: 0,
+    fontSize: font.sizeSm,
     fontWeight: font.weightMedium,
+    lineHeight: '1.375rem',
     opacity: {
       ':hover': {
         '@media (hover: hover)': 0.88,
@@ -105,14 +105,14 @@ const styles = create({
       default: 1,
     },
     outlineColor: colors.muted,
-    outlineOffset: 2,
+    outlineOffset: 1,
     outlineStyle: {
       ':focus-visible': 'solid',
       default: 'none',
     },
     outlineWidth: 1,
-    paddingBlock: spacing.s2,
-    paddingInline: spacing.s4,
+    paddingBlock: spacing.s1,
+    paddingInline: spacing.s3,
     textDecoration: 'none',
     transitionDuration: '120ms',
     transitionProperty: 'opacity',
@@ -129,12 +129,6 @@ const styles = create({
     height: '1rem',
     width: '1rem',
   },
-  // The extension first, then the ways into an app's own code.
-  start: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: spacing.s3,
-  },
   // A button sizes to its content; this one fills the row it sits in.
   fill: {
     width: '100%',
@@ -149,33 +143,6 @@ const styles = create({
     fontSize: '0.8125rem',
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
-  },
-  hint: {
-    color: colors.muted,
-    fontSize: '0.8125rem',
-    margin: 0,
-  },
-  // The setup prompt, then "or" and the npm command, on one row, centered on it. Each box hugs
-  // its line; on a narrow screen the npm command and its "or" go under the prompt.
-  install: {
-    alignItems: 'center',
-    columnGap: spacing.s2,
-    display: 'flex',
-    flexWrap: 'wrap',
-    rowGap: spacing.s2,
-  },
-  // A box that shrinks to the row, never past it.
-  installBox: {
-    maxWidth: '100%',
-    minWidth: 0,
-  },
-  // "or" and the npm command, kept together, the box free to shrink to the width.
-  installOr: {
-    alignItems: 'center',
-    columnGap: spacing.s2,
-    display: 'flex',
-    maxWidth: '100%',
-    minWidth: 0,
   },
   // The footer's links' focus ring. Their color is set in app.css, past the theme's
   // global `a` rules.
@@ -278,25 +245,6 @@ function promptBox(name: string, style?: StyleXStyles) {
   );
 }
 
-/** How to install, agent first: the setup prompt, then the npm command after a quiet "or". */
-function installChoices() {
-  return (
-    <div {...props(styles.install)}>
-      {promptBox('install_prompt', styles.installBox)}
-      <div {...props(styles.installOr)}>
-        <span {...props(styles.hint)}>{m.install_or()}</span>
-        <CodeBox
-          code={m.install_command()}
-          copyLabel={m.copy_install()}
-          name="install"
-          quiet
-          style={styles.installBox}
-        />
-      </div>
-    </div>
-  );
-}
-
 // The tour, opened before the panel mounts and watching its knobs once it does.
 const TOUR: PanelTour = { open: openTour, watch: watchKnobs };
 
@@ -314,20 +262,15 @@ function Landing() {
           <GitHubButton />
         </div>
         <p {...props(styles.text)}>{m.hero_line()}</p>
-        <div {...props(styles.start)}>
-          <div {...props(styles.cta)}>
-            <a href={EXTENSION_URL} onClick={onExtension('hero')} {...props(styles.ctaButton)}>
-              <span {...props(styles.ctaLabel)}>
-                <ChromeMark style={styles.glyph} />
-                {m.extension_cta()}
-              </span>
-            </a>
-            <span {...props(styles.hint)}>{m.extension_line()}</span>
-          </div>
-          <p {...props(styles.hint)}>{m.install_app()}</p>
-          {installChoices()}
+        <div {...props(styles.cta)}>
+          <a href={EXTENSION_URL} onClick={onExtension('hero')} {...props(styles.ctaButton)}>
+            <span {...props(styles.ctaLabel)}>
+              <ChromeMark style={styles.glyph} />
+              {m.extension_cta()}
+            </span>
+          </a>
+          {promptBox('install_prompt')}
         </div>
-        <p {...props(styles.hint)}>{withKeys(m.hero_hint())}</p>
       </header>
 
       <Tour install={promptBox('install_prompt_tour', styles.fill)} />
