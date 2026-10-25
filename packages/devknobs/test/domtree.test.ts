@@ -278,6 +278,9 @@ describe("the tree as built", () => {
   let selected: [Node, string | null][];
   let copied: string[];
 
+  const GLOBALS = ["window", "document", "MutationObserver"] as const;
+  const saved = GLOBALS.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+
   beforeEach(() => {
     jest.useFakeTimers();
     outlined = [];
@@ -302,6 +305,11 @@ describe("the tree as built", () => {
     tree?.destroy();
     tree = null;
     jest.useRealTimers();
+    GLOBALS.forEach((name, index) => {
+      const descriptor = saved[index];
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    });
   });
 
   function start(): FakeNode {

@@ -54,11 +54,11 @@ function task(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 20));
 }
 
-const realObserver = globalThis.MutationObserver;
+const realObserver = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, "document");
-  if (realObserver) globalThis.MutationObserver = realObserver;
+  if (realObserver) Object.defineProperty(globalThis, "MutationObserver", realObserver);
   else Reflect.deleteProperty(globalThis, "MutationObserver");
 });
 
@@ -97,15 +97,19 @@ describe("equip", () => {
   test("waits for a page that has no root yet", () => {
     let grown: (() => void) | undefined;
     let disconnected = false;
-    globalThis.MutationObserver = class {
-      constructor(callback: () => void) {
-        grown = callback;
-      }
-      observe() {}
-      disconnect() {
-        disconnected = true;
-      }
-    } as unknown as typeof MutationObserver;
+    Object.defineProperty(globalThis, "MutationObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        constructor(callback: () => void) {
+          grown = callback;
+        }
+        observe() {}
+        disconnect() {
+          disconnected = true;
+        }
+      },
+    });
     const doc = fakeDocument("https://app.test/", false);
     equipped(fakeWindow(doc));
     expect(doc.styles).toEqual([]);
