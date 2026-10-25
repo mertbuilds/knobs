@@ -1,5 +1,9 @@
 # changelog
 
+## 0.5.1
+
+- published from vinenastudio/knobs on GitHub Actions through npm trusted publishing, with provenance. no code changes
+
 ## 0.5.0
 
 - first release as @vinena/knobs (was devknobs)
