@@ -3,6 +3,9 @@ import { createFileRoute } from '@tanstack/react-router';
 /** The self-hosted OpenPanel: its API under `/api`, the script at the root. */
 const ANALYTICS_HOST = 'https://analytics.vinena.studio';
 const SCRIPT = '/op1.js';
+/** The session recorder, which the self-hosted OpenPanel does not serve, so it comes from OpenPanel's own host. */
+const REPLAY_SCRIPT = '/op1-replay.js';
+const REPLAY_HOST = 'https://openpanel.dev';
 /**
  * Crawlers that run JavaScript reach this proxy too, and their visits inflate
  * every count. Their events are dropped before they reach OpenPanel; 200 so
@@ -13,8 +16,8 @@ const BOT_UA =
 
 /**
  * Reverse proxy for the analytics, so a blocker that knows the vendor's host
- * does not drop the page views. `/api/op/op1.js` is the script; everything else
- * is the event API.
+ * does not drop the page views. `/api/op/op1.js` is the script and
+ * `/api/op/op1-replay.js` the session recorder; everything else is the event API.
  */
 async function proxy({ request }: { request: Request }): Promise<Response> {
   const url = new URL(request.url);
@@ -26,7 +29,11 @@ async function proxy({ request }: { request: Request }): Promise<Response> {
     }
   }
   const upstream = new URL(
-    path === SCRIPT ? `${ANALYTICS_HOST}${SCRIPT}` : `${ANALYTICS_HOST}/api${path}${url.search}`,
+    path === SCRIPT
+      ? `${ANALYTICS_HOST}${SCRIPT}`
+      : path === REPLAY_SCRIPT
+        ? `${REPLAY_HOST}${REPLAY_SCRIPT}`
+        : `${ANALYTICS_HOST}/api${path}${url.search}`,
   );
   const headers = new Headers(request.headers);
   headers.set('host', upstream.host);

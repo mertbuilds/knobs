@@ -38,17 +38,22 @@ function DevFoldTune() {
   ) : null;
 }
 
+/** The share of sessions recorded for replay. Inputs are masked; `[data-replay-block]` parts are left out. */
+const REPLAY_SAMPLE_RATE = 0.02;
+
 /**
  * Loads the analytics through the site's own `/api/op` proxy. Page views only,
  * no link or attribute tracking, and nothing at all from an automated browser
  * or from the copy of the page devknobs loads in a device's frame, which would
- * count every device pick as a second page view.
+ * count every device pick as a second page view. A small share of sessions is
+ * recorded; the recorder is a second script, `/api/op/op1-replay.js`.
  * Without a client id the script is never injected, so analytics is simply off.
  */
 function analyticsScript(clientId: string): string {
+  const replay = `sessionReplay:{enabled:true,sampleRate:${REPLAY_SAMPLE_RATE},maskAllInputs:true,blockSelector:'[data-replay-block]',scriptUrl:'/api/op/op1-replay.js'}`;
   return (
     "if(location.hostname==='knobs.dev'&&!navigator.webdriver&&window.top===window){window.op=window.op||function(){(window.op.q=window.op.q||[]).push(arguments)};" +
-    `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false});` +
+    `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false,${replay}});` +
     "var s=document.createElement('script');s.src='/api/op/op1.js';s.async=true;document.head.appendChild(s)}"
   );
 }

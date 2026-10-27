@@ -1,6 +1,7 @@
 import { colors } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import { m } from '../paraglide/messages.js';
+import { track } from './analytics.ts';
 
 const VINENA =
   'https://vinena.studio/?utm_source=knobs.dev&utm_medium=referral&utm_campaign=footer';
@@ -26,7 +27,13 @@ const styles = create({
 // The studio's line: muted words, then its wordmark in the link's own color.
 export function CraftedAtVinena({ style }: { style?: StyleXStyles | undefined }) {
   return (
-    <a href={VINENA} rel="noreferrer" target="_blank" {...props(styles.link, style)}>
+    <a
+      href={VINENA}
+      onClick={() => track('outbound_click', { placement: 'footer', to: 'vinena.studio' })}
+      rel="noreferrer"
+      target="_blank"
+      {...props(styles.link, style)}
+    >
       <span {...props(styles.lead)}>{m.link_vinena_before()}</span>
       <svg
         aria-label={m.link_vinena()}
