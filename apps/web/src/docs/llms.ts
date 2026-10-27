@@ -84,6 +84,7 @@ ${pages
 ## Optional
 
 - [npm](https://www.npmjs.com/package/@vinena/knobs): the @vinena/knobs package
+- [Chrome Web Store](https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj): the knobs extension
 - [GitHub](https://github.com/vinenastudio/knobs): the source of the package, the extension and this site
 `;
 

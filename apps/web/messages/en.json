@@ -3,6 +3,7 @@
   "app_name": "knobs",
   "hero_line": "See your site on an iPhone or a Pixel, tomorrow morning, in Arabic or in dark mode, from a panel inside the page",
   "extension_cta": "Add to Chrome",
+  "extension_line": "The extension puts the panel on any site, with no change to its code. The setup prompt adds it to your own project.",
   "copy_done": "Copied",
   "copy_install_prompt": "Copy setup prompt",
   "copy_code": "Copy code",

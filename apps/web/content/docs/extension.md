@@ -10,17 +10,11 @@ the same devknobs panel on any page you open, with no change to the site's code.
 
 ## install
 
-it is coming to the chrome web store. until then, build it from a clone of the repo and load it unpacked. you need node 24 or later, pnpm and [bun](https://bun.sh).
+install it from the [chrome web store](https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj). it works in Chrome and Edge. tabs open before the install get the panel at their next load.
 
-```sh
-git clone https://github.com/vinenastudio/knobs.git
-cd knobs
-pnpm install
-pnpm --filter @vinena/knobs build
-pnpm --filter @knobs/extension build
-```
+## with the npm package
 
-then open `chrome://extensions`, turn on developer mode, press load unpacked and pick `packages/extension/dist`. tabs open before the install get the panel at their next load.
+the npm package is for your own app, in any browser. the extension is for any site, in Chrome and Edge. if the page runs devknobs too, the extension's panel wins, and the page's calls such as `setState` go to it.
 
 ## what Chrome sets for real
 
@@ -33,8 +27,6 @@ the npm package fakes every knob inside the page. the extension hands these to C
 - user agent: every request of the tab carries it, so servers see it too.
 
 while text size, offline, a preference or the viewport is set, Chrome shows its "started debugging this browser" bar. to avoid it, turn off "real browser settings" in the panel's settings, and those knobs work in the page as with the npm package. the user agent still reaches servers.
-
-if the page runs devknobs too, the extension's panel wins, and the page's calls such as `setState` go to it.
 
 ## permissions
 

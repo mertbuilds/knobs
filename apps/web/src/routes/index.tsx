@@ -56,9 +56,11 @@ const DOCS = '/docs';
 
 const EXTENSION_DOCS = '/docs/extension';
 
-// Where the hero's "Add to Chrome" goes. The docs page while the store listing is in review;
-// it becomes the Chrome Web Store URL once the listing is approved.
-const EXTENSION_URL = EXTENSION_DOCS;
+const EXTENSION_STORE =
+  'https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj';
+
+// Where the hero's "Add to Chrome" goes: the extension's Chrome Web Store listing.
+const EXTENSION_URL = EXTENSION_STORE;
 
 const onExtension = (placement: 'footer' | 'hero') => () =>
   track('extension_clicked', { placement });
@@ -178,6 +180,12 @@ const styles = create({
     flexDirection: 'column',
     gap: spacing.s4,
   },
+  // A quiet line under the hero's buttons.
+  note: {
+    color: colors.muted,
+    fontSize: '0.8125rem',
+    margin: 0,
+  },
   // Small and calm, like the panel's own labels.
   sectionHeading: {
     color: colors.muted,
@@ -264,7 +272,13 @@ function Landing() {
         </div>
         <p {...props(styles.text)}>{m.hero_line()}</p>
         <div {...props(styles.cta)}>
-          <a href={EXTENSION_URL} onClick={onExtension('hero')} {...props(styles.ctaButton)}>
+          <a
+            href={EXTENSION_URL}
+            onClick={onExtension('hero')}
+            rel="noreferrer"
+            target="_blank"
+            {...props(styles.ctaButton)}
+          >
             <span {...props(styles.ctaLabel)}>
               <ChromeMark style={styles.glyph} />
               {m.extension_cta()}
@@ -272,6 +286,7 @@ function Landing() {
           </a>
           {promptBox('install_prompt')}
         </div>
+        <p {...props(styles.note)}>{m.extension_line()}</p>
       </header>
 
       <Tour install={promptBox('install_prompt_tour', styles.fill)} />
