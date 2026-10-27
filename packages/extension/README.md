@@ -2,6 +2,8 @@
 
 A Chrome extension that puts the devknobs panel on any page, the same panel as the npm package, with some of its knobs set for real through the Chrome DevTools Protocol (`chrome.debugger`) in place of devknobs' emulation in the page.
 
+Install it from the Chrome Web Store: <https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj>. The build steps below are for development.
+
 What it does, how to install it, what Chrome sets for real and the permissions are in the user docs: <https://knobs.dev/docs/extension>. The full reference is at <https://knobs.dev/llms-full.txt>. This file is for working on it.
 
 ## How it fits together
