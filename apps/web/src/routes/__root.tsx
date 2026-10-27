@@ -40,6 +40,12 @@ function DevFoldTune() {
 
 /** The share of sessions recorded for replay. Inputs are masked; `[data-replay-block]` parts are left out. */
 const REPLAY_SAMPLE_RATE = 0.02;
+/**
+ * How often the recorder sends what it has, in milliseconds. It also takes a
+ * full page snapshot each time, so a long interval keeps replays small; it
+ * still sends on leaving the page.
+ */
+const REPLAY_FLUSH_INTERVAL_MS = 60_000;
 
 /**
  * Loads the analytics through the site's own `/api/op` proxy. Page views only,
@@ -50,7 +56,7 @@ const REPLAY_SAMPLE_RATE = 0.02;
  * Without a client id the script is never injected, so analytics is simply off.
  */
 function analyticsScript(clientId: string): string {
-  const replay = `sessionReplay:{enabled:true,sampleRate:${REPLAY_SAMPLE_RATE},maskAllInputs:true,blockSelector:'[data-replay-block]',scriptUrl:'/api/op/op1-replay.js'}`;
+  const replay = `sessionReplay:{enabled:true,sampleRate:${REPLAY_SAMPLE_RATE},flushIntervalMs:${REPLAY_FLUSH_INTERVAL_MS},maskAllInputs:true,maskAllText:false,blockSelector:'[data-replay-block]',scriptUrl:'/api/op/op1-replay.js'}`;
   return (
     "if(location.hostname==='knobs.dev'&&!navigator.webdriver&&window.top===window){window.op=window.op||function(){(window.op.q=window.op.q||[]).push(arguments)};" +
     `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false,${replay}});` +
