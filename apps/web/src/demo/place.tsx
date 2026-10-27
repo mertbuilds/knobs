@@ -462,7 +462,14 @@ function Face() {
     };
   }, [inView, calm]);
   return (
-    <svg {...props(styles.clock)} aria-hidden="true" ref={ref} viewBox="-50 -50 100 100">
+    // Redrawn every frame, so session replays leave it out (`data-replay-block`).
+    <svg
+      {...props(styles.clock)}
+      aria-hidden="true"
+      data-replay-block=""
+      ref={ref}
+      viewBox="-50 -50 100 100"
+    >
       <circle {...props(styles.face)} r={49} />
       {Array.from({ length: 12 }, (_, index) => (
         <line

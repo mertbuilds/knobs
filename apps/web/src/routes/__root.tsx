@@ -38,17 +38,33 @@ function DevFoldTune() {
   ) : null;
 }
 
+/** The share of sessions recorded for replay. Inputs are masked; `[data-replay-block]` parts are left out. */
+const REPLAY_SAMPLE_RATE = 0.02;
+/**
+ * How often the recorder sends what it has, in milliseconds. It also takes a
+ * full page snapshot each time, so a long interval keeps replays small; it
+ * still sends on leaving the page.
+ */
+const REPLAY_FLUSH_INTERVAL_MS = 60_000;
+/**
+ * Events per replay chunk. Chunks go out without keepalive, so the flush on
+ * leaving the page can be lost; small chunks send a visit's start while it lasts.
+ */
+const REPLAY_MAX_EVENTS_PER_CHUNK = 50;
+
 /**
  * Loads the analytics through the site's own `/api/op` proxy. Page views only,
  * no link or attribute tracking, and nothing at all from an automated browser
  * or from the copy of the page devknobs loads in a device's frame, which would
- * count every device pick as a second page view.
+ * count every device pick as a second page view. A small share of sessions is
+ * recorded; the recorder is a second script, `/api/op/op1-replay.js`.
  * Without a client id the script is never injected, so analytics is simply off.
  */
 function analyticsScript(clientId: string): string {
+  const replay = `sessionReplay:{enabled:true,sampleRate:${REPLAY_SAMPLE_RATE},flushIntervalMs:${REPLAY_FLUSH_INTERVAL_MS},maxEventsPerChunk:${REPLAY_MAX_EVENTS_PER_CHUNK},maskAllInputs:true,maskAllText:false,blockSelector:'[data-replay-block]',scriptUrl:'/api/op/op1-replay.js'}`;
   return (
     "if(location.hostname==='knobs.dev'&&!navigator.webdriver&&window.top===window){window.op=window.op||function(){(window.op.q=window.op.q||[]).push(arguments)};" +
-    `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false});` +
+    `window.op('init',{clientId:'${clientId}',apiUrl:'/api/op',trackScreenViews:true,trackOutgoingLinks:false,trackAttributes:false,${replay}});` +
     "var s=document.createElement('script');s.src='/api/op/op1.js';s.async=true;document.head.appendChild(s)}"
   );
 }
