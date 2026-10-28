@@ -217,8 +217,8 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
       const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
       const inside = { x: x - page.x, y: y - page.y };
       if (inside.y < 0) return { x, y, color: top };
-      // Right of the page, the Duo's column, takes the page's own color.
-      if (inside.x >= page.width) return { x, y, color: background };
+      // Beside the page, the Duo's column takes the page's own color.
+      if (inside.x < 0 || inside.x >= page.width) return { x, y, color: background };
       if (inside.y >= page.height) return { x, y, color: bottom };
       const across = Math.min(Math.max(inside.x, 0), page.width - 1);
       return { x, y, color: colorAt(doc, view, across, inside.y, base) ?? background };
@@ -263,10 +263,12 @@ export function screenFill(look: Look, bars: Bars, page: Rect | null, height: nu
   const end = ((page.y + page.height) / height) * 100;
   const { background: middle, bottom } = look;
   const strips = `linear-gradient(to bottom, ${top} ${start}%, ${middle} ${start}%, ${middle} ${end}%, ${bottom} ${end}%)`;
-  if (!bars.column) return strips;
-  // The Duo's cover column takes the page's color all the way down, over the strips.
-  const right = ((page.x + page.width) / turn(bars.screen, bars.orientation).width) * 100;
-  return `linear-gradient(to right, transparent ${right}%, ${middle} ${right}%), ${strips}`;
+  const W = turn(bars.screen, bars.orientation).width;
+  const [left, right] = [(page.x / W) * 100, ((page.x + page.width) / W) * 100];
+  if (left <= 0 && right >= 100) return strips;
+  // The Duo cover's column takes the page's color all the way down, over the strips.
+  const column = `linear-gradient(to right, ${middle} ${left}%, transparent ${left}%, transparent ${right}%, ${middle} ${right}%)`;
+  return `${column}, ${strips}`;
 }
 
 /** Can the frame's page be read? Not on another origin, or behind an error page. */

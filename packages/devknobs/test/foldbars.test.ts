@@ -33,7 +33,7 @@ describe("the bars drawn into the picture of a screen", () => {
       { rect: { x: 395.5, y: 254.2, width: 48, height: 48 }, radius: 24 },
       { rect: { x: 395.5, y: 544, width: 48, height: 102 }, radius: 24 },
     ]);
-    expect(glass("open", "portrait", "compact", false)?.map((pane) => pane.rect.y)).toEqual([38, 38, 38, 38]);
+    expect(glass("open", "portrait", "compact", false)?.map((pane) => pane.rect.y)).toEqual([20, 20, 20, 20]);
   });
 
   test("take the Duo's own layout for any other the knob asks for", () => {
@@ -54,8 +54,9 @@ describe("the bars drawn into the picture of a screen", () => {
   });
 
   test("held across, the cover keeps its column and the inner screen its row at the top", () => {
-    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([38, 38, 38, 38]);
+    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([20, 20, 20, 20]);
     expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([386, 193.8, 254.2, 332]);
+    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.x)).toEqual([107, 22.5, 22.5, 22.5]);
   });
 
   test("are not glass in Chrome, whose bars hide the page", () => {

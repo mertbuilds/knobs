@@ -130,6 +130,22 @@ describe("readLook", () => {
     const colors = readLook(frame, probe).under.map((sample) => sample.color);
     expect(colors).toEqual([RED, RED, BLUE, GREEN]);
   });
+
+  test("samples beside the page, in the Duo cover's column, read the page's own color", () => {
+    const { frame } = headerPage(580, true);
+    const probe = {
+      page: { x: 0, y: 0, width: 382, height: 580 },
+      points: [
+        { x: 419.5, y: 50 },
+        { x: 419.5, y: 622 },
+        { x: 191, y: 622 },
+      ],
+    };
+    const colors = readLook(frame, probe).under.map((sample) => sample.color);
+    expect(colors).toEqual([BLUE, BLUE, GREEN]);
+    const across = { ...probe, page: { x: 84, y: 0, width: 594, height: 368 }, points: [{ x: 46.5, y: 50 }] };
+    expect(readLook(frame, across).under.map((sample) => sample.color)).toEqual([BLUE]);
+  });
 });
 
 function look(over: Partial<Look> = {}): Look {
@@ -190,12 +206,13 @@ describe("screenFill", () => {
       const at = viewportOf(cover, orientation, "compact", false);
       if (!bars) throw new Error("no bars");
       const [W, H] = orientation === "portrait" ? [466, 678] : [678, 466];
-      const fill = screenFill(look({ top: BLUE, background: BLUE, bottom: GREEN }), bars, at, H);
-      const right = (at.width / W) * 100;
+      const fill = screenFill(look({ top: RED, background: BLUE, bottom: GREEN }), bars, at, H);
+      const left = (at.x / W) * 100;
+      const right = ((at.x + at.width) / W) * 100;
       const end = (at.height / H) * 100;
       expect(fill).toBe(
-        `linear-gradient(to right, transparent ${right}%, ${BLUE} ${right}%), ` +
-          `linear-gradient(to bottom, ${BLUE} 0%, ${BLUE} 0%, ${BLUE} ${end}%, ${GREEN} ${end}%)`,
+        `linear-gradient(to right, ${BLUE} ${left}%, transparent ${left}%, transparent ${right}%, ${BLUE} ${right}%), ` +
+          `linear-gradient(to bottom, ${RED} 0%, ${BLUE} 0%, ${BLUE} ${end}%, ${GREEN} ${end}%)`,
       );
     }
   });

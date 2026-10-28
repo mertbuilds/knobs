@@ -1,4 +1,4 @@
-import { layoutOf, layoutOptions, platformOf } from "../engine/browserui";
+import { layoutOf, layoutOptions, platformOf, runsUnderBars } from "../engine/browserui";
 import { isCustomColor, parseColor, toHex } from "../engine/color";
 import { DEVICES, deviceOf, formId, formOf, hasTouch, POSTURES } from "../engine/devices";
 import { DPR_MAX, DPR_MIN, frameForced, knobFrame, SIZE_MAX, SIZE_MIN } from "../engine/frame";
@@ -201,10 +201,11 @@ function safariShown(state: DevknobsState): boolean {
 
 /**
  * Is Safari drawn on a phone held sideways? Only there does edge to edge
- * change the frame: upright, the page is always Safari's real viewport.
+ * change the frame: upright, the page is always Safari's real viewport, and
+ * the Duo's page is never under its bars.
  */
 function safariSideways(state: DevknobsState): boolean {
-  return safariShown(state) && state.orientation === "landscape";
+  return safariShown(state) && state.orientation === "landscape" && runsUnderBars(screenNow(state));
 }
 
 export const EDGE_TO_EDGE: Knob = {

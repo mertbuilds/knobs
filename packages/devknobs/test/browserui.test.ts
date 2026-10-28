@@ -404,7 +404,12 @@ describe("bars", () => {
     const upright = cover("portrait", false);
     expect(upright?.status).toBeNull();
     // Under the camera hole, on the column's center line 46.5 in from the right.
-    expect(upright?.column).toEqual({ x: 419.5, time: { y: 103.5, size: 16 }, ring: { y: 139, radius: 18.9, stroke: 3.5 } });
+    expect(upright?.column).toEqual({
+      x: 419.5,
+      strip: false,
+      time: { y: 103.5, size: 16 },
+      ring: { y: 139, radius: 18.9, stroke: 3.5 },
+    });
     const boxes = upright?.shapes.map(({ x, y, width, height }) => [x, y, width, height]);
     expect(boxes).toEqual([
       // The address, floating at the bottom of the page.
@@ -420,27 +425,47 @@ describe("bars", () => {
       ["plus", "tabs"],
     ]);
     // Its scroll edge stays over the page.
-    expect(upright?.fade?.width).toBe(382);
+    expect(upright?.fade).toMatchObject({ x: 0, width: 382 });
     // Minimized, the pill in the middle of the page, the status where it was.
     const mini = cover("portrait", true);
     expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y])).toEqual([["pill", 191, 632]]);
     expect(mini?.column).toEqual(upright?.column ?? null);
-    // Across, the camera hole is at the top left, and the time and ring go up by its room.
+    // Across, the camera hole turns to the top left, and the column goes with it, the page right of it.
     const across = cover("landscape", false);
-    expect(across?.column).toMatchObject({ x: 631.5, time: { y: 44.5 }, ring: { y: 80 } });
-    expect(across?.shapes[0]).toMatchObject({ x: 23, y: 386, width: 548 });
+    expect(across?.column).toMatchObject({ x: 46.5, time: { y: 103.5 }, ring: { y: 139 } });
+    expect(viewportOf(device("iphone-duo-closed"), "landscape", "compact", false)).toEqual({ x: 84, y: 0, width: 594, height: 368 });
+    expect(across?.shapes.map(({ x, y, width, height }) => [x, y, width, height])).toEqual([
+      [107, 386, 548, 48],
+      [22.5, 193.8, 48, 48],
+      [22.5, 254.2, 48, 48],
+      [22.5, 332, 48, 102],
+    ]);
+    expect(across?.fade).toMatchObject({ x: 84, width: 594 });
+    expect(cover("landscape", true)?.shapes.map((shape) => [shape.kind, shape.x])).toEqual([["pill", 84 + 297]]);
   });
 
-  test("the Duo's inner screen keeps a status bar and Safari's row at the top, held either way", () => {
+  test("the Duo's inner screen keeps its status at the top right and Safari's row left of it, held either way", () => {
     for (const orientation of ["portrait", "landscape"] as const) {
       const bars = barsOf(device("iphone-duo-open"), orientation, "compact", false);
       const W = orientation === "portrait" ? 669 : 951;
-      expect(bars?.column).toBeNull();
-      expect(bars?.status).toMatchObject({ time: { x: 50, y: 20, size: 17 }, icons: { x: W - 44, y: 20 }, large: false });
-      expect(bars?.shapes.map((shape) => shape.y)).toEqual([38, 38, 38, 38]);
-      expect(Math.max(...(bars?.shapes ?? []).map((shape) => shape.y + shape.height))).toBeLessThanOrEqual(84);
+      expect(bars?.status).toBeNull();
+      expect(bars?.column).toEqual({
+        x: W - 47.9,
+        strip: true,
+        time: { y: 20, size: 15 },
+        ring: { y: 57.5, radius: 18.2, stroke: 2.9 },
+      });
+      const shapes = bars?.shapes ?? [];
+      expect(shapes.map((shape) => shape.y)).toEqual([20, 20, 20, 20]);
+      // The row ends left of the status, and the ring with its dots ends above the page.
+      expect(Math.max(...shapes.map((shape) => shape.x + shape.width))).toBeLessThanOrEqual(W - 96 - 10);
+      expect(57.5 + 18.2 + 2.2).toBeLessThan(84);
+      // No two of the row's capsules overlap.
+      const spans = shapes.map((shape) => [shape.x, shape.x + shape.width]).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+      for (let at = 1; at < spans.length; at++) expect(spans[at]?.[0] ?? 0).toBeGreaterThan(spans[at - 1]?.[1] ?? 0);
       const mini = barsOf(device("iphone-duo-open"), orientation, "compact", true);
       expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y])).toEqual([["pill", W / 2, 4]]);
+      expect(mini?.column).toEqual(bars?.column ?? null);
     }
   });
 
