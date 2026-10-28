@@ -21,6 +21,15 @@ import { HOST_RESET, holdInTopLayer, LAYER } from "../engine/toplayer";
  */
 const Z_INDEX = 2147483646;
 
+/** The host covers the window, whatever a page's popover rules give it. */
+const HOST_CSS = `
+:host([popover]) {
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  pointer-events: none !important;
+}`;
+
 /** Space between a box and its label or toast, in px. */
 const GAP = 6;
 
@@ -494,9 +503,9 @@ function place(node: HTMLElement, shape: readonly number[], ratio: number): void
 export function createOverlay(quiet = false, model = false): BoxOverlay {
   const host = document.createElement("div");
   host.setAttribute("data-devknobs", "grab");
-  host.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z_INDEX}`;
+  host.style.cssText = `position:fixed;inset:0;width:auto;height:auto;pointer-events:none;z-index:${Z_INDEX}`;
   const root = host.attachShadow({ mode: "open" });
-  addStyle(root, HOST_RESET + CSS);
+  addStyle(root, HOST_RESET + HOST_CSS + CSS);
   const layer = document.createElement("div");
   layer.className = "layer";
   const glow = document.createElement("div");

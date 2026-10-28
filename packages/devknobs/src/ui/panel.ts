@@ -92,12 +92,12 @@ export interface Panel {
  * the panel is doing, so it never takes a pointer: the stylesheet hands that
  * back to the handle and to a panel that is out, and every other pixel of the
  * box belongs to the page underneath. The side it lives on anchors it to the
- * left or the right edge, and the other edges stay `auto`, whatever a popover
- * would give them. Its z-index puts it over the page and grab's boxes where
+ * left or the right edge, and the other edges and its size stay `auto` until
+ * set, whatever a popover would give them. Its z-index puts it over the page and grab's boxes where
  * the browser has no top layer for it.
  */
 export const HOST_STYLE =
-  "position:fixed;top:0;right:auto;bottom:auto;left:auto;z-index:2147483647;pointer-events:none";
+  "position:fixed;top:0;right:auto;bottom:auto;left:auto;width:auto;height:auto;z-index:2147483647;pointer-events:none";
 
 /**
  * Build the panel, put it on the page and keep it in step with the engine. The

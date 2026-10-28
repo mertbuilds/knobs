@@ -1,5 +1,6 @@
 import { colors, font, radius, shadow, spacing } from '@knobs/ui/tokens.stylex';
 import { create, firstThatWorks, props } from '@stylexjs/stylex';
+import type { TopLayerHold } from '@vinena/knobs';
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from 'lucide-react';
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -323,21 +324,6 @@ function copyText(
 
 function clock(date: Date): string {
   return date.toLocaleTimeString([], { hour12: false });
-}
-
-/** Into the browser's top layer, over the device's mat and the panel. A manual popover closes no other. */
-function raise(card: HTMLElement): void {
-  if (typeof card.showPopover !== 'function') {
-    return;
-  }
-  try {
-    card.setAttribute('popover', 'manual');
-    if (!card.matches(':popover-open')) {
-      card.showPopover();
-    }
-  } catch {
-    card.removeAttribute('popover');
-  }
 }
 
 const styles = create({
@@ -971,7 +957,18 @@ export default function FoldTunePanel() {
       return;
     }
     el.style.transform = `translate(${place.x}px, ${place.y}px)`;
-    raise(el);
+    // Into the browser's top layer, over the device's mat and the panel, in the order devknobs keeps.
+    let hold: TopLayerHold | null = null;
+    let gone = false;
+    void import('@vinena/knobs').then(({ holdInTopLayer, LAYER }) => {
+      if (!gone) {
+        hold = holdInTopLayer(el, LAYER.guide);
+      }
+    });
+    return () => {
+      gone = true;
+      hold?.release();
+    };
   }, []);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {

@@ -10,8 +10,11 @@ import { ensureStyle, removeStyle } from "./style";
  * Without popovers each host stays a plain layer, its z-index its order.
  */
 
-/** Where each host goes, the lowest first: grab's boxes, then the panel, then the touch cursor. */
-export const LAYER = { overlay: 0, panel: 1, touch: 2 } as const;
+/**
+ * Where each host goes, the lowest first: grab's boxes, then the panel, then
+ * a guide that points at the panel, such as a tour of it, then the touch cursor.
+ */
+export const LAYER = { overlay: 0, panel: 1, guide: 2, touch: 3 } as const;
 
 /**
  * What a host's shadow root holds, so that none of the look a popover comes
@@ -38,6 +41,20 @@ export const HOST_RESET = `
   scale: none !important;
   rotate: none !important;
   filter: none !important;
+  backdrop-filter: none !important;
+  clip-path: none !important;
+  mask: none !important;
+  contain: none !important;
+  container-type: normal !important;
+  content-visibility: visible !important;
+  visibility: visible !important;
+  perspective: none !important;
+  will-change: auto !important;
+  zoom: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  position-anchor: auto !important;
+  position-area: none !important;
   transition: none !important;
   animation: none !important;
 }`;
@@ -221,8 +238,9 @@ function unwatch(): void {
 
 /**
  * Put `host`, already in the page, in the top layer at its `rank`, and the
- * hosts above it in again over it. Where the browser has no popovers it
- * stays where it is, and nothing is watched.
+ * hosts above it in again over it. Where the browser has no popovers, or
+ * will not show this one, it stays where it is, no popover, and nothing is
+ * watched for it.
  */
 export function holdInTopLayer(host: HTMLElement, rank: number): TopLayerHold {
   if (!layered()) return { raise() {}, release() {} };
@@ -239,6 +257,13 @@ export function holdInTopLayer(host: HTMLElement, rank: number): TopLayerHold {
   host.setAttribute("popover", "manual");
   if (first) watch();
   raiseFrom(rank);
+  if (!host.matches(":popover-open")) {
+    // A popover that is not open is not drawn at all.
+    host.removeAttribute("popover");
+    held = held.filter((other) => other !== entry);
+    if (held.length === 0) unwatch();
+    return { raise() {}, release() {} };
+  }
   return {
     raise(): void {
       if (held.includes(entry)) raiseFrom(rank);

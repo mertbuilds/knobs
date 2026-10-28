@@ -26,6 +26,9 @@ class FakeHost extends FakeElement {
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
   }
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+  }
   matches(selector: string): boolean {
     return selector === ":popover-open" && layer.includes(this);
   }
@@ -128,9 +131,10 @@ describe("place among the hosts", () => {
     expect(placeOf([0, 1], 2)).toBe(2);
   });
 
-  test("puts grab's boxes under the panel, and the touch cursor over both", () => {
+  test("puts grab's boxes under the panel, a guide over it, and the touch cursor over all", () => {
     expect(LAYER.overlay).toBeLessThan(LAYER.panel);
-    expect(LAYER.panel).toBeLessThan(LAYER.touch);
+    expect(LAYER.panel).toBeLessThan(LAYER.guide);
+    expect(LAYER.guide).toBeLessThan(LAYER.touch);
   });
 });
 
@@ -194,6 +198,26 @@ describe("hosts in the top layer", () => {
     log = [];
     panel.raise();
     expect(log).toEqual([]);
+  });
+
+  test("a guide stays over the panel when the page opens a popover", () => {
+    const panel = hold("panel", LAYER.panel);
+    const guide = hold("guide", LAYER.guide);
+    pageOpens(new FakeHost("page"));
+    expect(layer.map((host) => host.name)).toEqual(["page", "panel", "guide"]);
+    guide.release();
+    panel.release();
+  });
+
+  test("lets go of a host the browser will not show, and leaves it no popover", () => {
+    const host = new FakeHost("refused");
+    host.showPopover = () => {
+      throw new Error("not in the page");
+    };
+    holdInTopLayer(host as unknown as HTMLElement, LAYER.panel);
+    expect(host.attributes.has("popover")).toBe(false);
+    expect(listeners).toEqual([]);
+    expect(styles).toEqual([]);
   });
 
   test("stays a plain layer, watching nothing, where the browser has no popovers", () => {

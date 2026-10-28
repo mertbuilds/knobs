@@ -463,6 +463,7 @@ function hosted<K extends keyof DevknobsApi>(name: K): DevknobsApi[K] | null {
  * to those queries.
  */
 export { setSystemMedia } from "./engine/system";
+export { holdInTopLayer, LAYER, type TopLayerHold } from "./engine/toplayer";
 
 /**
  * Turn the `native` driver off or on, every knob kept: off, the page emulates

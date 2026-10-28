@@ -149,6 +149,10 @@ class FakeElement extends FakeTarget {
     this.attributes.set(name, value);
   }
 
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+  }
+
   append(...nodes: FakeElement[]): void {
     for (const node of nodes) {
       node.parent = this;
@@ -634,6 +638,8 @@ describe("touch pointer in a frame", () => {
     });
     apply(true);
     expect(dotHost()).toBeDefined();
+    expect(dotHost()?.hasAttribute("popover")).toBe(false);
+    expect(FakeMutationObserver.live).toEqual([]);
   });
 
   test("gives its own cursor up once the page above takes the mark", () => {
@@ -909,5 +915,7 @@ describe("touch pointer in a page with a top layer", () => {
     });
     apply(true);
     expect(dotHost()).toBeDefined();
+    expect(dotHost()?.hasAttribute("popover")).toBe(false);
+    expect(FakeMutationObserver.live).toEqual([]);
   });
 });

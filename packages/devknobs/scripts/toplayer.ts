@@ -25,7 +25,8 @@ body { margin: 0; font: 16px system-ui; background: rgb(250, 250, 250); }
   background: rgb(40, 160, 90); }
 #page-pop { inset: auto 40px 40px auto; width: 480px; height: 200px; margin: 0;
   background: rgb(200, 60, 160); }
-[popover] { padding: 30px; border: 6px solid rgb(255, 0, 0); background: rgb(255, 255, 0); }
+[popover] { padding: 30px; border: 6px solid rgb(255, 0, 0); background: rgb(255, 255, 0);
+  width: 280px; height: 140px; min-width: 280px; backdrop-filter: blur(6px); }
 ::backdrop { background: rgba(0, 0, 255, 0.3); }
 dialog { inset: 80px auto auto 80px; margin: 0; width: 360px; padding: 24px; }
 #block { margin: 120px 40px; height: 500px; background: rgb(230, 230, 230); }
@@ -151,6 +152,7 @@ function check(name: string, ok: boolean, detail: string): void {
 try {
   // A plain page: the box of an element that runs under the panel stays under it.
   const plain = await open('/plain');
+  const plainSize = await panelBox(plain);
   await inspect(plain);
   const plainBox = await panelBox(plain);
   await rest(plain, plainBox);
@@ -162,6 +164,15 @@ try {
   check('a plain page: the element under the panel is boxed', (await shown(plain)).length > 0, JSON.stringify(await shown(plain)));
   check('a plain page: the box leaves the panel as it was', plainTint < 1, `mean channel change ${plainTint.toFixed(2)}`);
   await plain.close();
+  // The same page with the popover rules: the panel keeps its size, the grab layer covers the window.
+  const ruled = await open('/');
+  const ruledSize = await panelBox(ruled);
+  check(
+    "the page's popover rules leave the panel its size",
+    Math.abs(ruledSize.width - plainSize.width) < 1 && Math.abs(ruledSize.height - plainSize.height) < 1,
+    `${ruledSize.width}x${ruledSize.height} against ${plainSize.width}x${plainSize.height}`,
+  );
+  await ruled.close();
 
   // The panel goes in again over a popover the page opens, and keeps the focus it had.
   const typing = await open('/plain');
@@ -203,6 +214,18 @@ try {
   const tinted = await difference(tab, clean, hovered);
   check('the element under the panel is boxed', boxed.length > 0, JSON.stringify(boxed));
   check('the box under the panel leaves the panel as it was', tinted < 1, `mean channel change ${tinted.toFixed(2)}`);
+  const cover = await tab.evaluate(() => {
+    const host = document.querySelector<HTMLElement>('[data-devknobs="grab"]');
+    if (!host) return null;
+    const rect = host.getBoundingClientRect();
+    const style = getComputedStyle(host);
+    return { width: rect.width, height: rect.height, view: [innerWidth, innerHeight], blur: style.backdropFilter };
+  });
+  check(
+    "the page's popover rules leave the grab layer covering the window",
+    cover?.width === cover?.view[0] && cover?.height === cover?.view[1] && cover?.blur === 'none',
+    JSON.stringify(cover),
+  );
   const looks = await tab.evaluate(() => {
     const host = document.querySelector<HTMLElement>('[data-devknobs="panel"]');
     if (!host) return null;

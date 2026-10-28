@@ -1,5 +1,6 @@
 import { colors, font, palette } from '@knobs/ui/tokens.stylex';
 import { create, keyframes, props } from '@stylexjs/stylex';
+import type { TopLayerHold } from '@vinena/knobs';
 import { type ReactNode, useEffect, useEffectEvent, useRef } from 'react';
 import type { Aim } from './targets.ts';
 
@@ -304,26 +305,6 @@ function radiusOf(node: Element | null): number {
 }
 
 /**
- * Put the layer last in the browser's top layer, over the panel and over
- * anything that joined before it. A manual popover closes no other and no
- * light dismiss closes it. Without popovers it stays a fixed layer on top.
- */
-function raise(layer: HTMLElement): void {
-  if (typeof layer.showPopover !== 'function') {
-    return;
-  }
-  try {
-    layer.setAttribute('popover', 'manual');
-    if (layer.matches(':popover-open')) {
-      layer.hidePopover();
-    }
-    layer.showPopover();
-  } catch {
-    layer.removeAttribute('popover');
-  }
-}
-
-/**
  * The tour's layer: a frame around the real control to use next, and what is
  * said beside it. It follows the control every frame, as the panel glides, a
  * row opens and the device turns, and writes only when something moved.
@@ -371,19 +352,15 @@ export function Layer({
     if (host === null || frame === null || note === null || dimmer === null) {
       return;
     }
-    raise(host);
-    // Something else joined the top layer, and paints over the tour until it goes in again.
-    // devknobs' own, such as the touch cursor, belong over the tour, and the tour's own toggle is not news.
-    const onToggle = (event: Event) => {
-      if (!('newState' in event) || event.newState !== 'open') {
-        return;
+    // In the browser's top layer, over the panel and whatever the page puts there, under the
+    // touch cursor. devknobs keeps that order. It loads after hydration, as the panel does.
+    let hold: TopLayerHold | null = null;
+    let gone = false;
+    void import('@vinena/knobs').then(({ holdInTopLayer, LAYER }) => {
+      if (!gone) {
+        hold = holdInTopLayer(host, LAYER.guide);
       }
-      const ours = Array.from(document.querySelectorAll('[data-devknobs]'));
-      if (!ours.some((node) => node === event.target)) {
-        raise(host);
-      }
-    };
-    window.addEventListener('toggle', onToggle, true);
+    });
 
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
     let size: Size = { height: note.offsetHeight, width: note.offsetWidth };
@@ -500,7 +477,8 @@ export function Layer({
     return () => {
       cancelAnimationFrame(id);
       sizes.disconnect();
-      window.removeEventListener('toggle', onToggle, true);
+      gone = true;
+      hold?.release();
     };
   }, []);
 
