@@ -1575,8 +1575,26 @@ describe("a foldable folding", () => {
     reset();
     reduce = true;
     apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    const buttons = () =>
+      (everything().find((element) => element.getAttribute("class") === "mock")?.children ?? [])
+        .filter((node) => node.getAttribute("class") === "button")
+        .map((node) => [node.getAttribute("x"), node.getAttribute("y"), node.getAttribute("width")].join(" "));
+    const upright = buttons();
     apply({ ...SHUT, orientation: "landscape", width: 678, height: 466 });
     expect(Reflect.get(frameElement().style, "width")).toBe("678px");
+    // Unfolded from the cover held across, the case is the same phone's, half round; picked again, as it is drawn.
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    expect(upright.length).toBeGreaterThan(0);
+    expect(buttons()).not.toEqual(upright);
+    const viewBox = (everything().find((element) => element.getAttribute("class") === "mock")?.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const [, , mockWidth = 0] = viewBox;
+    expect(buttons().map((one) => {
+      const [x = 0, , width = 0] = one.split(" ").map(Number);
+      return Math.round((mockWidth - x - width) * 100) / 100 + 0;
+    }).sort((a, b) => a - b)).toEqual(upright.map((one) => Number(one.split(" ")[0])).sort((a, b) => a - b));
+    apply({ ...OPEN, orientation: "landscape" });
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    expect(buttons()).toEqual(upright);
   });
 
   test("leaves nothing behind when the frame goes mid fold, and swaps at once with less movement", () => {

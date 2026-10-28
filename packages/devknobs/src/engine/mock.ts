@@ -42,6 +42,8 @@ export interface MockImage extends Rect {
   turn: number | null;
   /** Turned the other way, its top to the right, `turn` then the upright mock's height. */
   clockwise?: boolean;
+  /** Not turned, but half round in the mock: the case held the other way up, as `flipMock` has it. */
+  over?: boolean;
 }
 
 /** A device's body around its screen, in css px of the screen. */

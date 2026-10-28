@@ -131,11 +131,11 @@ export function drawMock(
     });
   // A picture is the whole body, buttons too, and its island goes flat black over it.
   if (mock.image && href) {
-    const { x, y, width, height, turn, clockwise } = mock.image;
+    const { x, y, width, height, turn, clockwise, over } = mock.image;
     const image = svgNode("image", { href, x, y, width, height });
     if (turn !== null) {
       image.setAttribute("transform", clockwise ? `matrix(0 1 -1 0 ${turn} 0)` : `matrix(0 -1 1 0 0 ${turn})`);
-    }
+    } else if (over) image.setAttribute("transform", `matrix(-1 0 0 -1 ${mock.width} ${mock.height})`);
     svg.append(image, ...mock.parts.map(part));
     return svg;
   }

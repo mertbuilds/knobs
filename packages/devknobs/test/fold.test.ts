@@ -70,7 +70,7 @@ import {
   wipeLight,
 } from "../src/engine/fold";
 import { bezelMock } from "../src/engine/bezels";
-import { flipFace, flipMock, flipPoint } from "../src/engine/foldflip";
+import { caseOver, flipFace, flipMock, flipPoint } from "../src/engine/foldflip";
 import { blurAt, freeOf, screenLook } from "../src/engine/foldgl";
 import { resetTune, setTune, TUNE_DEFAULTS } from "../src/engine/foldtune";
 import { DUO_FOLD } from "../src/engine/bezelurls";
@@ -1078,10 +1078,26 @@ describe("flipMock", () => {
     expect(over.image?.clockwise).toBeUndefined();
     expect(over.image?.turn).toBe(upright.width);
     expect(flipMock(over)).toEqual(cover);
-    // A picture of its own stays as it is.
+    // A picture of its own is drawn half round.
     const inner = bezelMock("iphone-duo-open", "portrait");
-    if (!inner) throw new Error("no bezels");
-    expect(flipMock(inner).image).toEqual(inner.image);
+    if (!inner?.image) throw new Error("no bezels");
+    expect(flipMock(inner).image).toEqual({ ...inner.image, over: true });
+    expect(flipMock(flipMock(inner))).toEqual(inner);
+  });
+});
+
+describe("caseOver", () => {
+  test("holds the open Duo's case half round only as unfolded from its cover held across", () => {
+    const across = "iphone-duo|landscape|closed";
+    const upright = "iphone-duo|portrait|open";
+    expect(caseOver(across, upright, false)).toBe(true);
+    expect(caseOver(upright, upright, true)).toBe(true);
+    expect(caseOver(upright, across, true)).toBe(true);
+    // Picked open upright, or unfolded from the cover upright, it is as drawn.
+    expect(caseOver("iphone-duo|landscape|open", upright, true)).toBe(false);
+    expect(caseOver("iphone-duo|portrait|closed", "iphone-duo|landscape|open", true)).toBe(false);
+    expect(caseOver("frame", upright, false)).toBe(false);
+    expect(caseOver(across, "iphone-18-pro|portrait", true)).toBe(false);
   });
 });
 
@@ -1243,6 +1259,20 @@ describe("the Duo's fold frames", () => {
     near(seen([x + width / 2, y], 1), inner.x + inner.width, inner.y + inner.height / 2);
     near(seen([x + width / 2, y + height], 1), inner.x, inner.y + inner.height / 2);
     for (const corner of first.inner) expect(seen(corner, 1).y).toBeLessThan(inner.y + inner.height / 2 + 0.5);
+    // Unfolded from the cover held across the open case is drawn half round, buttons and all, so its picture lies
+    // where the frames' open end does: the picture's screen corner by the buttons, the top left, at the render's
+    // top right, and its hinge line, the middle of its left side, at the middle of the render's top.
+    const turned = flipMock(openBody);
+    expect(turned.image?.over).toBe(true);
+    const scale = inner.width / open.size.width;
+    const drawn = (px: number, py: number) => ({
+      x: inner.x - turned.inset.left * scale + (turned.width - px) * scale,
+      y: inner.y - turned.inset.top * scale + (turned.height - py) * scale,
+    });
+    const atButtons = drawn(openBody.inset.left, openBody.inset.top);
+    near(seen([x + width, y], 1), atButtons.x, atButtons.y);
+    const atHinge = drawn(openBody.inset.left, openBody.inset.top + open.size.height / 2);
+    near(seen([x + width / 2, y], 1), atHinge.x, atHinge.y);
   });
 
   /**
