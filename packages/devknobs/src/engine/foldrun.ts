@@ -1,5 +1,6 @@
 import type { PostureValue } from "../types";
 import { bezelUrl, decodeFoldShots, endFoldShots, type FoldPictures, foldShots, foldShotsDue } from "./bezels";
+import { formOf } from "./devices";
 import {
   type FoldFrame,
   foldFrame,
@@ -25,6 +26,7 @@ import {
   SHOTS_FADE,
   shotsDrift,
 } from "./fold";
+import { flipFace, flipPicture, flipRect, type Room } from "./foldflip";
 import { BLEED, pick, pose, type Shots, shotsOf } from "./foldframes";
 import {
   type Face,
@@ -186,6 +188,8 @@ interface Going {
   wait: { since: number | null; painted: boolean } | null;
   parts: Layer;
   unit: Unit;
+  /** The letterbox where the fold is laid out turned half round, as `foldflip` has it, else null. */
+  flip: Room | null;
   /**
    * How many times the fold was drawn since the frame's own device was last
    * drawn open in the middle of it, while the open screen's picture is still
@@ -406,8 +410,11 @@ function build(
   closed: Face,
   pictures: Pictures,
   found: FoldPictures | null,
+  flip: Room | null,
 ): Layer {
   const layer = div("fold");
+  // Turned back about the letterbox's middle.
+  if (flip) layer.style.transform = "rotate(180deg)";
   const place = div("");
   let turning: Copies | Shots;
   const shots = found && shotsOf(layout, open, closed, pictures, found);
@@ -472,9 +479,11 @@ function retake(going: Going): void {
   const { size } = going.faces.open;
   const color = scene.background();
   const last = going.pictures.open;
+  const rough = roughOf(scene.frame, scene.glass, values.open, size, color);
   // The same rough picture again: the page is as the picture has it.
-  if (roughOf(scene.frame, scene.glass, values.open, size, color) === last.shot) return;
-  const next = pictureOf(scene.frame, scene.glass, values.open, size, color, copyPage(scene.frame));
+  if ((going.flip && rough ? flipPicture({ shot: rough, painted: null, bars: null }, size).shot : rough) === last.shot) return;
+  const taken = pictureOf(scene.frame, scene.glass, values.open, size, color, copyPage(scene.frame));
+  const next = going.flip ? flipPicture(taken, size) : taken;
   going.pictures = { ...going.pictures, open: next };
   const put = (shot: HTMLCanvasElement) => {
     if (fold !== going || going.pictures.open !== next) return;
@@ -483,14 +492,14 @@ function retake(going: Going): void {
     else paintLeaf(turning.inner, shot);
   };
   // Only once the browser has drawn it, so a sharp picture never gives way to a rough one, but where it will not.
-  const rough = () => {
+  const roughly = () => {
     if (next.shot) put(next.shot);
   };
-  if (!next.painted) rough();
+  if (!next.painted) roughly();
   else {
     void next.painted.then((drawn) => {
       if (drawn) paintDrawn(next, drawn, put);
-      else rough();
+      else roughly();
     });
   }
 }
@@ -551,7 +560,7 @@ function show(going: Going): void {
     going.waiting = false;
     const { open, closed } = going.faces;
     drop(going.parts);
-    going.parts = build(going.scene, going.layout, open, closed, going.pictures, found);
+    going.parts = build(going.scene, going.layout, open, closed, going.pictures, found, going.flip);
     going.drawn = "";
   }
   const { layout, parts } = going;
@@ -586,8 +595,15 @@ function show(going: Going): void {
   const drift = shots
     ? shotsDrift(shots.shots, layout, shots.inside, shots.outside, open, unit.posture)
     : { wide: 1, tall: 1, x: 0, y: 0 };
-  const body = opened ? { x: 0, y: 0 } : layout.shut;
-  const to = { x: x + (drift.wide * body.x + drift.x) * scale, y: y + (drift.tall * body.y + drift.y) * scale };
+  const body = opened ? { x: 0, y: 0, ...layout.open } : layout.shut;
+  const laid = {
+    x: x + (drift.wide * body.x + drift.x) * scale,
+    y: y + (drift.tall * body.y + drift.y) * scale,
+    width: body.width * drift.wide * scale,
+    height: body.height * drift.tall * scale,
+  };
+  // Laid out turned over, the device is drawn where that puts it, the right way up.
+  const to = going.flip ? flipRect(laid, going.flip) : laid;
   const by = { x: to.x - unit.corner.x, y: to.y - unit.corner.y };
   const size = (unit.base * scale) / own;
   scene.unit.style.transform = `translate(${by.x}px, ${by.y}px) scale(${size * drift.wide}, ${size * drift.tall})`;
@@ -615,7 +631,10 @@ function stillClip(going: Going, shots: Shots | null, inside: boolean, own: numb
   const under = inside ? 1 + 2 * (shots?.inner.over ?? 0) : 0;
   const hinge = at(layout.hinge + (layout.across ? -under : under));
   const far = 1e5;
-  const points = (corners: [number, number][]) => `polygon(${corners.map(([px, py]) => `${px}px ${py}px`).join(", ")})`;
+  // Laid out turned over, the device's own is the right way up: its corners half round the open body.
+  const { width, height } = layout.open;
+  const placed = ([px, py]: [number, number]): [number, number] => (going.flip ? [at(width) - px, at(height) - py] : [px, py]);
+  const points = (corners: [number, number][]) => `polygon(${corners.map(placed).map(([px, py]) => `${px}px ${py}px`).join(", ")})`;
   if (!shots || going.still < 1) {
     return layout.across
       ? points([[hinge, -far], [far, -far], [far, far], [hinge, far]])
@@ -839,16 +858,21 @@ export function foldDevice(
   coverTo(scene.cover, 0);
   scene.glass.append(scene.cover);
   const color = scene.background();
-  const now = sideOf(scene, from, scene.screenRect());
-  const next = sideOf(scene, value, to);
   const opening = value.posture === "open";
   const across = (opening ? value : from).orientation === "landscape";
+  // The cover held across turned clockwise, the other way from the frames: laid out turned over.
+  const { letterbox } = scene;
+  const flip = !across && formOf(from.device, "closed")?.clockwise === true ? { width: letterbox.clientWidth, height: letterbox.clientHeight } : null;
+  const turn = (face: Face) => (flip ? flipFace(face, flip) : face);
+  const now = turn(sideOf(scene, from, scene.screenRect()));
+  const next = turn(sideOf(scene, value, to));
   // Pictures of the page as it is, and as laid out for the other screen, for
   // which the frame is drawn that way a moment, unseen.
   const copy = copyPage(scene.frame);
-  const before = pictureOf(scene.frame, scene.glass, from, now.size, color, copy);
+  const turnPicture = (picture: Picture, size: Room) => (flip ? flipPicture(picture, size) : picture);
+  const before = turnPicture(pictureOf(scene.frame, scene.glass, from, now.size, color, copy), now.size);
   draw(value);
-  const after = pictureOf(scene.frame, scene.glass, value, next.size, color, copy);
+  const after = turnPicture(pictureOf(scene.frame, scene.glass, value, next.size, color, copy), next.size);
   draw(from);
   const closed = opening ? now : next;
   const open = opening ? next : now;
@@ -860,7 +884,7 @@ export function foldDevice(
   const start = openOf(from.posture);
   const target = openOf((held ? from : value).posture);
   if (duo) decodeFoldShots(start, Math.sign(start - target));
-  const parts = build(scene, layout, open, closed, pictures, duo ? foldShots() : null);
+  const parts = build(scene, layout, open, closed, pictures, duo ? foldShots() : null, flip);
   const wait = held ? null : { since: null, painted: !before.painted && !after.painted };
   // Only told so: the fold goes at its next frame, if it still waits then.
   if (wait && !wait.painted) {
@@ -889,6 +913,7 @@ export function foldDevice(
     wait,
     parts,
     unit: measure(scene, from.posture),
+    flip,
     fresh: null,
     // At rest the device shows as it is drawn, till the hinge moves.
     still: 0,

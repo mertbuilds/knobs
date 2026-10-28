@@ -7,7 +7,6 @@ import {
   FADE_CURVE,
   fitCorners,
   folds,
-  foldsInView,
   holeAt,
   holePath,
   lerpRect,
@@ -275,12 +274,9 @@ describe("what moves", () => {
     expect(folds(shut, "iphone-duo|portrait|open")).toBe(false);
     expect(turnOf(shut, "iphone-duo|portrait|open")).toBe(0);
     expect(turnOf(shut, "iphone-duo|landscape|closed")).toBe(90);
-    // The cover held across turns its top to the right, the other way from
-    // the fold's rendered frames, so that fold is not played in view.
-    expect(folds("iphone-duo|landscape|closed", "iphone-duo|portrait|open")).toBe(false);
-    expect(folds("iphone-duo|portrait|open", "iphone-duo|landscape|closed")).toBe(false);
-    expect(foldsInView("iphone-duo", "landscape")).toBe(false);
-    expect(foldsInView("iphone-duo", "portrait")).toBe(true);
+    // The cover held across, its top to the right, folds in view either way too.
+    expect(folds("iphone-duo|landscape|closed", "iphone-duo|portrait|open")).toBe(true);
+    expect(folds("iphone-duo|portrait|open", "iphone-duo|landscape|closed")).toBe(true);
     expect(folds("iphone-18-pro|portrait", "iphone-18-pro|landscape")).toBe(false);
   });
 

@@ -286,20 +286,11 @@ export function turnOf(from: string, to: string): number {
 /**
  * Does going from one shape to the other fold a foldable open or shut? Its
  * hinge stays where it is, so the screen it goes to is held the other way.
- * Not in view where the folded screen is held across with its top to the
- * right, as the Duo's cover is: the fold's frames are rendered with the top
- * to the left, and would turn it over at either end.
  */
 export function folds(from: string, to: string): boolean {
   const [device, held, posture] = from.split("|");
   const [next, now, after] = to.split("|");
-  if (!device || !posture || !after || device !== next || posture === after || held === now) return false;
-  return foldsInView(device, posture === "closed" ? held : now);
-}
-
-/** Can the foldable fold in view, its folded screen held `shut` that way? */
-export function foldsInView(device: string, shut: string | undefined): boolean {
-  return !(shut === "landscape" && formOf(device, "closed")?.clockwise === true);
+  return Boolean(posture && after) && device === next && posture !== after && held !== now;
 }
 
 /**
