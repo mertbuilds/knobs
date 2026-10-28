@@ -76,16 +76,18 @@ function toRgb(color: string): Color | null {
 }
 
 /**
- * The color the page paints its canvas in: the root's background, else the
- * body's, over the browser's own canvas, which is dark only for a page that
- * takes a dark color scheme while the preference is dark.
+ * The color the page paints its canvas in: the body's background over the
+ * root's, over the browser's own canvas, which is dark only for a page that
+ * takes a dark color scheme while the preference is dark. A body that covers
+ * the page hides the root's color, as the simulator shows a white body on a
+ * dark root as white.
  */
 function backgroundOf(doc: Document, view: Window, dark: boolean): [number, number, number] {
   const root = view.getComputedStyle(doc.documentElement);
   const schemes = root.colorScheme ?? "";
   const canvasDark = schemes.includes("dark") && (dark || !schemes.includes("light"));
   let base: [number, number, number] = canvasDark ? [18, 18, 18] : [255, 255, 255];
-  const layers = [doc.body, doc.documentElement].filter((node): node is HTMLElement => !!node);
+  const layers = [doc.documentElement, doc.body].filter((node): node is HTMLElement => !!node);
   for (const node of layers) {
     const color = toRgb(view.getComputedStyle(node).backgroundColor);
     if (!color || color.alpha === 0) continue;
@@ -97,10 +99,75 @@ function backgroundOf(doc: Document, view: Window, dark: boolean): [number, numb
   return base;
 }
 
-/** What the bars show for the page in the frame, white and empty while it is out of reach. */
-export function readLook(frame: HTMLIFrameElement): Look {
+function rgbOf(color: Color): string {
+  return `rgb(${Math.round(color.red)}, ${Math.round(color.green)}, ${Math.round(color.blue)})`;
+}
+
+/** A background that hides what is under it, or nearly. */
+function solidOf(view: Window, node: Element): string | null {
+  const color = toRgb(view.getComputedStyle(node).backgroundColor);
+  return color && color.alpha >= 0.5 ? rgbOf(color) : null;
+}
+
+/**
+ * The color of a fixed or sticky bar at `x`, `y` of the viewport whose box
+ * touches its top or bottom edge: the first solid background from what is
+ * there up to the bar.
+ */
+function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | "bottom") {
+  let paint: string | null = null;
+  for (let node = doc.elementFromPoint(x, y); node; node = node.parentElement) {
+    if (node === doc.body || node === doc.documentElement) return null;
+    paint ??= solidOf(view, node);
+    const { position } = view.getComputedStyle(node);
+    if (position !== "fixed" && position !== "sticky") continue;
+    const box = node.getBoundingClientRect();
+    const touches = edge === "top" ? box.top <= 0.5 : box.bottom >= view.innerHeight - 0.5;
+    return touches ? paint : null;
+  }
+  return null;
+}
+
+/**
+ * The color of a bar across the viewport's top or bottom edge, as iOS 26
+ * Safari carries it into the strip over the page and the screen under it,
+ * measured on the iOS 26.5 simulator. A bar only part of the way across
+ * does not count.
+ */
+function edgeBar(doc: Document, view: Window, edge: "top" | "bottom"): string | null {
+  const width = view.innerWidth;
+  const y = edge === "top" ? 0.5 : view.innerHeight - 0.5;
+  const colors = [width / 2, 1, width - 1].map((x) => barAt(doc, view, x, y, edge));
+  const [middle = null] = colors;
+  return colors.every((color) => color !== null) ? middle : null;
+}
+
+/** The first solid background at `x`, `y` of the viewport, from the top down. */
+function colorAt(doc: Document, view: Window, x: number, y: number): string | null {
+  for (const node of doc.elementsFromPoint(x, y)) {
+    const color = solidOf(view, node);
+    if (color) return color;
+  }
+  return null;
+}
+
+/** Points of the screen to read the page's color under, with the page's box in it. */
+export interface Probe {
+  page: Rect;
+  points: { x: number; y: number }[];
+}
+
+/**
+ * What the bars show for the page in the frame, white and empty while it is
+ * out of reach. `probe` reads the page's color under the glass.
+ */
+export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): Look {
+  const white = "rgb(255, 255, 255)";
   const fallback: Look = {
-    background: "rgb(255, 255, 255)",
+    background: white,
+    top: white,
+    bottom: white,
+    under: [],
     dark: false,
     scheme: "light",
     host: "",
@@ -113,13 +180,27 @@ export function readLook(frame: HTMLIFrameElement): Look {
     if (!view || !doc?.documentElement) return fallback;
     const scheme = view.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     const [r, g, b] = backgroundOf(doc, view, scheme === "dark");
+    const background = `rgb(${r}, ${g}, ${b})`;
+    const top = edgeBar(doc, view, "top") ?? background;
+    const bottom = edgeBar(doc, view, "bottom") ?? background;
+    const under = (probe?.points ?? []).map(({ x, y }) => {
+      const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
+      const inside = { x: x - page.x, y: y - page.y };
+      if (inside.y < 0) return { x, y, color: top };
+      if (inside.y >= page.height) return { x, y, color: bottom };
+      const across = Math.min(Math.max(inside.x, 0), page.width - 1);
+      return { x, y, color: colorAt(doc, view, across, inside.y) ?? background };
+    });
     const navigation = navigationOf(view);
     const can = (key: string): boolean | null => {
       const value: unknown = navigation && Reflect.get(navigation, key);
       return typeof value === "boolean" ? value : null;
     };
     return {
-      background: `rgb(${r}, ${g}, ${b})`,
+      background,
+      top,
+      bottom,
+      under,
       dark: luminance(r, g, b) < 0.4,
       scheme,
       host: view.location.host,
@@ -129,6 +210,19 @@ export function readLook(frame: HTMLIFrameElement): Look {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * What fills Safari's screen around the frame: the strip's color over the
+ * page and the bottom's under it, the page's color everywhere else.
+ */
+function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
+  if (bars.platform !== "safari" || bars.orientation !== "portrait" || !page) return look.background;
+  if (look.top === look.background && look.bottom === look.background) return look.background;
+  const start = (page.y / height) * 100;
+  const end = ((page.y + page.height) / height) * 100;
+  const { top, background: middle, bottom } = look;
+  return `linear-gradient(to bottom, ${top} ${start}%, ${middle} ${start}%, ${middle} ${end}%, ${bottom} ${end}%)`;
 }
 
 /** Can the frame's page be read? Not on another origin, or behind an error page. */
@@ -233,6 +327,8 @@ export function createBrowser(
   let busy = false;
   /** The wait for the reloaded page to paint. */
   let loadWait = 0;
+  /** The frame to read the page under the glass again in, after a scroll. */
+  let sampling = 0;
   const still = () => baseMatchMedia("(prefers-reduced-motion: reduce)").matches;
   const step = (event: BarsEvent) => {
     const before = motion.minimized;
@@ -240,9 +336,34 @@ export function createBrowser(
     // Heard after the step, so a step taken while the frame is drawn never redraws inside it.
     if (motion.minimized !== before) queueMicrotask(onChange);
   };
+  /** The centers of Safari's capsules in both states, to read the page's color under. */
+  const probe = (): Probe | null => {
+    const bars = view?.bars ?? null;
+    if (!view || !bars || bars.platform !== "safari") return null;
+    const { screen, orientation, layout, minimized, edge } = bars;
+    const other = barsOf(screen, orientation, layout, !minimized, edge);
+    const shapes = [...bars.shapes, ...(other?.shapes ?? [])];
+    // A pill's x is its middle already: its width is 0 until its text sets it.
+    const points = shapes.map((shape) => ({
+      x: shape.x + shape.width / 2,
+      y: shape.y + shape.height / 2,
+    }));
+    return { page: view.page ?? { x: 0, y: 0, ...view.size }, points };
+  };
+  const lookNow = () => readLook(frame, probe());
+  /** The page moved under the glass: read it again once a frame, and redraw only for a change. */
+  const resample = () => {
+    sampling = 0;
+    if (busy || !look || !view?.bars || view.bars.platform !== "safari") return;
+    const next = lookNow();
+    if (JSON.stringify(next) === JSON.stringify(look)) return;
+    look = next;
+    draw();
+  };
   const onScroll = () => {
     const page = frame.contentWindow;
     if (page) step({ type: "scroll", y: page.scrollY, time: performance.now() });
+    if (!sampling) sampling = window.requestAnimationFrame(resample);
   };
   const actions: Actions = {
     back: () => frame.contentWindow?.history.back(),
@@ -314,7 +435,7 @@ export function createBrowser(
    * is drawn in new layers. A page out of reach keeps the stylesheet's.
    */
   const back = () => {
-    frame.style.background = reaches(frame) ? (look ??= readLook(frame)).background : "";
+    frame.style.background = reaches(frame) ? (look ??= lookNow()).background : "";
   };
   const draw = () => {
     const bars = view?.bars ?? null;
@@ -328,8 +449,8 @@ export function createBrowser(
       if (view) sizeFrame();
       return;
     }
-    look ??= readLook(frame);
-    glass.style.background = look.background;
+    look ??= lookNow();
+    glass.style.background = screenFill(look, bars, view.page, view.size.height);
     back();
     const { platform, layout, screen, orientation, edge } = bars;
     const base = JSON.stringify([platform, layout, screen, orientation, edge, view.follow]);
@@ -380,7 +501,7 @@ export function createBrowser(
     showLoading(false, null);
   };
   const startLoading = (seed: Look | null) => {
-    blank.style.background = (seed ?? look ?? readLook(frame)).background;
+    blank.style.background = (seed ?? look ?? lookNow()).background;
     blank.hidden = false;
     showLoading(true, seed);
     if (loadWait) window.cancelAnimationFrame(loadWait);
@@ -416,7 +537,7 @@ export function createBrowser(
     } catch {
       query = null;
     }
-    if (!busy || !look) look = readLook(frame);
+    if (!busy || !look) look = lookNow();
     draw();
   };
   const browser: BrowserLayer = {
@@ -434,7 +555,7 @@ export function createBrowser(
       const again = view.bars
         ? read
         : () => {
-            if (!busy || !look) look = readLook(frame);
+            if (!busy || !look) look = lookNow();
             back();
           };
       again();
@@ -449,6 +570,8 @@ export function createBrowser(
     look: () => look,
     remove() {
       clearTimeout(later);
+      if (sampling) window.cancelAnimationFrame(sampling);
+      sampling = 0;
       if (loadWait) window.cancelAnimationFrame(loadWait);
       loadWait = 0;
       clearTimeout(shrinking);

@@ -115,6 +115,8 @@ export function snapshotKey(knobs: Drawn, view: WindowSize): string {
   ]);
 }
 
+const RGB = /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/;
+
 function lookOf(value: unknown): Look | null {
   if (typeof value !== "object" || value === null) return null;
   const read = (key: string): unknown => Reflect.get(value, key);
@@ -122,14 +124,21 @@ function lookOf(value: unknown): Look | null {
   const scheme = read("scheme");
   const host = read("host");
   const flags = [read("dark"), read("canBack"), read("canForward")];
-  if (typeof background !== "string" || !/^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/.test(background)) {
+  if (typeof background !== "string" || !RGB.test(background)) {
     return null;
   }
   if ((scheme !== "light" && scheme !== "dark") || typeof host !== "string") return null;
   const [dark, canBack, canForward] = flags;
   if (typeof dark !== "boolean" || typeof canBack !== "boolean") return null;
   if (typeof canForward !== "boolean") return null;
-  return { background, dark, scheme, host, canBack, canForward };
+  // The strip and the glass take the page's color again until the page is read.
+  const color = (key: string) => {
+    const value = read(key);
+    return typeof value === "string" && RGB.test(value) ? value : background;
+  };
+  const top = color("top");
+  const bottom = color("bottom");
+  return { background, top, bottom, under: [], dark, scheme, host, canBack, canForward };
 }
 
 /** The drawing the last page kept, if it was drawn for these knobs at this window's size. */
