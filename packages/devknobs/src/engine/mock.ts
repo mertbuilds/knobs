@@ -40,6 +40,8 @@ export interface Part extends Rect {
 export interface MockImage extends Rect {
   file: string;
   turn: number | null;
+  /** Turned the other way, its top to the right, `turn` then the upright mock's height. */
+  clockwise?: boolean;
 }
 
 /** A device's body around its screen, in css px of the screen. */

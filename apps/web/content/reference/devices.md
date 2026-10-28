@@ -132,7 +132,8 @@ and Safari's buttons stack in a column on the right, under the camera hole:
 the time, a ring for the battery round wifi with the signal's four dots in
 its gap, back, reader, and new tab with tabs. the address floats at the
 bottom of the page. the page never runs under the column, which takes the
-page's color. held across, the cover has no status and no column: one bar
+page's color. held across, the cover turns its top to the right, the camera
+hole to the bottom right, and has no status and no column: one bar
 along the top holds back, reader, the address, share, new tab and tabs. the
 inner screen has one bar at the top, held either way: back, reader, the
 address, new tab with tabs, then the time and the ring; minimized, only a

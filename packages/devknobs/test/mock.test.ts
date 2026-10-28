@@ -44,10 +44,10 @@ describe("mockOf", () => {
       screenRadius: [8, 59, 59, 8],
       bodyRadius: [10, 75, 75, 10],
     });
-    // The top of the phone goes to the left, so the hinge goes to the bottom.
+    // The top of the phone goes to the right, so the hinge goes to the top.
     expect(mockOf("iphone-duo-closed", "landscape")).toMatchObject({
-      screenRadius: [59, 59, 8, 8],
-      bodyRadius: [75, 75, 10, 10],
+      screenRadius: [8, 8, 59, 59],
+      bodyRadius: [10, 10, 75, 75],
     });
     expect(mockOf("iphone-duo-open", "portrait")).toMatchObject({ screenRadius: 55 });
   });
