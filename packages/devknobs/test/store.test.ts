@@ -115,6 +115,7 @@ describe("parse", () => {
         tab: "none",
         docked: false,
         handle: true,
+        devIcon: "auto",
         pinned: ["scheme", "clock"],
       },
     });
@@ -254,6 +255,7 @@ describe("parse", () => {
       tab: "none",
       docked: false,
       handle: true,
+      devIcon: "auto",
       pinned: [],
     });
   });

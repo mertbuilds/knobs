@@ -12,6 +12,7 @@ import {
   CONNECTIONS,
   CONTRASTS,
   DEFAULT_STATE,
+  DEV_ICONS,
   DIRS,
   GEO_ERRORS,
   MOTIONS,
@@ -236,6 +237,10 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
             "Show the knobs handle on the window's edge while the panel is closed. false keeps it out of screenshots for this tab.",
             flag,
           ),
+          devIcon: field(
+            "The yellow DEV ribbon on the tab's icon and the apple-touch-icon. auto shows it on a local host only: localhost, *.localhost, *.local, a loopback or private network address.",
+            oneOf(DEV_ICONS),
+          ),
         },
       },
       "frame",
@@ -258,8 +263,8 @@ export function describe(): KnobDescription[] {
 /** A knob's default, trimmed to the fields it lists. */
 function defaultOf(key: keyof DevknobsState): KnobValue {
   if (key === "panel") {
-    const { open, docked, handle } = DEFAULT_STATE.panel;
-    return { open, docked, handle };
+    const { open, docked, handle, devIcon } = DEFAULT_STATE.panel;
+    return { open, docked, handle, devIcon };
   }
   if (key === "clock") {
     const { mode, at, speed, header } = DEFAULT_STATE.clock;

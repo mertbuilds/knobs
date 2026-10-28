@@ -14,6 +14,7 @@ import {
   CONNECTIONS,
   CONTRASTS,
   DEFAULT_STATE,
+  DEV_ICONS,
   DIRS,
   GEO_ERRORS,
   merge,
@@ -34,6 +35,7 @@ import type {
   ContrastValue,
   DevknobsState,
   DevknobsStatePatch,
+  DevIconValue,
   DirValue,
   GeoErrorValue,
   MatColorName,
@@ -156,7 +158,7 @@ describe("describe", () => {
     const fields = panel?.value.type === "object" ? panel.value.fields : {};
     expect(fields.handle?.value).toEqual({ type: "boolean" });
     expect(fields.handle?.description).toContain("screenshots");
-    expect(panel?.default).toEqual({ open: false, docked: false, handle: true });
+    expect(panel?.default).toEqual({ open: false, docked: false, handle: true, devIcon: "auto" });
   });
 });
 
@@ -173,6 +175,7 @@ describe("value lists", () => {
       [CONTRASTS, members<ContrastValue>({ more: true, system: true })],
       [TRANSPARENCIES, members<TransparencyValue>({ reduce: true, system: true })],
       [DIRS, members<DirValue>({ ltr: true, rtl: true, system: true })],
+      [DEV_ICONS, members<DevIconValue>({ auto: true, on: true, off: true })],
       [
         GEO_ERRORS,
         members<GeoErrorValue>({ none: true, denied: true, unavailable: true, timeout: true }),

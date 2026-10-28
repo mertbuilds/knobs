@@ -11,7 +11,8 @@ import { createRefusal, type Tips } from "./tooltip";
 /**
  * The settings view, which slides in over the rows: whether the handle shows
  * while the panel is closed, the host's switch for its native driver where it
- * gives one, and each binding's key, recorded from the next
+ * gives one, whether the tab's icon has the dev ribbon, and each binding's
+ * key, recorded from the next
  * keys pressed. A key a binding cannot take is refused, and the chip says why.
  */
 
@@ -51,6 +52,10 @@ export interface SettingsContext {
   handleShown(): boolean;
   /** Let the knobs show the handle, which an agent may have hidden. */
   showHandle(): void;
+  /** Whether the tab's icon has the dev ribbon. */
+  devIconShown(): boolean;
+  /** The user turned the dev ribbon on the tab's icon off or on. */
+  setDevIcon(on: boolean): void;
   /** The words of the host's switch for its native driver, null with none. */
   native: { label: string; hint: string } | null;
   /** The user turned the native driver off or on. */
@@ -69,6 +74,8 @@ export interface Settings {
   drawKeys(now: Keys): void;
   /** Show whether the handle shows while the panel is closed. */
   drawHandle(shown: boolean): void;
+  /** Show whether the tab's icon has the dev ribbon. */
+  drawDevIcon(shown: boolean): void;
   /** Show whether the native driver is on, and why it last went off or on in place of its hint. */
   drawNative(on: boolean, note: string | null): void;
   /** Take a key for the binding that records, if one does, and say whether it did. */
@@ -132,6 +139,18 @@ export function createSettings(context: SettingsContext): Settings {
       context.setNative(nativeSwitch.getAttribute("aria-checked") !== "true"),
     );
   }
+  const devIconSwitch = button("switch row-control", "");
+  devIconSwitch.setAttribute("role", "switch");
+  devIconSwitch.setAttribute("aria-label", "dev tab icon");
+  keysView.append(
+    rowBox({
+      main: el("div", "main"),
+      glyph: icon("image"),
+      title: "dev tab icon",
+      ends: [devIconSwitch],
+    }).box,
+  );
+  devIconSwitch.addEventListener("click", () => context.setDevIcon(!context.devIconShown()));
   keysView.append(rowsLabel("shortcuts"));
   const keyViews = new Map<
     Binding,
@@ -293,6 +312,9 @@ export function createSettings(context: SettingsContext): Settings {
     drawKeys,
     drawHandle(shown: boolean): void {
       mark(handleSwitch, shown, "aria-checked");
+    },
+    drawDevIcon(shown: boolean): void {
+      mark(devIconSwitch, shown, "aria-checked");
     },
     drawNative(on: boolean, note: string | null): void {
       mark(nativeSwitch, on, "aria-checked");

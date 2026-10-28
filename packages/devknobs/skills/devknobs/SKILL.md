@@ -114,7 +114,7 @@ await window.devknobs.ready();
    `window.devknobs.setState({ panel: { open: false, handle: false, docked: false } })`,
    then `await window.devknobs.ready()`. `reset()` keeps this. Patch only
    `open`, `docked` and `handle`. The other panel fields are the user's
-   layout. `panel.handle` is your layer. The user's own "show handle" setting
+   layout and settings, such as `devIcon`, the DEV ribbon on the tab's icon. `panel.handle` is your layer. The user's own "show handle" setting
    can hide the handle too, and `getState()` does not show that setting.
 2. Take a screenshot, or read the DOM.
 3. A numeric width or height, a device, a numeric dpr, a vision other than

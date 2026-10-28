@@ -85,6 +85,8 @@ function buildSettings(more: Partial<SettingsContext> = {}): Settings {
     renderKeys: () => {},
     handleShown: () => true,
     showHandle: () => {},
+    devIconShown: () => true,
+    setDevIcon: () => {},
     native: null,
     setNative: () => {},
     searching: () => false,
@@ -362,7 +364,8 @@ describe("the settings' native switch", () => {
 
   test("is not there where the host gives none", () => {
     const view = settings();
-    expect(view.find("switch")).toHaveLength(1);
+    // The handle's switch and the dev tab icon's.
+    expect(view.find("switch")).toHaveLength(2);
     expect(view.find("row-hint")).toHaveLength(0);
   });
 
@@ -393,6 +396,32 @@ describe("the settings' native switch", () => {
     expect(fake(said).textContent).toBe("switched to in-page");
     made.drawNative(true, null);
     expect(view.find("row-hint")[0]?.textContent).toBe("uses the debugger");
+  });
+});
+
+describe("the settings' dev tab icon switch", () => {
+  test("sits after the host's switch, before the shortcuts, and shows what is drawn", () => {
+    const made = buildSettings({ native: { label: "real browser settings", hint: "" } });
+    const view = fake(made.view);
+    const row = view.children[3];
+    expect(parts(row?.children[0]?.children[0])).toEqual(["glyph", "row-label", "switch row-control"]);
+    expect(row?.children[0]?.children[0]?.children[1]?.textContent).toBe("dev tab icon");
+    const toggle = view.find("switch")[2];
+    made.drawDevIcon(true);
+    expect(toggle?.attributes.get("aria-checked")).toBe("true");
+    made.drawDevIcon(false);
+    expect(toggle?.attributes.get("aria-checked")).toBe("false");
+  });
+
+  test("turns the ribbon the other way from what shows", () => {
+    const picked: boolean[] = [];
+    let shown = true;
+    const made = buildSettings({ devIconShown: () => shown, setDevIcon: (on) => picked.push(on) });
+    const toggle = fake(made.view).find("switch")[1];
+    toggle?.fire("click");
+    shown = false;
+    toggle?.fire("click");
+    expect(picked).toEqual([false, true]);
   });
 });
 
@@ -427,8 +456,8 @@ describe("the settings' head", () => {
 
   test("the shortcuts' title is the rows' label, over the rows' icons by the one shared rule", () => {
     const view = settings();
-    expect(view.children[2]?.className).toBe("rows-label");
-    expect(view.children[2]?.textContent).toBe("shortcuts");
+    expect(view.children[3]?.className).toBe("rows-label");
+    expect(view.children[3]?.textContent).toBe("shortcuts");
     expect(fake(rowsLabel("shortcuts")).className).toBe("rows-label");
     const label = rules(CSS).filter((rule) => /\.rows-label\b/.test(rule.selector));
     expect(label.map((rule) => rule.selector)).toEqual([".rows-label"]);
@@ -438,7 +467,7 @@ describe("the settings' head", () => {
 
   test("a shortcut ends with its x, the button a row's is, then its key", () => {
     const view = settings();
-    const shortcut = view.children[3];
+    const shortcut = view.children[4];
     const main = shortcut?.children[0]?.children[0];
     expect(parts(main)).toEqual([
       "glyph sided",
