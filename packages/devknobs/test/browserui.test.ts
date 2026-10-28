@@ -128,13 +128,14 @@ describe("viewportOf", () => {
     }
   });
 
-  test("gives the iPhone Duo WebKit's Safari 27.1 viewports, held either way", () => {
-    // webkit.org/blog/18486: width, then the small and the large viewport's height.
+  test("gives the iPhone Duo Safari 27.1's viewports, held either way, as the simulator does", () => {
+    // Measured on the iOS 27.1 simulator: width, then the expanded and the minimized height.
+    // The cover upright minimized is WebKit's (webkit.org/blog/18486), and across its `lvh`.
     const table: [string, OrientationValue, string, string][] = [
       ["iphone-duo-closed", "portrait", "382x580", "382x618"],
-      ["iphone-duo-closed", "landscape", "594x368", "594x406"],
-      ["iphone-duo-open", "portrait", "669x867", "669x902"],
-      ["iphone-duo-open", "landscape", "951x585", "951x620"],
+      ["iphone-duo-closed", "landscape", "678x386", "678x440"],
+      ["iphone-duo-open", "portrait", "669x871", "669x900"],
+      ["iphone-duo-open", "landscape", "951x589", "951x618"],
     ];
     for (const [id, orientation, expanded, minimized] of table) {
       expect(size(device(id), "compact", false, orientation)).toBe(expanded);
@@ -143,9 +144,10 @@ describe("viewportOf", () => {
       const edge = viewportOf(device(id), orientation, "compact", false, true);
       expect(`${edge.width}x${edge.height}`).toBe(expanded);
     }
-    // The cover's page is left of the column, from the top; the inner's under the bars at the top.
+    // The cover's page is left of the column, from the top; across, and on the inner screen, under the bar at the top.
     expect(viewportOf(device("iphone-duo-closed"), "portrait", "compact", false)).toEqual({ x: 0, y: 0, width: 382, height: 580 });
-    expect(viewportOf(device("iphone-duo-open"), "landscape", "compact", true)).toEqual({ x: 0, y: 49, width: 951, height: 620 });
+    expect(viewportOf(device("iphone-duo-closed"), "landscape", "compact", false)).toEqual({ x: 0, y: 80, width: 678, height: 386 });
+    expect(viewportOf(device("iphone-duo-open"), "landscape", "compact", true)).toEqual({ x: 0, y: 51, width: 951, height: 618 });
   });
 
   test("offers the Duo only its own layout, or none", () => {
@@ -272,15 +274,9 @@ describe("edge to edge", () => {
     expect(barsOf(device("pixel-9"), "portrait", "top", true)?.scrim).toBeNull();
   });
 
-  test("iOS 27 draws no scroll edge under an iPhone's bottom bars, in any layout", () => {
+  test("Safari's look under its bars is drawn upright and with edge to edge on, never in Chrome", () => {
     const pro = device("iphone-16-pro");
-    const full = barsOf(pro, "portrait", "compact", false, true);
-    expect(full?.edge).toBe(true);
-    expect(full?.fade).toBeNull();
-    expect(barsOf(pro, "portrait", "compact", true, true)?.fade).toBeNull();
-    expect(barsOf(pro, "portrait", "bottom", false, true)?.fade).toBeNull();
-    expect(barsOf(pro, "portrait", "top", false, true)?.fade).toBeNull();
-    expect(barsOf(pro, "landscape", "compact", false, true)?.fade).toBeNull();
+    expect(barsOf(pro, "portrait", "compact", false, true)?.edge).toBe(true);
     expect(barsOf(device("pixel-9"), "portrait", "top", false, true)?.edge).toBe(false);
   });
 });
@@ -397,25 +393,25 @@ describe("bars", () => {
     expect(status("iphone-air")?.time.y).toBeCloseTo(38.335);
   });
 
-  test("the Duo's cover screen stacks its status and Safari's buttons in the column, as Apple shows it", () => {
+  test("the Duo's cover screen stacks its status and Safari's buttons in the column upright, as the simulator shows it", () => {
     const cover = (orientation: OrientationValue, minimized: boolean) =>
       barsOf(device("iphone-duo-closed"), orientation, "compact", minimized);
     const upright = cover("portrait", false);
     expect(upright?.status).toBeNull();
-    // Under the camera hole, on the column's center line 46.5 in from the right.
+    // Under the camera hole, on the column's center line 48 in from the right.
     expect(upright?.column).toEqual({
-      x: 419.5,
+      x: 418,
       strip: false,
-      time: { y: 103.5, size: 16 },
-      ring: { y: 139, radius: 18.9, stroke: 3.5 },
+      time: { x: 418, y: 91.5, size: 15.75 },
+      ring: { y: 129.9, radius: 18.9, stroke: 3.5 },
     });
     const boxes = upright?.shapes.map(({ x, y, width, height }) => [x, y, width, height]);
     expect(boxes).toEqual([
       // The address, floating at the bottom of the page.
-      [23, 598, 336, 48],
-      [395.5, 193.8, 48, 48],
-      [395.5, 254.2, 48, 48],
-      [395.5, 544, 48, 102],
+      [24, 596, 334, 48],
+      [394, 174.2, 48, 48],
+      [394, 234.2, 48, 48],
+      [394, 542, 48, 102],
     ]);
     expect(upright?.shapes.map((shape) => shape.marks.map((mark) => mark.glyph))).toEqual([
       ["page", "reload"],
@@ -423,48 +419,61 @@ describe("bars", () => {
       ["bookmarks"],
       ["plus", "tabs"],
     ]);
-    // Its scroll edge stays over the page.
-    expect(upright?.fade).toMatchObject({ x: 0, width: 382 });
     // Minimized, the pill in the middle of the page, the status where it was.
     const mini = cover("portrait", true);
     expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y])).toEqual([["pill", 191, 632]]);
     expect(mini?.column).toEqual(upright?.column ?? null);
-    // Across, the camera hole turns to the top left, and the column goes with it, the page right of it.
-    const across = cover("landscape", false);
-    expect(across?.column).toMatchObject({ x: 46.5, time: { y: 103.5 }, ring: { y: 139 } });
-    expect(viewportOf(device("iphone-duo-closed"), "landscape", "compact", false)).toEqual({ x: 84, y: 0, width: 594, height: 368 });
-    expect(across?.shapes.map(({ x, y, width, height }) => [x, y, width, height])).toEqual([
-      [107, 386, 548, 48],
-      [22.5, 193.8, 48, 48],
-      [22.5, 254.2, 48, 48],
-      [22.5, 332, 48, 102],
-    ]);
-    expect(across?.fade).toMatchObject({ x: 84, width: 594 });
-    expect(cover("landscape", true)?.shapes.map((shape) => [shape.kind, shape.x])).toEqual([["pill", 84 + 297]]);
   });
 
-  test("the Duo's inner screen keeps its status at the top right and Safari's row left of it, held either way", () => {
+  test("held across, the Duo's cover screen has one bar at the top and no status, as the simulator shows it", () => {
+    const across = barsOf(device("iphone-duo-closed"), "landscape", "compact", false);
+    expect(across?.status).toBeNull();
+    expect(across?.column).toBeNull();
+    expect(across?.shapes.map(({ x, y, width, height }) => [x, y, width, height])).toEqual([
+      [17.33, 26, 44, 44],
+      [73.33, 26, 44, 44],
+      // The address in the middle of the screen.
+      [209, 26, 260, 44],
+      [528.67, 26, 132, 44],
+    ]);
+    expect(across?.shapes.map((shape) => shape.marks.map((mark) => mark.glyph))).toEqual([
+      ["back"],
+      ["bookmarks"],
+      ["page", "reload"],
+      ["share", "plus", "tabs"],
+    ]);
+    const mini = barsOf(device("iphone-duo-closed"), "landscape", "compact", true);
+    expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y, shape.height])).toEqual([["pill", 339, 3, 20]]);
+  });
+
+  test("the Duo's inner screen keeps Safari's row and its status in one bar at the top, held either way", () => {
+    // The address's box, measured on the simulator 951 and 669 wide.
+    const fields = { landscape: { x: 295, width: 361 }, portrait: { x: 184, width: 241.5 } };
     for (const orientation of ["portrait", "landscape"] as const) {
       const bars = barsOf(device("iphone-duo-open"), orientation, "compact", false);
       const W = orientation === "portrait" ? 669 : 951;
       expect(bars?.status).toBeNull();
+      // The time inline, left of the ring.
       expect(bars?.column).toEqual({
-        x: W - 47.9,
+        x: W - 47.67,
         strip: true,
-        time: { y: 20, size: 15 },
-        ring: { y: 57.5, radius: 18.2, stroke: 2.9 },
+        time: { x: W - 99.83, y: 47.4, size: 15.75 },
+        ring: { y: 47.9, radius: 18.9, stroke: 3.5 },
       });
       const shapes = bars?.shapes ?? [];
-      expect(shapes.map((shape) => shape.y)).toEqual([20, 20, 20, 20]);
-      // The row ends left of the status, and the ring with its dots ends above the page.
-      expect(Math.max(...shapes.map((shape) => shape.x + shape.width))).toBeLessThanOrEqual(W - 96 - 10);
-      expect(57.5 + 18.2 + 2.2).toBeLessThan(84);
-      // No two of the row's capsules overlap.
-      const spans = shapes.map((shape) => [shape.x, shape.x + shape.width]).sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
-      for (let at = 1; at < spans.length; at++) expect(spans[at]?.[0] ?? 0).toBeGreaterThan(spans[at - 1]?.[1] ?? 0);
+      expect(shapes.map(({ x, y, width, height }) => [x, y, width, height])).toEqual([
+        [16, 26, 44, 44],
+        [72, 26, 44, 44],
+        [fields[orientation].x, 26, fields[orientation].width, 44],
+        [W - 232, 26, 88, 44],
+      ]);
+      // No share: new tab and tabs alone, and nothing reaches the time.
+      expect(shapes.at(-1)?.marks.map((mark) => mark.glyph)).toEqual(["plus", "tabs"]);
+      expect(Math.max(...shapes.map((shape) => shape.x + shape.width))).toBeLessThan(W - 99.83 - 20);
+      // Minimized, a small domain pill alone, the status gone.
       const mini = barsOf(device("iphone-duo-open"), orientation, "compact", true);
-      expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y])).toEqual([["pill", W / 2, 4]]);
-      expect(mini?.column).toEqual(bars?.column ?? null);
+      expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y, shape.height])).toEqual([["pill", W / 2, 23.5, 20]]);
+      expect(mini?.column).toBeNull();
     }
   });
 
@@ -514,8 +523,6 @@ describe("bars", () => {
     // Turned across, the switch still decides.
     expect(barsOf(pro, "landscape", "compact", false, false)?.edge).toBe(false);
     expect(barsOf(pro, "landscape", "compact", false, true)?.edge).toBe(true);
-    expect(barsOf(pro, "landscape", "compact", false)?.fade).toBeNull();
-    expect(barsOf(device("pixel-9"), "portrait", "bottom", false)?.fade).toBeNull();
   });
 
   test("nothing for the browser off or a device without one", () => {

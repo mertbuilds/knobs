@@ -107,7 +107,8 @@ and 402 × 660 at the top (the page starts under the address bar, at 122),
 754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
 `position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
 and `screen.height` are the device's own size, 402 × 874 on a 17 Pro: an
-iPhone keeps it upright however it is held, an Android phone turns it. under the bars, where the frame
+iPhone keeps it upright however it is held, an Android phone turns it; the
+iPhone Duo reports its cover screen, 466 × 678, on either screen. under the bars, where the frame
 ends, the page runs on to the bottom of the screen, as a picture of the
 document past the viewport that follows the scroll, or the color of a fixed
 bar at the bottom of the viewport, carried down as on the phone. the strip over the page takes the color of a fixed or
@@ -115,7 +116,7 @@ sticky bar at the top, else the page's background. minimized, the strip
 goes: the content at the top of the page shows under the status bar, in a
 wash of the page's color that fades out over 100 px, and the status bar's
 glyphs follow it. iOS 27 draws no scroll edge under the bottom bars, so the page
-runs on under them at full strength; only the iPhone Duo keeps a light one. the edge to edge switch
+runs on under them at full strength, on the iPhone Duo too. the edge to edge switch
 is offered only with the iPhone held sideways, where it still changes the
 frame: on, by default, the page runs under the top row of bars; off, it
 starts under it. upright it is not offered, and a value set earlier is kept
@@ -125,19 +126,21 @@ toolbar and 412 × 857 without. the 9s' status bars are AOSP's own. Google
 publishes none for the 10s, so theirs are derived from where the punch hole
 sits, as AOSP lines the 9s' bars up with theirs.
 
-the iPhone Duo has Safari 27.1's own layout, the only one it offers. on the
-cover screen the status bar and Safari's buttons stack in a column beside
-the camera hole, on the right upright and on the left held across, as
-Apple's picture shows it: the time, a ring
-for the battery round wifi with the signal's four dots in its gap, back,
-reader, and new tab with tabs. the address floats at the bottom of the
-page. the page never runs under the column, which takes the page's color.
-the inner screen keeps Safari's row at the top, held either way, with the
-same time and ring at its top right, as on jadon7's concept, since Apple
-shows none. the edge to edge switch is not offered on the Duo. the page
-gets WebKit's viewports: 382 × 580 and 618 minimized on the cover screen
-upright, 594 × 368 and 406 across, 669 × 867 and 902 on the inner screen
-upright, 951 × 585 and 620 across.
+the iPhone Duo has Safari 27.1's own layout, the only one it offers, as
+measured on the iOS 27.1 simulator. upright on the cover screen the status
+and Safari's buttons stack in a column on the right, under the camera hole:
+the time, a ring for the battery round wifi with the signal's four dots in
+its gap, back, reader, and new tab with tabs. the address floats at the
+bottom of the page. the page never runs under the column, which takes the
+page's color. held across, the cover has no status and no column: one bar
+along the top holds back, reader, the address, share, new tab and tabs. the
+inner screen has one bar at the top, held either way: back, reader, the
+address, new tab with tabs, then the time and the ring; minimized, only a
+small domain pill is left. the edge to edge switch is not offered on the
+Duo. the page gets the simulator's viewports: 382 × 580 on the cover screen
+upright (618 minimized, WebKit's, as the simulator's cover takes no
+swipe), 678 × 386 and 440 across, 669 × 871 and 900 on the inner screen
+upright, 951 × 589 and 618 across.
 
 the bars minimize and come back with the page's scroll, or stay one way with
 the bars knob. Safari's address capsule, or the bottom layout's card, is one

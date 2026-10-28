@@ -28,12 +28,12 @@ describe("the bars drawn into the picture of a screen", () => {
     expect(cover?.screen.id).toBe("iphone-duo-closed");
     expect(inner?.screen.id).toBe("iphone-duo-open");
     expect(glass("closed", "portrait", "compact", false)).toEqual([
-      { rect: { x: 23, y: 598, width: 336, height: 48 }, radius: 24 },
-      { rect: { x: 395.5, y: 193.8, width: 48, height: 48 }, radius: 24 },
-      { rect: { x: 395.5, y: 254.2, width: 48, height: 48 }, radius: 24 },
-      { rect: { x: 395.5, y: 544, width: 48, height: 102 }, radius: 24 },
+      { rect: { x: 24, y: 596, width: 334, height: 48 }, radius: 24 },
+      { rect: { x: 394, y: 174.2, width: 48, height: 48 }, radius: 24 },
+      { rect: { x: 394, y: 234.2, width: 48, height: 48 }, radius: 24 },
+      { rect: { x: 394, y: 542, width: 48, height: 102 }, radius: 24 },
     ]);
-    expect(glass("open", "portrait", "compact", false)?.map((pane) => pane.rect.y)).toEqual([20, 20, 20, 20]);
+    expect(glass("open", "portrait", "compact", false)?.map((pane) => pane.rect.y)).toEqual([26, 26, 26, 26]);
   });
 
   test("take the Duo's own layout for any other the knob asks for", () => {
@@ -50,13 +50,16 @@ describe("the bars drawn into the picture of a screen", () => {
     expect(pill?.rect.y).toBe(632);
     // Centered on the page, left of the column.
     expect((pill?.rect.x ?? 0) + (pill?.rect.width ?? 0) / 2).toBe(382 / 2);
-    expect(glass("open", "portrait", "compact", true)?.[0]?.rect.y).toBe(4);
+    // The inner screen's pill is smaller, at its top.
+    const inner = glass("open", "portrait", "compact", true)?.[0];
+    expect(inner?.rect.y).toBe(23.5);
+    expect(inner?.radius).toBe(10);
   });
 
-  test("held across, the cover keeps its column and the inner screen its row at the top", () => {
-    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([20, 20, 20, 20]);
-    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([386, 193.8, 254.2, 332]);
-    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.x)).toEqual([107, 22.5, 22.5, 22.5]);
+  test("held across, the cover and the inner screen both keep their row at the top", () => {
+    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([26, 26, 26, 26]);
+    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([26, 26, 26, 26]);
+    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.x)).toEqual([17.33, 73.33, 209, 528.67]);
   });
 
   test("are not glass in Chrome, whose bars hide the page", () => {

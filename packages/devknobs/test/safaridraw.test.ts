@@ -4,7 +4,6 @@ import {
   batteryParts,
   batteryWidth,
   domainOf,
-  edgeTone,
   glassTint,
   STATUS_GLYPHS,
 } from "../src/engine/safaridraw";
@@ -102,15 +101,6 @@ describe("Safari's glass", () => {
     const navy = hex(glassTint(hex("#0a1a40"), "dark").fill);
     expect(navy.blue).toBeGreaterThan(navy.red);
     expect(navy.blue).toBeLessThan(0x80);
-  });
-
-  test("the scroll edge shades the content a little in its hue, and not over black", () => {
-    const white = edgeTone(hex("#ffffff"));
-    expect(Math.round(white?.red ?? 0)).toBe(252);
-    const blue = edgeTone(hex("#1e5bd7"));
-    expect(Math.round(blue?.blue ?? 0)).toBeGreaterThanOrEqual(0xc4);
-    expect(Math.round(blue?.blue ?? 0)).toBeLessThanOrEqual(0xcc);
-    expect(edgeTone(hex("#000000"))).toBeNull();
   });
 
   test("the address is the host alone, as Safari hides the port", () => {

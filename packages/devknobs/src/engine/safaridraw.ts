@@ -4,7 +4,6 @@ import { type Color, luminance, parseColor, parseHex } from "./color";
 import {
   alphaAt,
   type Bars,
-  type Fade,
   type Glyph,
   type Mark,
   SAFARI_TEXT,
@@ -121,7 +120,7 @@ export const SAFARI_CSS = `
 /* A minimized Safari's wash under the status bar comes and goes with the bars. */
 .safari .scrim { left: 0; right: 0; opacity: 0; transition: opacity var(--main) ${MORPH.ease}; }
 .safari[data-state="min"] .scrim[data-on="true"] { opacity: 1; }
-.safari .domain, .safari .fade {
+.safari .domain {
   transition:
     top var(--main) ${MORPH.ease},
     height var(--main) ${MORPH.ease},
@@ -415,24 +414,23 @@ function statusBar(status: StatusBar): Element[] {
 }
 
 /**
- * The Duo cover screen's status column, measured on Apple's picture of it in
- * pt: the ring is open at the bottom, its ends 55 degrees each side of
- * straight down, and the signal's four dots, 4.4 round, sit on its circle in
- * the gap, 11 and 32 degrees each side. Wifi in the ring is 17.9 by 14.3,
- * its bands the large set's to that height. The ring's arc is the battery:
- * as much of it as the charge, the rest at 35%.
+ * The Duo's status, measured on the iOS 27.1 simulator in pt: the ring is
+ * open at the bottom, its ends 55 degrees each side of straight down, and the
+ * signal's four dots, 4 round, sit on its circle in the gap, 10 and 30.5
+ * degrees each side. Wifi in the ring is the iPhone's, 18.2 by 13.33. The
+ * ring's arc is the battery: as much of it as the charge, the rest at 35%.
  */
 export const DUO_GLYPHS = {
   time: { spacing: 0, drop: 0.8 },
   ends: 55,
-  dots: [-32, -11, 11, 32],
-  dot: 2.2,
+  dots: [-30.5, -10, 10, 30.5],
+  dot: 2,
   rest: 0.35,
   wifi: {
-    width: 17.9,
-    height: 14.3,
-    bands: [0, 3.57, 6.93, 8.91, 12.27, 14.3],
-    angle: 38.7,
+    width: 18.2,
+    height: 13.33,
+    bands: [0, 3.06, 5.94, 7.64, 10.51, 12.26],
+    angle: 45.4,
     round: 1.1,
     drop: 0,
   },
@@ -472,10 +470,10 @@ function ring(x: number, y: number, size: StatusColumn["ring"]): SVGSVGElement {
   return svg;
 }
 
-/** The Duo's status column: the time, and under it the ring round wifi. */
-function statusColumn(column: StatusColumn): Element[] {
+/** The Duo's status: the time, and the ring round wifi. */
+function statusColumn(column: StatusColumn): (HTMLElement | SVGSVGElement)[] {
   const time = el("div", "time", "04:20");
-  time.style.left = `${column.x}px`;
+  time.style.left = `${column.time.x}px`;
   time.style.top = `${column.time.y + DUO_GLYPHS.time.drop}px`;
   time.style.fontSize = `${column.time.size}px`;
   time.style.letterSpacing = `${DUO_GLYPHS.time.spacing}px`;
@@ -508,13 +506,10 @@ export function domainOf(host: string): string {
   return host.replace(/:\d+$/, "");
 }
 
-/**
- * The minimized domain pill's box: 18.5 px either side of its text's ink,
- * measured on the iOS 26.5 simulator, which is 16.5 either side of the
- * text's advance.
- */
+/** The minimized domain pill's box: its domain's advance and the pill's room either side. */
 export function pillBox(pill: Shape, host: string): Rect {
-  const width = Math.round(textWidth(domainOf(host), SAFARI_TEXT.pill, DOMAIN_WEIGHT)) + 33;
+  const size = pill.text?.size ?? SAFARI_TEXT.pill;
+  const width = Math.round(textWidth(domainOf(host), size, DOMAIN_WEIGHT)) + (pill.text?.pad ?? 0);
   return { x: pill.x - width / 2, y: pill.y, width, height: pill.height };
 }
 
@@ -650,51 +645,9 @@ function tintGlass(node: HTMLElement, box: Rect, look: Look): Color {
   return under;
 }
 
-/**
- * The scroll edge's tone over content of `under`, as the simulator draws it:
- * a shade darker in the same hue (white to #fcfcfc, #1e5bd7 to #1d54c9 by
- * the bars), and none over dark content.
- */
-export function edgeTone(under: Color): Color | null {
-  if (luminance(under.red, under.green, under.blue) < 0.03) return null;
-  const [, saturation, lightness] = hslOf(under);
-  const share = 0.988 - 0.08 * saturation * (1 - Math.abs(2 * lightness - 1));
-  return { red: under.red * share, green: under.green * share, blue: under.blue * share, alpha: 1 };
-}
-
 function placeBox(node: HTMLElement, box: Rect, radius: number): void {
   place(node, box.x, box.y, box.width, box.height);
   node.style.borderRadius = `${radius}px`;
-}
-
-/**
- * The scroll edge's box and its gradient. Over a page drawn to the screen's
- * bottom it darkens the content under the bars a shade, `under`'s tone at
- * its last stop. Over the frame's end it fades the page into the screen's
- * color under it.
- */
-function placeFade(node: HTMLElement, fade: Fade | null, look: Look, edge: Color | null): void {
-  const last = fade?.stops.at(-1)?.alpha ?? 1;
-  const bottom = parseColor(look.bottom) ?? WHITE;
-  const tone = edge ? edgeTone(edge) : bottom;
-  node.hidden = fade === null || tone === null;
-  if (!fade || !tone) return;
-  node.style.left = `${fade.x ?? 0}px`;
-  node.style.right = fade.width === undefined ? "0" : "";
-  node.style.width = fade.width === undefined ? "" : `${fade.width}px`;
-  node.style.top = `${fade.y}px`;
-  node.style.height = `${fade.height}px`;
-  // Reach the tone at the last stop's opacity: the shade's own color sits that much further from the content.
-  const toward = (channel: number, page: number) =>
-    edge ? Math.max(0, Math.round(page - (page - channel) / last)) : Math.round(channel);
-  const base = edge ?? bottom;
-  const [r, g, b] = [
-    toward(tone.red, base.red),
-    toward(tone.green, base.green),
-    toward(tone.blue, base.blue),
-  ];
-  const stops = fade.stops.map(({ at, alpha }) => `rgba(${r}, ${g}, ${b}, ${alpha}) ${at}px`);
-  node.style.background = `linear-gradient(to bottom, ${stops.join(", ")})`;
 }
 
 /** `top` over `under`, `alpha` of the way. */
@@ -733,20 +686,18 @@ export function scrimOver(node: HTMLElement, mini: Bars, look: Look): Color | nu
  * Safari's bars, drawn once for both states (the plus to menu morph of
  * transitions.dev). The address capsule, Bottom's card or Top's address bar
  * is one surface that becomes the minimized pill: its box and corners tween,
- * the domain glides and scales from 17 to 13 px in it, and the page menu,
- * reload and Bottom's buttons fade out as an icon swap. The capsules beside
- * it fade and drift 10 px. The scroll edge moves on the same curve.
+ * the domain glides and scales from 17 to the pill's size in it, and the page
+ * menu, reload and Bottom's buttons fade out as an icon swap. The capsules
+ * beside it fade and drift 10 px.
  */
 export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions): Painted {
   const root = el("div", "safari");
   root.style.inset = "0";
-  const fade = el("div", "fade");
-  fade.style.left = "0";
-  fade.style.right = "0";
   const scrim = el("div", "scrim");
-  root.append(scrim, fade);
+  root.append(scrim);
   if (full.status) root.append(...statusBar(full.status));
-  if (full.column) root.append(...statusColumn(full.column));
+  const column = full.column ? statusColumn(full.column) : [];
+  root.append(...column);
   const pill = mini.shapes.find((shape) => shape.kind === "pill") ?? null;
   // The shape that becomes the pill: the one with the domain, or Bottom's card.
   const main = pill
@@ -841,17 +792,8 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
       const strip = (minimized ? behind : null) ?? parseColor(own) ?? WHITE;
       const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
       root.className = darkStrip ? "safari dark" : "safari light";
-      const shown = minimized ? mini : full;
-      // The scroll edge over a page under the bars takes the tone of the content under the lowest bar.
-      const lowest = shown.shapes.reduce<Shape | null>(
-        (low, shape) => (!low || shape.y > low.y ? shape : low),
-        null,
-      );
-      const edge =
-        shown.edge && lowest
-          ? underAt(sight, shown.screen.width / 2, lowest.y + lowest.height / 2)
-          : null;
-      placeFade(fade, shown.fade, sight, edge);
+      // The Duo's inner screen hides its status minimized.
+      for (const node of column) node.style.display = minimized && !mini.column ? "none" : "";
       for (const text of Array.from(root.querySelectorAll<HTMLElement>(".domain"))) {
         text.textContent = domainOf(sight.host);
       }
@@ -868,7 +810,7 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
         tintGlass(surface, box, sight);
         const top = minimized ? pill.height / 2 : Number(domain.dataset.top);
         domain.style.top = `${top}px`;
-        const scale = minimized ? SAFARI_TEXT.pill / SAFARI_TEXT.field : 1;
+        const scale = minimized ? (pill.text?.size ?? SAFARI_TEXT.pill) / SAFARI_TEXT.field : 1;
         domain.style.transform = `translate(-50%, -50%) scale(${scale})`;
       }
     },
