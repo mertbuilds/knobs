@@ -77,8 +77,11 @@ const styles = create({
     justifyContent: 'space-between',
   },
   // The studio, at the footer's right end, also on a line of its own where the links fill the width.
+  // On a phone it takes a centered line of its own under the centered links.
   credit: {
-    marginInlineStart: 'auto',
+    flexBasis: { default: '100%', [WIDE]: 'auto' },
+    justifyContent: { default: 'center', [WIDE]: 'flex-start' },
+    marginInlineStart: { default: 0, [WIDE]: 'auto' },
   },
   // The hero's two ways in, one row of equal height: the extension, then the setup prompt. On a
   // narrow screen the prompt goes under the extension.
@@ -144,6 +147,7 @@ const styles = create({
     display: 'flex',
     flexWrap: 'wrap',
     fontSize: '0.8125rem',
+    justifyContent: { default: 'center', [WIDE]: 'flex-start' },
     paddingTop: spacing.s6,
     rowGap: spacing.s2,
   },
