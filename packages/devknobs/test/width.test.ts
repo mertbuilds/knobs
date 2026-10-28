@@ -1836,6 +1836,9 @@ describe("the touch cursor over the screen", () => {
     if (!(letterbox instanceof HTMLElement)) throw new Error("no letterbox");
     const look = {
       background: "rgb(255, 255, 255)",
+      top: "rgb(255, 255, 255)",
+      bottom: "rgb(255, 255, 255)",
+      under: [],
       dark: false,
       scheme: "light",
       host: "localhost:3000",

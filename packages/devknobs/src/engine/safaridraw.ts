@@ -1,5 +1,6 @@
 import type { Actions, Look, Painted, Shapes } from "./browserkit";
 import { CHARGE, el, glyphAt, MORPH, place, svgNode, textWidth } from "./browserkit";
+import { type Color, luminance, parseColor, parseHex } from "./color";
 import {
   type Bars,
   type Fade,
@@ -18,6 +19,9 @@ import type { Rect } from "./mock";
  * (a chevron, a box with an arrow, an open book), not from Apple's symbols.
  * Colors are sampled from the simulator.
  */
+
+/** The domain's weight, medium and untracked as on the iOS 26.5 simulator. */
+const DOMAIN_WEIGHT = 500;
 
 export const SAFARI_CSS = `
 .safari {
@@ -40,27 +44,25 @@ export const SAFARI_CSS = `
 }
 .safari.dark { color: #f3f3f8; }
 .safari .surface > *, .safari .side > *, .safari .field > * { position: absolute; }
-/* Glass over the page: a fill the page shows faintly through, blurred. */
-.safari .capsule, .safari .card, .safari .surface {
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  -webkit-backdrop-filter: blur(10px) saturate(1.8);
-  backdrop-filter: blur(10px) saturate(1.8);
+/* Glass over the page: a fill in the tone of the page under it, which shows faintly through, blurred. */
+.safari .capsule, .safari .surface {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
-.safari .card, .safari[data-state="max"] .surface.from-card {
-  background: rgba(250, 250, 250, 0.82);
+.safari [data-tone="light"] { color: #000; }
+.safari [data-tone="dark"] { color: #fff; }
+/* Light glass has no hairline, only a soft wide shadow. */
+.safari [data-rim="none"] { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.065); }
+/* Glass in a page's hue: a lighter rim of its own color. */
+.safari [data-rim="tint"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+/* Dark glass: a faint rim, brighter along the top, and no shadow. */
+.safari [data-rim="highlight"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 1px 0.5px rgba(255, 255, 255, 0.14);
 }
 .safari .field { background: rgba(0, 0, 0, 0.05); }
-/* Sampled from a real iPhone over a dark page. */
-.safari.dark .capsule, .safari.dark .surface {
-  background: rgba(40, 40, 42, 0.75);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13);
-}
-.safari.dark .card, .safari.dark[data-state="max"] .surface.from-card {
-  background: rgba(46, 46, 48, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-.safari.dark .field { background: rgba(0, 0, 0, 0.14); }
+.safari [data-tone="dark"] .field { background: rgba(0, 0, 0, 0.14); }
 .safari .glyph {
   fill: none;
   stroke: currentColor;
@@ -72,9 +74,9 @@ export const SAFARI_CSS = `
 /* Reload and stop are a shade lighter than the other glyphs and thinner, as measured. */
 .safari .glyph .reload { stroke-width: 1.6; }
 .safari .glyph .stop { stroke-width: 1.82; }
-.safari.light .glyph .reload, .safari.light .glyph .stop { stroke: #191919; }
-.safari .glyph.off { color: #babac7; }
-.safari.dark .glyph.off { color: #58585b; }
+.safari [data-tone="light"] .glyph .reload, .safari [data-tone="light"] .glyph .stop { stroke: #191919; }
+/* A button that does nothing: its glyph at 30%, #babac7 on white glass, #58585b on dark. */
+.safari .glyph.off { stroke-opacity: 0.3; fill-opacity: 0.3; }
 .safari .domain {
   left: 50%;
   white-space: nowrap;
@@ -82,8 +84,7 @@ export const SAFARI_CSS = `
   text-overflow: ellipsis;
   text-align: center;
   font-size: ${SAFARI_TEXT.field}px;
-  font-weight: 400;
-  letter-spacing: -0.2px;
+  font-weight: ${DOMAIN_WEIGHT};
   transform: translate(-50%, -50%);
 }
 .safari .time { font-weight: 600; transform: translate(-50%, -50%); }
@@ -411,10 +412,154 @@ function glyphIn(mark: Mark, origin: Rect, className: string, actions: Actions):
   return svg;
 }
 
-/** The minimized domain pill's box: as wide as its text and 19 px either side. */
+/** The address as Safari shows it: the host alone, without its port. */
+export function domainOf(host: string): string {
+  return host.replace(/:\d+$/, "");
+}
+
+/**
+ * The minimized domain pill's box: 18.5 px either side of its text's ink,
+ * measured on the iOS 26.5 simulator, which is 16.5 either side of the
+ * text's advance.
+ */
 export function pillBox(pill: Shape, host: string): Rect {
-  const width = Math.round(textWidth(host, SAFARI_TEXT.pill, 400, -0.2)) + 38;
+  const width = Math.round(textWidth(domainOf(host), SAFARI_TEXT.pill, DOMAIN_WEIGHT)) + 33;
   return { x: pill.x - width / 2, y: pill.y, width, height: pill.height };
+}
+
+/** A color's hue in degrees, its saturation and its lightness, both from 0 to 1. */
+function hslOf({ red, green, blue }: Color): [number, number, number] {
+  const [r, g, b] = [red / 255, green / 255, blue / 255];
+  const high = Math.max(r, g, b);
+  const low = Math.min(r, g, b);
+  const lightness = (high + low) / 2;
+  const span = high - low;
+  if (span === 0) return [0, 0, lightness];
+  const saturation = span / (1 - Math.abs(2 * lightness - 1));
+  const hue = high === r ? (g - b) / span + 6 : high === g ? (b - r) / span + 2 : (r - g) / span + 4;
+  return [(hue * 60) % 360, saturation, lightness];
+}
+
+function fromHsl(hue: number, saturation: number, lightness: number): Color {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const at = (((hue % 360) + 360) % 360) / 60;
+  const second = chroma * (1 - Math.abs((at % 2) - 1));
+  const sectors = [
+    [chroma, second, 0],
+    [second, chroma, 0],
+    [0, chroma, second],
+    [0, second, chroma],
+    [second, 0, chroma],
+    [chroma, 0, second],
+  ];
+  const [r = 0, g = 0, b = 0] = sectors[Math.floor(at) % 6] ?? [];
+  const m = lightness - chroma / 2;
+  return { red: (r + m) * 255, green: (g + m) * 255, blue: (b + m) * 255, alpha: 1 };
+}
+
+function hexOf({ red, green, blue }: Color): string {
+  const pair = (channel: number) =>
+    Math.min(255, Math.max(0, Math.round(channel))).toString(16).padStart(2, "0");
+  return `#${pair(red)}${pair(green)}${pair(blue)}`;
+}
+
+/** How Safari's glass looks over a color of the page. */
+export interface Tint {
+  /** The glass's color where the page under it is that color all over. */
+  fill: string;
+  /** The tone of the glyphs and text on it. */
+  glyph: "light" | "dark";
+  /** Its edge: none and a soft shadow, a rim of its own hue, or dark glass's highlight. */
+  rim: "none" | "tint" | "highlight";
+}
+
+/**
+ * The glass over `under` in a page of `scheme`, from pairs measured on the
+ * iOS 26.5 simulator. The glass takes its tone from the page under it, not
+ * from the scheme: light content gives near-white glass (#fefefe, a little
+ * grayer at #f8f8f8 in dark), dark content #191919 glass, and saturated
+ * content glass in its own hue, lighter in light (#1e5bd7 gives #78b8ff with
+ * dark glyphs) and deeper in dark (#1661fd with white glyphs). Colors in
+ * between mix the two by how saturated they are.
+ */
+export function glassTint(under: Color, scheme: "light" | "dark"): Tint {
+  const [hue, saturation, lightness] = hslOf(under);
+  // Light content is the content black text reads better on than white.
+  const light = luminance(under.red, under.green, under.blue) > 0.179;
+  const gray = light ? (scheme === "light" ? 0xfe : 0xf8) : 0x19;
+  const neutral: Color = { red: gray, green: gray, blue: gray, alpha: 1 };
+  const hued =
+    scheme === "light"
+      ? fromHsl(hue - 8, Math.min(1, saturation + 0.245), Math.min(0.9, lightness + 0.255))
+      : fromHsl(hue + 1, Math.min(1, saturation + 0.225), Math.min(0.85, lightness + 0.06));
+  const chroma = saturation * (1 - Math.abs(2 * lightness - 1));
+  const share = Math.min(1, chroma / 0.7);
+  const mix = (a: number, b: number) => a + (b - a) * share;
+  const fill: Color = {
+    red: mix(neutral.red, hued.red),
+    green: mix(neutral.green, hued.green),
+    blue: mix(neutral.blue, hued.blue),
+    alpha: 1,
+  };
+  const glyph = luminance(fill.red, fill.green, fill.blue) > 0.3 ? "dark" : "light";
+  const rim = share > 0.3 ? "tint" : glyph === "light" ? "highlight" : "none";
+  return { fill: hexOf(fill), glyph, rim };
+}
+
+/** How much of the page under it the glass hides. */
+const GLASS_ALPHA = 0.9;
+
+/**
+ * The glass's own fill, which shows the page faintly through, so that over
+ * a page of `under` all over it reads as `fill`.
+ */
+function glassFill(fill: Color, under: Color): string {
+  const own = (want: number, page: number) =>
+    Math.min(255, Math.max(0, Math.round((want - (1 - GLASS_ALPHA) * page) / GLASS_ALPHA)));
+  const [r, g, b] = [
+    own(fill.red, under.red),
+    own(fill.green, under.green),
+    own(fill.blue, under.blue),
+  ];
+  return `rgba(${r}, ${g}, ${b}, ${GLASS_ALPHA})`;
+}
+
+const WHITE: Color = { red: 255, green: 255, blue: 255, alpha: 1 };
+
+/** The page's color under the point of the screen nearest `x`, `y`, else the page's own. */
+function underAt(look: Look, x: number, y: number): Color {
+  let best: string | null = null;
+  let far = Infinity;
+  for (const sample of look.under) {
+    const distance = Math.hypot(sample.x - x, sample.y - y);
+    if (distance < far) {
+      far = distance;
+      best = sample.color;
+    }
+  }
+  return parseColor(best ?? look.background) ?? WHITE;
+}
+
+/** Tint a piece of glass for the page under its middle. */
+function tintGlass(node: HTMLElement, box: Rect, look: Look): Color {
+  const under = underAt(look, box.x + box.width / 2, box.y + box.height / 2);
+  const tint = glassTint(under, look.scheme);
+  node.style.backgroundColor = glassFill(parseHex(tint.fill) ?? WHITE, under);
+  node.dataset.tone = tint.glyph === "dark" ? "light" : "dark";
+  node.dataset.rim = tint.rim;
+  return under;
+}
+
+/**
+ * The scroll edge's tone over content of `under`, as the simulator draws it:
+ * a shade darker in the same hue (white to #fcfcfc, #1e5bd7 to #1d54c9 by
+ * the bars), and none over dark content.
+ */
+export function edgeTone(under: Color): Color | null {
+  if (luminance(under.red, under.green, under.blue) < 0.03) return null;
+  const [, saturation, lightness] = hslOf(under);
+  const share = 0.988 - 0.08 * saturation * (1 - Math.abs(2 * lightness - 1));
+  return { red: under.red * share, green: under.green * share, blue: under.blue * share, alpha: 1 };
 }
 
 function placeBox(node: HTMLElement, box: Rect, radius: number): void {
@@ -422,15 +567,30 @@ function placeBox(node: HTMLElement, box: Rect, radius: number): void {
   node.style.borderRadius = `${radius}px`;
 }
 
-/** The scroll edge's box and its gradient of the page's color. */
-function placeFade(node: HTMLElement, fade: Fade | null, look: Look): void {
-  node.hidden = fade === null;
-  if (!fade) return;
+/**
+ * The scroll edge's box and its gradient. Over a page drawn to the screen's
+ * bottom it darkens the content under the bars a shade, `under`'s tone at
+ * its last stop. Over the frame's end it fades the page into the screen's
+ * color under it.
+ */
+function placeFade(node: HTMLElement, fade: Fade | null, look: Look, edge: Color | null): void {
+  const last = fade?.stops.at(-1)?.alpha ?? 1;
+  const bottom = parseColor(look.bottom) ?? WHITE;
+  const tone = edge ? edgeTone(edge) : bottom;
+  node.hidden = fade === null || tone === null;
+  if (!fade || !tone) return;
   node.style.top = `${fade.y}px`;
   node.style.height = `${fade.height}px`;
-  // The page's color, `rgb(r, g, b)`, at each stop's opacity.
-  const color = (alpha: number) => look.background.replace(/^rgb\((.*)\)$/, `rgba($1, ${alpha})`);
-  const stops = fade.stops.map(({ at, alpha }) => `${color(alpha)} ${at}px`);
+  // Reach the tone at the last stop's opacity: the shade's own color sits that much further from the content.
+  const toward = (channel: number, page: number) =>
+    edge ? Math.max(0, Math.round(page - (page - channel) / last)) : Math.round(channel);
+  const base = edge ?? bottom;
+  const [r, g, b] = [
+    toward(tone.red, base.red),
+    toward(tone.green, base.green),
+    toward(tone.blue, base.blue),
+  ];
+  const stops = fade.stops.map(({ at, alpha }) => `rgba(${r}, ${g}, ${b}, ${alpha}) ${at}px`);
   node.style.background = `linear-gradient(to bottom, ${stops.join(", ")})`;
 }
 
@@ -508,11 +668,13 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
   surface?.append(progress);
   /** Each load, so a finish that a new load cut short leaves the line alone. */
   let loads = 0;
+  const sides: { node: HTMLElement; box: Rect }[] = [];
   // Everything else leaves as a side capsule, toward the surface, or up when turned across.
   for (const shape of full.shapes) {
     if (shape === main || shape.kind === "field") continue;
     const side = el("div", "side capsule");
     placeBox(side, shape, shape.radius);
+    sides.push({ node: side, box: shape });
     const middle = shape.x + shape.width / 2;
     const across = full.orientation === "landscape";
     const toward = main ? main.x + main.width / 2 : middle;
@@ -535,11 +697,25 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
     root,
     apply(minimized, sight) {
       root.dataset.state = minimized ? "min" : "max";
-      root.className = sight.dark ? "safari dark" : "safari light";
-      placeFade(fade, (minimized ? mini : full).fade, sight);
+      // The status bar's glyphs follow the strip they are on.
+      const strip = parseColor(sight.top) ?? WHITE;
+      const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
+      root.className = darkStrip ? "safari dark" : "safari light";
+      const shown = minimized ? mini : full;
+      // The scroll edge over a page under the bars takes the tone of the content under the lowest bar.
+      const lowest = shown.shapes.reduce<Shape | null>(
+        (low, shape) => (!low || shape.y > low.y ? shape : low),
+        null,
+      );
+      const edge =
+        shown.edge && lowest
+          ? underAt(sight, shown.screen.width / 2, lowest.y + lowest.height / 2)
+          : null;
+      placeFade(fade, shown.fade, sight, edge);
       for (const text of Array.from(root.querySelectorAll<HTMLElement>(".domain"))) {
-        text.textContent = sight.host;
+        text.textContent = domainOf(sight.host);
       }
+      for (const { node, box } of sides) tintGlass(node, box, sight);
       for (const { node, glyph } of glyphs) {
         const off =
           (glyph === "back" && !sight.canBack) || (glyph === "forward" && !sight.canForward);
@@ -549,6 +725,7 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
       if (surface && domain && main && pill) {
         const box = minimized ? pillBox(pill, sight.host) : main;
         placeBox(surface, box, minimized ? pill.radius : main.radius);
+        tintGlass(surface, box, sight);
         const top = minimized ? pill.height / 2 : Number(domain.dataset.top);
         domain.style.top = `${top}px`;
         const scale = minimized ? SAFARI_TEXT.pill / SAFARI_TEXT.field : 1;
