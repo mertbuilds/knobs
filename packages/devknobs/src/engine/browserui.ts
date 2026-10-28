@@ -540,30 +540,32 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
       large: false,
     };
   }
+  // The size by the screen's width alone, the Duo's screens too.
+  const large = W >= 420;
+  const size = large ? 18 : 17;
   if (!island) {
     const y = spec.top / 2 + 2;
     return {
       height: spec.top,
-      time: { x: 58, y, size: 17 },
+      time: { x: 58, y, size },
       icons: { x: W - 36, y, align: "end" },
-      large: false,
+      large,
     };
   }
   const left = island.x - island.width / 2;
   if (left > W / 2) {
     return {
       height: spec.top,
-      time: { x: 52, y: island.y, size: 17 },
+      time: { x: 52, y: island.y, size },
       icons: { x: left - 12, y: island.y, align: "end" },
-      large: false,
+      large,
     };
   }
   // Where not measured: the time a little right of the ear's middle, and the
   // battery as far in from the edge as on the 17 Pro, or on the Pro Max.
-  const large = W >= 420;
   return {
     height: spec.top,
-    time: { x: spec.status?.time ?? left * 0.535, y: island.y, size: large ? 18 : 17 },
+    time: { x: spec.status?.time ?? left * 0.535, y: island.y, size },
     icons: { x: spec.status?.right ?? W - (large ? 40.67 : 35.33), y: island.y, align: "end" },
     large,
   };
