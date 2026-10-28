@@ -15,6 +15,7 @@ import type { Rect } from "./mock";
 import { navigationOf } from "./reload";
 import { buildSafari, SAFARI_CSS, underAt } from "./safaridraw";
 import { keep } from "./scrollkeep";
+import { bandRect, createUnderbar, showsBand, UNDERBAR_CSS } from "./underbar";
 
 /**
  * The browser's bars drawn in the screen around the frame, in the viewport's
@@ -51,6 +52,7 @@ export const BARS_CSS = `
 .browser .press { pointer-events: auto; cursor: default; }
 ${SAFARI_CSS}
 ${CHROME_CSS}
+${UNDERBAR_CSS}
 `;
 
 const BUILDERS: Record<Bars["platform"], Builder> = { safari: buildSafari, chrome: buildChrome };
@@ -194,6 +196,7 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
     background: white,
     top: white,
     bottom: white,
+    footer: false,
     under: [],
     dark: false,
     scheme: "light",
@@ -212,7 +215,8 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
     const top = edgeBar(doc, view, "top", base) ?? background;
     // Under the bars the phone shows the page's content, so the content at its bottom edge stands for it.
     const last = () => colorAt(doc, view, view.innerWidth / 2, view.innerHeight - 1, base);
-    const bottom = edgeBar(doc, view, "bottom", base) ?? last() ?? background;
+    const footer = edgeBar(doc, view, "bottom", base);
+    const bottom = footer ?? last() ?? background;
     const under = (probe?.points ?? []).map(({ x, y }) => {
       const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
       const inside = { x: x - page.x, y: y - page.y };
@@ -232,6 +236,7 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
       background,
       top,
       bottom,
+      footer: footer !== null,
       under,
       dark: luminance(r, g, b) < 0.4,
       scheme,
@@ -248,8 +253,9 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
  * What fills Safari's screen around the frame: the strip's color over the
  * page and the bottom's under it, the page's color everywhere else. Under
  * the bars the phone shows the page's content, or a fixed footer's color
- * carried down. The frame ends above them, so a solid fill of the content
- * at its bottom edge stands for it, or of the footer. A
+ * carried down. The frame ends above them: the band's picture of the page
+ * goes over the fill there, which is the content's color at the frame's
+ * bottom edge, or the footer's, where it has none. A
  * minimized Safari has no strip: the page's content goes up under the status
  * bar, with the scrim over it, unless a fixed or sticky bar holds the top.
  */
@@ -353,6 +359,8 @@ export function createBrowser(
   const blank = el("div", "screenblank");
   blank.hidden = true;
   glass.append(blank);
+  /** The page under the bottom bars, past the viewport. */
+  const band = createUnderbar(glass, frame);
   const layer = el("div", "browser");
   layer.setAttribute("aria-hidden", "true");
   let view: BrowserView | null = null;
@@ -401,6 +409,12 @@ export function createBrowser(
     return { page: view.page ?? { x: 0, y: 0, ...view.size }, points };
   };
   const lookNow = () => readLook(frame, probe());
+  /** The band under the frame as it is now, and the page in it. */
+  const placeBand = () => {
+    const bars = view?.bars ?? null;
+    const shown = view && showsBand(bars, look) && reaches(frame) ? bandRect(applied, view.size.height) : null;
+    band.show(shown, view?.zoom ?? 1, look);
+  };
   /**
    * The page moved under the glass: read it again once a frame, and repaint
    * only for a change. Only the colors move: the bars and the frame's box
@@ -415,9 +429,11 @@ export function createBrowser(
     look = next;
     glass.style.background = screenFill(look, bars, view.page, view.size.height);
     back();
+    placeBand();
     painted?.apply(bars.minimized, look);
   };
   const onScroll = () => {
+    band.move();
     const page = frame.contentWindow;
     if (page) step({ type: "scroll", y: page.scrollY, time: performance.now() });
     if (!sampling) sampling = window.requestAnimationFrame(resample);
@@ -444,6 +460,7 @@ export function createBrowser(
     view.sizeFrame();
     if (!same(view.page, applied)) step({ type: "resize", time: performance.now() });
     applied = view.page;
+    placeBand();
   };
   const stopShrink = () => {
     clearTimeout(shrinking);
@@ -491,11 +508,13 @@ export function createBrowser(
       painted = null;
       built = "";
       if (view) sizeFrame();
+      placeBand();
       return;
     }
     look ??= lookNow();
     glass.style.background = screenFill(look, bars, view.page, view.size.height);
     back();
+    placeBand();
     const { platform, layout, screen, orientation, edge } = bars;
     const base = JSON.stringify([platform, layout, screen, orientation, edge, view.follow]);
     const fresh = base !== built || !painted;
@@ -603,6 +622,7 @@ export function createBrowser(
             back();
           };
       again();
+      band.refresh();
       // A knob's change reaches the page a message later, and its styles after that.
       clearTimeout(later);
       later = window.setTimeout(again, RESTYLE);
@@ -629,6 +649,7 @@ export function createBrowser(
       watched = null;
       layer.remove();
       blank.remove();
+      band.remove();
     },
   };
   return browser;

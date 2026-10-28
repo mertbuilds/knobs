@@ -15,6 +15,8 @@ export interface Look {
   top: string;
   /** What fills the screen under the viewport: a fixed bar's color touching its bottom, else the content at its bottom edge. */
   bottom: string;
+  /** Is `bottom` a fixed bar's, carried down under the bars, where Safari shows the page past the viewport otherwise? */
+  footer: boolean;
   /** The page's color under points of the screen, where Safari's glass takes its tint from. */
   under: readonly Sample[];
   /** Is that background dark, so Chrome's bars go dark over it too? Safari's glass reads `under`. */

@@ -12,6 +12,7 @@ const LOOK: Look = {
   background: "#ffffff",
   top: "#ffffff",
   bottom: "#ffffff",
+  footer: false,
   under: [],
   dark: false,
   scheme: "light",
