@@ -666,6 +666,7 @@ function placeFade(node: HTMLElement, fade: Fade | null, look: Look, edge: Color
   const tone = edge ? edgeTone(edge) : bottom;
   node.hidden = fade === null || tone === null;
   if (!fade || !tone) return;
+  node.style.left = `${fade.x ?? 0}px`;
   node.style.right = fade.width === undefined ? "0" : "";
   node.style.width = fade.width === undefined ? "" : `${fade.width}px`;
   node.style.top = `${fade.y}px`;
@@ -822,8 +823,8 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
       root.dataset.state = minimized ? "min" : "max";
       const behind = scrimOver(scrim, mini, sight);
       // The status bar's glyphs follow the strip they are on, or minimized the
-      // page under them. The Duo's column is the page's own color.
-      const own = full.column ? sight.background : sight.top;
+      // page under them. The Duo cover's column is the page's own color.
+      const own = full.column && !full.column.strip ? sight.background : sight.top;
       const strip = (minimized ? behind : null) ?? parseColor(own) ?? WHITE;
       const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
       root.className = darkStrip ? "safari dark" : "safari light";

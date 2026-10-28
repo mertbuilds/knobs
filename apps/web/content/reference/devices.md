@@ -125,13 +125,15 @@ publishes none for the 10s, so theirs are derived from where the punch hole
 sits, as AOSP lines the 9s' bars up with theirs.
 
 the iPhone Duo has Safari 27.1's own layout, the only one it offers. on the
-cover screen the status bar and Safari's buttons stack in a column on the
-right, under the camera hole, as Apple's picture shows it: the time, a ring
+cover screen the status bar and Safari's buttons stack in a column beside
+the camera hole, on the right upright and on the left held across, as
+Apple's picture shows it: the time, a ring
 for the battery round wifi with the signal's four dots in its gap, back,
 reader, and new tab with tabs. the address floats at the bottom of the
 page. the page never runs under the column, which takes the page's color.
-the inner screen keeps a status bar and one row of bars at the top, held
-either way, an estimate in the iPad's manner, as Apple shows none. the page
+the inner screen keeps Safari's row at the top, held either way, with the
+same time and ring at its top right, as on jadon7's concept, since Apple
+shows none. the edge to edge switch is not offered on the Duo. the page
 gets WebKit's viewports: 382 × 580 and 618 minimized on the cover screen
 upright, 594 × 368 and 406 across, 669 × 867 and 902 on the inner screen
 upright, 951 × 585 and 620 across.

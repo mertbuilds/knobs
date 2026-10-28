@@ -32,19 +32,17 @@ const LAYOUTS: Record<Platform, readonly BrowserLayout[]> = {
  * that post, in pt: the time, the ring of the battery round wifi with the
  * signal's four dots in its gap, and under them back and reader, and a
  * capsule of new tab and tabs on the address's line. Across, the camera hole
- * turns to the top left, so the time and the ring go up by its room.
+ * turns to the top left, and the column goes with it to the left side.
  */
 export const DUO_COVER = {
   column: 84,
   bottom: 98,
   minimized: 60,
-  /** The column's center line, in from the right edge. */
+  /** The column's center line, in from the screen's edge on the camera hole's side. */
   axis: 46.5,
   time: { y: 103.5, size: 16 },
   /** The ring's center, the radius of its stroke's middle, and the stroke. */
   ring: { y: 139, radius: 18.9, stroke: 3.5 },
-  /** How far the time and the ring go up where the camera hole is not over them. */
-  lift: 59,
   /** The tops of back and reader, 48 round. */
   buttons: [193.8, 254.2],
   /** New tab and tabs in one capsule 48 wide, and the address 48 high, both 32 off the bottom. */
@@ -58,18 +56,30 @@ export const DUO_COVER = {
  * The inner screen: the page runs the whole width, under Safari's bars at the
  * top, held either way, 84 of them expanded and 49 minimized (WebKit: 669 by
  * 867 and 902 upright, 951 by 585 and 620 across). Apple shows no picture of
- * them, so the bars are estimates in the iPad's manner: a status bar, then
- * one row of back, bookmarks, the address and share, new tab and tabs, and
- * minimized the domain pill on the status bar's line.
+ * them, so the status is the cover's, stacked at the top right as on the
+ * concept of jadon7/iphone-duo (its 54 pt in from the edge, scaled to this
+ * screen, its time and ring drawn closer to fit the 84), and Safari's row of
+ * back, bookmarks, the address and share, new tab and tabs runs left of it.
+ * Minimized, the domain pill sits at the top, the status where it was, over
+ * the page.
  */
 export const DUO_INNER = {
   top: 84,
   minimized: 49,
-  status: { y: 20, time: 50, icons: 44, size: 17 },
-  row: 38,
+  axis: 47.9,
+  time: { y: 20, size: 15 },
+  ring: { y: 57.5, radius: 18.2, stroke: 2.9 },
+  /** The room the status keeps at the right of the row. */
+  gutter: 96,
+  row: 20,
   side: 24,
   pill: 4,
 } as const;
+
+/** May the page run under Safari's bars held sideways? Not on the Duo, whose page is never under them. */
+export function runsUnderBars(id: string): boolean {
+  return !SAFARI[id]?.duo;
+}
 
 /** The Duo's Safari has one layout of its own. */
 const DUO_LAYOUTS: readonly BrowserLayout[] = ["compact", "off"];
@@ -219,7 +229,9 @@ export function viewportOf(
   const safari = SAFARI[device.id];
   if (safari?.duo === "cover") {
     const bottom = minimized ? DUO_COVER.minimized : DUO_COVER.bottom;
-    return rect(0, 0, W - DUO_COVER.column, H - bottom);
+    // Across, the column is on the left, with the camera hole.
+    const left = orientation === "portrait" ? 0 : DUO_COVER.column;
+    return rect(left, 0, W - DUO_COVER.column, H - bottom);
   }
   if (safari?.duo === "inner") {
     const top = minimized ? DUO_INNER.minimized : DUO_INNER.top;
@@ -313,6 +325,8 @@ function mark(glyph: Glyph, x: number, y: number): Mark {
 export interface StatusColumn {
   /** The column's center line. */
   x: number;
+  /** Over the strip at the top, as on the inner screen, else on the page's own color. */
+  strip: boolean;
   time: { y: number; size: number };
   /** The ring's center, the radius of its stroke's middle, and the stroke's width. */
   ring: { y: number; radius: number; stroke: number };
@@ -361,7 +375,8 @@ export interface Bars {
 export interface Fade {
   y: number;
   height: number;
-  /** How far across from the left it goes, where not the whole screen. */
+  /** Where it starts across and how far it goes, where not the whole screen. */
+  x?: number;
   width?: number;
   stops: { at: number; alpha: number }[];
 }
@@ -409,10 +424,12 @@ export function alphaAt(fade: Fade, y: number): number {
  * weaker, while the bars are minimized. Never opaque. Estimates from a
  * screenshot of a real iPhone.
  */
-function edgeFade(bars: Bars, H: number, width?: number): Fade {
-  const across = width ?? Infinity;
-  const low = bars.shapes.filter((shape) => shape.kind !== "pill" && shape.y > H / 2 && shape.x < across);
-  const wide = width === undefined ? {} : { width };
+function edgeFade(bars: Bars, H: number, span?: { x: number; width: number }): Fade {
+  const [from, to] = span ? [span.x, span.x + span.width] : [-Infinity, Infinity];
+  const low = bars.shapes.filter(
+    (shape) => shape.kind !== "pill" && shape.y > H / 2 && shape.x >= from && shape.x < to,
+  );
+  const wide = span ? { x: span.x, width: span.width } : {};
   if (bars.minimized || low.length === 0) {
     const stops = [
       { at: 0, alpha: 0 },
@@ -448,17 +465,17 @@ const BOTTOM_ROW = [0.1032, 0.3056, 0.4965, 0.6925, 0.8872];
 const TOP_ROW = [0.0884, 0.2986, 0.4962, 0.6994, 0.9012];
 const ROW: Glyph[] = ["back", "forward", "share", "bookmarks", "tabs"];
 
-/** The domain pill a minimized Safari keeps, centered at `y`. Its width follows the text. */
-function domainPill(W: number, top: number): Shape {
+/** The domain pill a minimized Safari keeps, its middle at `x`, from `top` down. Its width follows the text. */
+function domainPill(x: number, top: number): Shape {
   return {
     kind: "pill",
-    x: W / 2,
+    x,
     y: top,
     width: 0,
     height: 32,
     radius: 16,
     marks: [],
-    text: { x: W / 2, y: top + 16, size: SAFARI_TEXT.pill },
+    text: { x, y: top + 16, size: SAFARI_TEXT.pill },
   };
 }
 
@@ -474,20 +491,27 @@ function address(kind: Shape["kind"], box: Rect, page: number, reload: number): 
   };
 }
 
-/** Safari's row across the top when the phone is held across, `y` down, `side` in from each edge. */
-function acrossRow(W: number, side: number, y: number): Shape[] {
-  const s = side;
+/**
+ * Safari's row across the top when the phone is held across, `y` down,
+ * between `left` and `right`: the address in the middle, 318 wide, or as wide
+ * as the room between the buttons leaves.
+ */
+function acrossRow(left: number, right: number, y: number): Shape[] {
+  const s = left;
   const row = (x: number, width: number) => rect(x, y, width, 44);
-  const right = row(W - s - 10 - 132, 132);
+  const end = row(right - 10 - 132, 132);
   const middle = y + 22;
+  const [from, to] = [s + 66 + 44 + 8, end.x - 8];
+  const width = Math.min(318, to - from);
+  const x = Math.min(Math.max((left + right) / 2 - width / 2, from), to - width);
   return [
     capsule("glass", row(s + 10, 44), [mark("back", s + 32, middle)]),
     capsule("glass", row(s + 66, 44), [mark("bookmarks", s + 88, middle)]),
-    address("glass", row((W - 318) / 2, 318), 24, 22),
-    capsule("glass", right, [
-      mark("share", right.x + 22, middle),
-      mark("plus", right.x + 66, middle),
-      mark("tabs", right.x + 110, middle),
+    address("glass", row(x, width), 24, 22),
+    capsule("glass", end, [
+      mark("share", end.x + 22, middle),
+      mark("plus", end.x + 66, middle),
+      mark("tabs", end.x + 110, middle),
     ]),
   ];
 }
@@ -495,23 +519,20 @@ function acrossRow(W: number, side: number, y: number): Shape[] {
 /** The Duo's cover screen: its status and buttons down the column, the address floating at the page's bottom. */
 function duoCover(bars: Bars, W: number, H: number, orientation: OrientationValue, minimized: boolean): Bars {
   const c = DUO_COVER;
-  const page = W - c.column;
-  const x = W - c.axis;
-  const lift = orientation === "portrait" ? 0 : c.lift;
-  bars.column = {
-    x,
-    time: { y: c.time.y - lift, size: c.time.size },
-    ring: { ...c.ring, y: c.ring.y - lift },
-  };
+  // Upright the column is on the right; across it turns to the left with the camera hole.
+  const upright = orientation === "portrait";
+  const page = { x: upright ? 0 : c.column, width: W - c.column };
+  const x = upright ? W - c.axis : c.axis;
+  bars.column = { x, strip: false, time: { ...c.time }, ring: { ...c.ring } };
   if (minimized) {
-    bars.shapes = [domainPill(page, H - 46)];
+    bars.shapes = [domainPill(page.x + page.width / 2, H - 46)];
     return bars;
   }
   const button = (y: number, glyph: Glyph) => capsule("glass", rect(x - 24, y, 48, 48), [mark(glyph, x, y + 24)]);
   const [back = 0, reader = 0] = c.buttons;
   const low = H - c.gap - c.capsule;
   bars.shapes = [
-    address("glass", rect(c.inset, H - c.gap - 48, page - 2 * c.inset, 48), 24, 22),
+    address("glass", rect(page.x + c.inset, H - c.gap - 48, page.width - 2 * c.inset, 48), 24, 22),
     // Reader's glyph is the open book, as Bookmarks' is on the iPhone.
     button(back, "back"),
     button(reader, "bookmarks"),
@@ -520,17 +541,11 @@ function duoCover(bars: Bars, W: number, H: number, orientation: OrientationValu
   return bars;
 }
 
-/** The Duo's inner screen: a status bar and one row of bars at the top, held either way. */
+/** The Duo's inner screen: the status at the top right, and Safari's row left of it, held either way. */
 function duoInner(bars: Bars, W: number, minimized: boolean): Bars {
   const d = DUO_INNER;
-  const y = d.status.y;
-  bars.status = {
-    height: d.minimized,
-    time: { x: d.status.time, y, size: d.status.size },
-    icons: { x: W - d.status.icons, y, align: "end" },
-    large: false,
-  };
-  bars.shapes = minimized ? [domainPill(W, d.pill)] : acrossRow(W, d.side, d.row);
+  bars.column = { x: W - d.axis, strip: true, time: { ...d.time }, ring: { ...d.ring } };
+  bars.shapes = minimized ? [domainPill(W / 2, d.pill)] : acrossRow(d.side, W - d.gutter, d.row);
   return bars;
 }
 
@@ -561,14 +576,14 @@ function safariBars(
   if (spec.duo === "inner") return duoInner(bars, W, minimized);
   if (orientation === "landscape") {
     // Measured on the 16 Pro: one row 10 under the top, starting 10 in from the side inset.
-    if (!minimized) bars.shapes = acrossRow(W, spec.side, 10);
+    if (!minimized) bars.shapes = acrossRow(spec.side, W - spec.side, 10);
     return bars;
   }
   bars.status = safariStatus(device.id, spec, W);
   const page = viewportOf(device, orientation, layout, minimized);
   const T = spec.top;
   if (minimized) {
-    bars.shapes = [layout === "top" ? domainPill(W, T) : domainPill(W, H - 46)];
+    bars.shapes = [domainPill(W / 2, layout === "top" ? T : H - 46)];
     const stops = SCRIM.map(([at, alpha]) => ({ at, alpha }));
     bars.scrim = { y: 0, height: 100, stops, at: { x: W / 2, y: page.y + 1 } };
     return bars;
@@ -763,9 +778,10 @@ export function barsOf(
     // under its bars held either way, and never under the cover's column.
     const upright = orientation === "portrait" || safari.duo !== undefined;
     if (!edge && !upright) return bars;
-    const { width: W, height: H } = turn(device, orientation);
-    const width = safari.duo === "cover" ? W - DUO_COVER.column : undefined;
-    return { ...bars, edge: true, fade: upright ? edgeFade(bars, H, width) : null };
+    const { height: H } = turn(device, orientation);
+    const page = viewportOf(device, orientation, layout, minimized);
+    const span = safari.duo === "cover" ? { x: page.x, width: page.width } : undefined;
+    return { ...bars, edge: true, fade: upright ? edgeFade(bars, H, span) : null };
   }
   const chrome = CHROME[device.id];
   if (chrome) return chromeBars(device, chrome, orientation, layout, minimized);

@@ -137,15 +137,37 @@ describe("the iPhone Duo's status", () => {
     });
   }
 
-  test("the inner screen keeps a plain status bar at the top, held either way, and no column", () => {
-    for (const orientation of ["portrait", "landscape"] as const) {
+  for (const orientation of ["portrait", "landscape"] as const) {
+    test(`the inner screen held ${orientation} draws the same time and ring at its top right, on the strip`, () => {
       const { bars, status, time, glyphs } = statusOf(INNER, orientation);
-      expect(bars.column).toBeNull();
-      expect(status?.large).toBe(false);
+      expect(status).toBeNull();
+      expect(bars.column?.strip).toBe(true);
       expect(time).toHaveLength(1);
-      expect(glyphs).toHaveLength(3);
-      expect(glyphs.some((glyph) => glyph.classes().includes("ring"))).toBe(false);
-    }
+      expect(glyphs).toHaveLength(2);
+      const [ring] = glyphs as [FakeNode];
+      expect(ring.classes()).toContain("ring");
+      expect(shapes(ring, "circle")).toHaveLength(4);
+      expect(glyphs.some((glyph) => shapes(glyph, "rect").length > 0)).toBe(false);
+    });
+  }
+
+  test("the cover's status takes its tone from the page's color, the inner's from the strip under it", () => {
+    const tone = (screen: Screen, over: Partial<Look>) => {
+      const layout = layoutOf(screen.id, "auto");
+      const full = barsOf(screen, "portrait", layout, false);
+      const mini = barsOf(screen, "portrait", layout, true);
+      if (!full || !mini) throw new Error("no bars");
+      const look = { ...LOOK, ...over };
+      const painted = buildSafari(full, mini, look, ACTIONS);
+      painted.apply(false, look);
+      return fake(painted.root).classes();
+    };
+    const darkPage = { background: "rgb(17, 17, 17)", top: "rgb(255, 255, 255)", bottom: "rgb(17, 17, 17)" };
+    const lightPage = { background: "rgb(255, 255, 255)", top: "rgb(17, 17, 17)", bottom: "rgb(255, 255, 255)" };
+    expect(tone(COVER, darkPage)).toContain("dark");
+    expect(tone(COVER, lightPage)).toContain("light");
+    expect(tone(INNER, darkPage)).toContain("light");
+    expect(tone(INNER, lightPage)).toContain("dark");
   });
 
   test("the camera hole is on the cover screen only, where Apple draws it", () => {

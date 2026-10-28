@@ -264,6 +264,10 @@ describe("summary", () => {
     expect(edge.offers?.(state({ device: "iphone-se", ...across }))).toEqual(["off", "on"]);
     expect(edge.offers?.(state({ device: "iphone-se", browser: "off", ...across }))).toEqual([]);
     expect(edge.offers?.(state({ device: "pixel-9", ...across }))).toEqual([]);
+    // The Duo's page is never under its bars, on either screen.
+    expect(edge.offers?.(state({ device: "iphone-duo", ...across }))).toEqual([]);
+    expect(edge.offers?.(state({ device: "iphone-duo", posture: "open", ...across }))).toEqual([]);
+    expect(edge.read(state({ device: "iphone-duo", ...across }))).toBe("off");
     // A stored value is kept upright, for the next time the phone turns.
     expect(state({ device: "iphone-16-pro", edgeToEdge: false }).edgeToEdge).toBe(false);
     expect(says("device", { device: "iphone-16-pro", edgeToEdge: false })).toBe(
