@@ -7,7 +7,7 @@ import { formOf, turn } from "./devices";
  * screen, as iOS 26.5 Safari reports 402 x 874 on the 17 Pro on the
  * simulator. iOS keeps them upright however the phone is held; Android turns
  * them with it. The getters go on the window's own `screen`, over its
- * prototype's, so taking them off hands the browser's back.
+ * prototype's, and taking them off puts back what the screen had.
  */
 
 export interface ScreenSize {
@@ -28,15 +28,39 @@ export function screenSizeOf(state: ScreenKnobs): ScreenSize | null {
   return { width, height };
 }
 
-/** Put `size` on the screen of the window `scope`, or null to give it its own. */
+/**
+ * The screen's own descriptors from before the first patch, kept on the
+ * screen itself so every copy of devknobs on that window puts back the same
+ * ones. Undefined for a key the screen read from its prototype.
+ */
+const ORIGINALS = Symbol.for("devknobs.screen");
+
+type Originals = Map<(typeof KEYS)[number], PropertyDescriptor | undefined>;
+
+function originalsOf(own: object): Originals | undefined {
+  const held: unknown = Reflect.get(own, ORIGINALS);
+  return held instanceof Map ? (held as Originals) : undefined;
+}
+
+/** Put `size` on the screen of the window `scope`, or null to give it back what it had. */
 export function apply(size: ScreenSize | null, scope: object = globalThis): void {
   const own: unknown = Reflect.get(scope, "screen");
   if (typeof own !== "object" || own === null) return;
-  for (const key of KEYS) {
-    if (!size) {
-      if (Object.hasOwn(own, key)) Reflect.deleteProperty(own, key);
-      continue;
+  const originals = originalsOf(own);
+  if (!size) {
+    if (!originals) return;
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(own, key, descriptor);
+      else Reflect.deleteProperty(own, key);
     }
+    Reflect.deleteProperty(own, ORIGINALS);
+    return;
+  }
+  if (!originals) {
+    const kept: Originals = new Map(KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(own, key)]));
+    Object.defineProperty(own, ORIGINALS, { configurable: true, value: kept });
+  }
+  for (const key of KEYS) {
     const value = key === "width" || key === "availWidth" ? size.width : size.height;
     Object.defineProperty(own, key, { configurable: true, enumerable: true, get: () => value });
   }

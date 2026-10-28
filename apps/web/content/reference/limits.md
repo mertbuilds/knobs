@@ -101,7 +101,8 @@ the frame.
 
 the bars follow the scroll of the document only, as on the phone, so a page
 that scrolls an inner box keeps them as they are, and they do not come back
-at the bottom of the page. the page is never drawn under the glass: the
+at the bottom of the page. upright, the page is never drawn under the
+glass (turned across with edge to edge on, it runs under the top row): the
 screen there takes one color, a fixed footer's or the content's at the
 page's bottom edge, where on the phone the page runs on under the bars, and
 minimized, the content under the status bar is that at the page's top, not

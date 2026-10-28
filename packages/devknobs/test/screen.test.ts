@@ -56,4 +56,18 @@ describe("apply", () => {
       1400, 1250, 1400, 1200,
     ]);
   });
+
+  test("gives back a screen property the page had of its own, and only takes off its own", () => {
+    const view = hostWindow();
+    const { screen } = view;
+    Object.defineProperty(screen, "availHeight", { configurable: true, enumerable: true, value: 1100 });
+    apply({ width: 402, height: 874 }, view);
+    apply({ width: 440, height: 956 }, view);
+    expect(screen.availHeight).toBe(956);
+    apply(null, view);
+    expect(screen.availHeight).toBe(1100);
+    expect(Object.hasOwn(screen, "availHeight")).toBe(true);
+    expect(Object.hasOwn(screen, "width")).toBe(false);
+    expect(screen.width).toBe(1400);
+  });
 });
