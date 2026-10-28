@@ -359,6 +359,27 @@ describe("a page copy a host steps aside for", () => {
     expect(owned(window)).toBe(true);
   });
 
+  test("keeps the choice and the footer's name through an unmount and a mount again, until it defers again", () => {
+    const { release, takes } = host();
+    devknobs.mount();
+    free(window, release);
+    takes[0]!({ prefer: { value: "page", change() {} } });
+    devknobs.unmount();
+    devknobs.mount();
+    expect(createPanel).toHaveBeenCalledTimes(2);
+    const prefer = createPanel.mock.calls[1]?.[0]?.prefer;
+    expect(prefer?.value()).toBe("page");
+    expect(prefer?.runtime).toBe("page source");
+    devknobs.unmount();
+    const again = host();
+    devknobs.mount();
+    expect(again.takes).toHaveLength(1);
+    devknobs.unmount();
+    free(window, again.release);
+    devknobs.mount();
+    expect(createPanel.mock.calls.at(-1)?.[0]?.prefer).toBeUndefined();
+  });
+
   test("does not take the page once it has unmounted, or while a host still holds it", () => {
     const { release, takes } = host();
     devknobs.mount();

@@ -149,6 +149,11 @@ let preferNow: PreferValue | null = null;
 let waiting: Take | null = null;
 /** This copy's mount that deferred to a host, until it takes the page from it or unmounts. */
 let deferred: MountOptions | null = null;
+/**
+ * The preference a host handed this copy as it stepped aside, kept for the
+ * page's next mount of it, such as a remount on a hot update, until it defers to a host again.
+ */
+let handedPrefer: PreferSetting | null = null;
 
 /**
  * Start the knobs and put the panel on the page. Patches go in right away, even
@@ -163,12 +168,15 @@ export function mount(options: MountOptions = {}): void {
   if (panel || stopKeys) return;
   const host = options.host ? null : hostOf(window);
   if (host) {
+    handedPrefer = null;
     hostedBy = host;
     deferred = options;
     host.adopt(options, (handed) => takeFrom(options, handed));
     return;
   }
-  if (options.host) preferNow = options.prefer?.value ?? null;
+  // A copy that is no host shows the preference it was handed, as it was handed.
+  preferNow = options.host ? (options.prefer?.value ?? null) : null;
+  if (!options.host && !options.prefer && handedPrefer) options = { ...options, prefer: handedPrefer };
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
   if (options.host) claim(window, unmount, adopt, api);
@@ -232,6 +240,7 @@ function takeFrom(options: MountOptions, handed: object): boolean {
   deferred = null;
   hostedBy = null;
   const prefer = preferOf(handed);
+  handedPrefer = prefer;
   mount(prefer ? { ...options, prefer } : options);
   return true;
 }

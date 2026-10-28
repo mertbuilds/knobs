@@ -172,9 +172,10 @@ const server = createServer(async (request, response) => {
     response.setHeader('content-type', 'text/html');
     response.end(
       page(`<script type="module">
-import { mount } from '/local/index.js';
+import { mount, unmount } from '/local/index.js';
 mount({ hotkey: 'j' });
 window.pageMounted = true;
+window.pageUnmount = unmount;
 </script>`),
     );
     return;
@@ -1683,6 +1684,37 @@ async function preferPage() {
     await showSettings(tab);
     await tab.screenshot({ path: join(out, 'prefer-page.png') });
 
+    // The page's knobs, set in its own panel, last a load again: the extension's copy keeps none.
+    await set(tab, { scheme: 'dark', text: 20 });
+    await tab.evaluate(() => window.devknobs!.ready());
+    await tab.reload();
+    await tab.waitForFunction(() => window.pageMounted === true);
+    await ready(tab);
+    await tab.waitForTimeout(500);
+    const kept = {
+      panels: await runtimeOf(tab),
+      scheme: await tab.evaluate(() => window.devknobs!.getState().scheme),
+      text: await tab.evaluate(() => window.devknobs!.getState().text),
+    };
+    log("prefer page, the page's knobs after a load again", kept);
+    assert.deepEqual(kept, { panels: [pageOwn], scheme: 'dark', text: 20 });
+    await set(tab, { scheme: 'system', text: 'system' });
+    await tab.evaluate(() => window.devknobs!.ready());
+
+    // The page unmounts its copy: the toolbar button brings the extension's panel back, open.
+    await tab.evaluate(() => window.pageUnmount!());
+    await tab.waitForTimeout(300);
+    const tabId = await worker.evaluate(async () => (await chrome.tabs.query({}))[0]!.id!);
+    await worker.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { type: 'toggle' }), tabId);
+    await ready(tab);
+    await tab.waitForTimeout(300);
+    const back = {
+      open: await tab.evaluate(() => window.devknobs!.getState().panel.open),
+      panels: await runtimeOf(tab),
+    };
+    log('prefer page, the page unmounted its copy, then the toolbar button', back);
+    assert.deepEqual(back, { open: true, panels: [extension] });
+
     await tab.goto(url);
     await ready(tab);
     await tab.waitForTimeout(300);
@@ -1701,9 +1733,9 @@ async function preferPage() {
     await tab.waitForFunction(() => window.pageMounted === true);
     await ready(tab);
     await tab.waitForTimeout(500);
-    const back = { panels: await runtimeOf(tab), stored: await stored() };
-    log("picked the extension in the page's panel", back);
-    assert.deepEqual(back, { panels: [extension], stored: 'extension' });
+    const picked2 = { panels: await runtimeOf(tab), stored: await stored() };
+    log("picked the extension in the page's panel", picked2);
+    assert.deepEqual(picked2, { panels: [extension], stored: 'extension' });
     assert.deepEqual(errors, []);
     log('screenshots', [join(out, 'prefer-extension.png'), join(out, 'prefer-page.png')]);
   } finally {

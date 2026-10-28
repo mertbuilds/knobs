@@ -40,6 +40,35 @@ const YIELDED = Symbol.for('devknobs-extension.yielded');
 const top = window === window.top;
 // The extension's copy stepped aside for the page's own, which runs the panel now.
 let yielded = false;
+
+// In the tab's sessionStorage once the extension's copy stepped aside on this page, read and
+// cleared as the next load starts: that load's copy keeps no knobs of its own, so it neither
+// reads nor writes the stored ones the page's copy shares, and hands none to Chrome before
+// it steps aside again. A load the page's copy does not take goes back to keeping them.
+const YIELDED_KEY = 'devknobs-extension.yielded';
+
+function lastYielded(): boolean {
+  try {
+    const was = sessionStorage.getItem(YIELDED_KEY) === '1';
+    sessionStorage.removeItem(YIELDED_KEY);
+    return was;
+  } catch {
+    // Storage the page cannot use: the knobs are kept as on any page.
+    return false;
+  }
+}
+
+function markYielded(on: boolean) {
+  try {
+    if (on) {
+      sessionStorage.setItem(YIELDED_KEY, '1');
+    } else {
+      sessionStorage.removeItem(YIELDED_KEY);
+    }
+  } catch {
+    // As above.
+  }
+}
 let knobs: KnobState = { ...DEFAULT_STATE };
 // Until the tab says what it has, its knobs win over the page's stored ones.
 let synced = false;
@@ -203,6 +232,7 @@ const prefer: PreferSetting = {
   change: (value) => {
     void ask({ prefer: value, type: 'prefer' }).then(({ error }) => {
       if (yielded && value === 'extension' && error === undefined) {
+        markYielded(false);
         location.reload();
       }
     });
@@ -211,14 +241,38 @@ const prefer: PreferSetting = {
   yielded: () => {
     yielded = true;
     Reflect.set(window, YIELDED, true);
+    markYielded(true);
   },
 };
 
-/** Once the page's copy runs the panel: the toolbar button opens it, and the tab keeps no knobs of the extension's. */
+/** Mount the extension's copy as the page's host, its options as for the first mount. */
+function mountHost(persist: boolean) {
+  // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
+  // The user's own choice in the panel's settings still wins. As the host, a copy of
+  // devknobs the page mounts itself hands its keys and grab here and takes no panel,
+  // unless the user prefers the page's copy, which then takes the page from this one.
+  mount({ handle: false, host: true, native: driver, persist, ...(top ? { prefer } : {}) });
+}
+
+/**
+ * Once the page's copy runs the panel: the toolbar button opens it, and the tab keeps no
+ * knobs of the extension's. A page that unmounted its copy since gets the extension's
+ * panel back on the button, open.
+ */
 function afterYield(message: PageMessage) {
   if (message.type === 'toggle') {
     const api = window.devknobs;
-    api?.setState({ panel: { open: !api.getState().panel.open } });
+    if (api) {
+      api.setState({ panel: { open: !api.getState().panel.open } });
+      return;
+    }
+    yielded = false;
+    Reflect.deleteProperty(window, YIELDED);
+    markYielded(false);
+    mountHost(true);
+    setState({ panel: { open: true } });
+  } else if (message.type === 'prefer') {
+    prefer.value = message.prefer;
   } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
     toBridge({ state: DEFAULT_STATE, type: 'set' });
   }
@@ -236,6 +290,8 @@ function onMessage(event: Event) {
   } else if (yielded) {
     afterYield(message);
   } else if (message.type === 'prefer') {
+    // Kept here too, for a mount again once the page's copy has gone.
+    prefer.value = message.prefer;
     setPrefer(message.prefer);
   } else if (message.type === 'toggle') {
     setState({ panel: { open: !getState().panel.open } });
@@ -286,9 +342,5 @@ if (top || (window.name === FRAME_NAME && !yieldedAbove())) {
   if (top) {
     document.addEventListener(TO_PAGE, onMessage);
   }
-  // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
-  // The user's own choice in the panel's settings still wins. As the host, a copy of
-  // devknobs the page mounts itself hands its keys and grab here and takes no panel,
-  // unless the user prefers the page's copy, which then takes the page from this one.
-  mount({ handle: false, host: true, native: driver, ...(top ? { prefer } : {}) });
+  mountHost(!(top && lastYielded()));
 }
