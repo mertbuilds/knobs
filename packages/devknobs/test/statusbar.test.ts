@@ -25,18 +25,20 @@ const ACTIONS = { back() {}, forward() {}, reload() {} };
 
 /** Every screen Safari draws on, each the way it is held with a status bar. */
 const SAFARI_SCREENS = SCREENS.filter((screen) => platformOf(screen.id) === "safari");
-/** The iPhones that show iOS's own status bar: all but the Duo's cover screen, which stacks its status in its column. */
+/** The iPhones that show iOS's own status bar: all but the Duo, whose screens draw their own. */
 const IPHONES = SAFARI_SCREENS.filter((screen) => !screen.id.startsWith("iphone-duo"));
 const COVER = SCREENS.find((screen) => screen.id === "iphone-duo-closed") as Screen;
 const INNER = SCREENS.find((screen) => screen.id === "iphone-duo-open") as Screen;
 
-/** The status bar's nodes as the viewport draws them: the time and the glyphs. */
-function statusOf(screen: Screen, orientation: OrientationValue) {
+/** The status bar's nodes as the viewport draws them: the time and the glyphs, `minimized` or not. */
+function statusOf(screen: Screen, orientation: OrientationValue, minimized = false) {
   const layout = layoutOf(screen.id, "auto");
   const full = barsOf(screen, orientation, layout, false);
   const mini = barsOf(screen, orientation, layout, true);
   if (!full || !mini) throw new Error(`no bars on ${screen.id}`);
-  const root = fake(buildSafari(full, mini, LOOK, ACTIONS).root);
+  const painted = buildSafari(full, mini, LOOK, ACTIONS);
+  painted.apply(minimized, LOOK);
+  const root = fake(painted.root);
   const glyphs = root.children.filter((node) => node.classes().includes("status"));
   return { bars: full, status: full.status, time: root.find("time"), glyphs };
 }
@@ -103,14 +105,23 @@ describe("every iPhone's status bar", () => {
 });
 
 describe("the iPhone Duo's status", () => {
-  for (const orientation of ["portrait", "landscape"] as const) {
-    test(`the cover screen held ${orientation} stacks the time and the ring in its column, none of the iPhone's glyphs`, () => {
-      const { bars, status, time, glyphs } = statusOf(COVER, orientation);
+  test("the cover screen held across shows no status at all, as the simulator draws it", () => {
+    const { bars, status, time, glyphs } = statusOf(COVER, "landscape");
+    expect(status).toBeNull();
+    expect(bars.column).toBeNull();
+    expect(time).toHaveLength(0);
+    expect(glyphs).toHaveLength(0);
+  });
+
+  for (const minimized of [false, true]) {
+    test(`the cover screen upright${minimized ? " and minimized" : ""} stacks the time and the ring in its column, none of the iPhone's glyphs`, () => {
+      const { bars, status, time, glyphs } = statusOf(COVER, "portrait", minimized);
       expect(status).toBeNull();
       expect(bars.column).not.toBeNull();
       expect(time).toHaveLength(1);
       expect(time[0]?.textContent).toBe("04:20");
       expect(Reflect.get(time[0]?.style ?? {}, "left")).toBe(`${bars.column?.x}px`);
+      expect(Reflect.get(time[0]?.style ?? {}, "display")).toBe("");
       // The ring and wifi in it: no bars, no battery.
       expect(glyphs).toHaveLength(2);
       const [ring, wifi] = glyphs as [FakeNode, FakeNode];
@@ -141,16 +152,23 @@ describe("the iPhone Duo's status", () => {
   }
 
   for (const orientation of ["portrait", "landscape"] as const) {
-    test(`the inner screen held ${orientation} draws the same time and ring at its top right, on the strip`, () => {
+    test(`the inner screen held ${orientation} draws the same ring at its top right, the time left of it, on the strip`, () => {
       const { bars, status, time, glyphs } = statusOf(INNER, orientation);
       expect(status).toBeNull();
       expect(bars.column?.strip).toBe(true);
       expect(time).toHaveLength(1);
+      expect(Reflect.get(time[0]?.style ?? {}, "left")).toBe(`${bars.column?.time.x}px`);
+      expect(bars.column?.time.x).toBeLessThan((bars.column?.x ?? 0) - 40);
       expect(glyphs).toHaveLength(2);
       const [ring] = glyphs as [FakeNode];
       expect(ring.classes()).toContain("ring");
       expect(shapes(ring, "circle")).toHaveLength(4);
       expect(glyphs.some((glyph) => shapes(glyph, "rect").length > 0)).toBe(false);
+    });
+
+    test(`the inner screen held ${orientation} hides its status minimized`, () => {
+      const { time, glyphs } = statusOf(INNER, orientation, true);
+      for (const node of [...time, ...glyphs]) expect(Reflect.get(node.style, "display")).toBe("none");
     });
   }
 

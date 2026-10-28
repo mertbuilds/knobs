@@ -202,20 +202,27 @@ describe("screenFill", () => {
 
   test("on the Duo's cover screen, the column takes the page's color all the way down, over the fill under the page", () => {
     const cover = screenOf("iphone-duo-closed") as Screen;
-    for (const orientation of ["portrait", "landscape"] as const) {
-      const bars = barsOf(cover, orientation, "compact", false);
-      const at = viewportOf(cover, orientation, "compact", false);
-      if (!bars) throw new Error("no bars");
-      const [W, H] = orientation === "portrait" ? [466, 678] : [678, 466];
-      const fill = screenFill(look({ top: RED, background: BLUE, bottom: GREEN }), bars, at, H);
-      const left = (at.x / W) * 100;
-      const right = ((at.x + at.width) / W) * 100;
-      const end = (at.height / H) * 100;
-      expect(fill).toBe(
-        `linear-gradient(to right, ${BLUE} ${left}%, transparent ${left}%, transparent ${right}%, ${BLUE} ${right}%), ` +
-          `linear-gradient(to bottom, ${RED} 0%, ${BLUE} 0%, ${BLUE} ${end}%, ${GREEN} ${end}%)`,
-      );
-    }
+    const bars = barsOf(cover, "portrait", "compact", false);
+    const at = viewportOf(cover, "portrait", "compact", false);
+    if (!bars) throw new Error("no bars");
+    const fill = screenFill(look({ top: RED, background: BLUE, bottom: GREEN }), bars, at, 678);
+    const right = (at.width / 466) * 100;
+    const end = (at.height / 678) * 100;
+    expect(fill).toBe(
+      `linear-gradient(to right, ${BLUE} 0%, transparent 0%, transparent ${right}%, ${BLUE} ${right}%), ` +
+        `linear-gradient(to bottom, ${RED} 0%, ${BLUE} 0%, ${BLUE} ${end}%, ${GREEN} ${end}%)`,
+    );
+  });
+
+  test("held across, the Duo's cover keeps the strip's color over its page, with no status", () => {
+    const cover = screenOf("iphone-duo-closed") as Screen;
+    const bars = barsOf(cover, "landscape", "compact", false);
+    const at = viewportOf(cover, "landscape", "compact", false);
+    if (!bars) throw new Error("no bars");
+    const start = (80 / 466) * 100;
+    expect(screenFill(look({ top: RED, background: BLUE, bottom: GREEN }), bars, at, 466)).toBe(
+      `linear-gradient(to bottom, ${RED} ${start}%, ${BLUE} ${start}%, ${BLUE} 100%, ${GREEN} 100%)`,
+    );
   });
 });
 

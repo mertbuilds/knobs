@@ -1,18 +1,22 @@
 import type { DevknobsState } from "../types";
-import { formOf, turn } from "./devices";
+import { deviceOf, formOf, turn } from "./devices";
 
 /**
  * A phone's or a tablet's screen as the page reads it in `window.screen`:
  * `width`, `height`, `availWidth` and `availHeight` in css px, all of the
  * screen, as iOS 26.5 Safari reports 402 x 874 on the 17 Pro on the
  * simulator. iOS keeps them upright however the phone is held; Android turns
- * them with it. The getters go on the window's own `screen`, over its
+ * them with it. The iPhone Duo reports its cover screen, 466 x 678, on
+ * either screen, and the cover held across is 466 high to `availHeight`,
+ * measured on the iOS 27.1 simulator. The getters go on the window's own `screen`, over its
  * prototype's, and taking them off puts back what the screen had.
  */
 
 export interface ScreenSize {
   width: number;
   height: number;
+  /** Where not the height. */
+  availHeight?: number;
 }
 
 const KEYS = ["width", "height", "availWidth", "availHeight"] as const;
@@ -23,9 +27,11 @@ type ScreenKnobs = Pick<DevknobsState, "device" | "posture" | "orientation">;
 export function screenSizeOf(state: ScreenKnobs): ScreenSize | null {
   const device = formOf(state.device, state.posture);
   if (!device || (device.kind !== "phone" && device.kind !== "tablet")) return null;
-  const upright = device.ua === "iphone-safari";
-  const { width, height } = turn(device, upright ? "portrait" : state.orientation);
-  return { width, height };
+  if (device.ua !== "iphone-safari") return turn(device, state.orientation);
+  // A foldable iPhone's base preset is its cover screen.
+  const { width, height } = turn(deviceOf(state.device) ?? device, "portrait");
+  const across = device.postures !== undefined && state.posture !== "open" && state.orientation === "landscape";
+  return across ? { width, height, availHeight: width } : { width, height };
 }
 
 /**
@@ -61,7 +67,8 @@ export function apply(size: ScreenSize | null, scope: object = globalThis): void
     Object.defineProperty(own, ORIGINALS, { configurable: true, value: kept });
   }
   for (const key of KEYS) {
-    const value = key === "width" || key === "availWidth" ? size.width : size.height;
+    const value =
+      key === "width" || key === "availWidth" ? size.width : key === "availHeight" ? (size.availHeight ?? size.height) : size.height;
     Object.defineProperty(own, key, { configurable: true, enumerable: true, get: () => value });
   }
 }

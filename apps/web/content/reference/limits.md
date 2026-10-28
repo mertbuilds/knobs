@@ -89,8 +89,9 @@ still get hover moves, and ones it put there before devknobs loaded read
 but no touch events. turn the switch off for the mouse as it is: clicks,
 hover and `pointerType: "mouse"`. `ontouchstart` is on the window only, not on
 elements or the document. in a phone's or tablet's frame `screen.width`,
-`screen.height`, `availWidth` and `availHeight` are the device's;
-`screen.orientation` keeps the real screen's.
+`screen.height`, `availWidth` and `availHeight` are the device's (the
+iPhone Duo's cover screen on either of its screens); `screen.orientation`
+keeps the real screen's.
 
 a touch device's scrollbars are hidden, not drawn as a phone draws them: the
 thin indicator that shows over the page while it scrolls is left out, and a

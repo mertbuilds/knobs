@@ -5,6 +5,7 @@ import {
   type BarsMotion,
   barsOf,
   barsStep,
+  runsUnderBars,
   viewportOf,
 } from "./browserui";
 import { type Actions, el, FONT, type Look, MORPH, type Painted, place } from "./browserkit";
@@ -261,8 +262,10 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
  * bar, with the scrim over it, unless a fixed or sticky bar holds the top.
  */
 export function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
-  // Turned across an iPhone has no status bar, and its screen takes the page's color.
-  if (bars.platform !== "safari" || (!bars.status && !bars.column) || !page) return look.background;
+  // Turned across an iPhone has no status bar, and its screen takes the page's
+  // color. The Duo keeps its strip at the top held either way, status or not.
+  const strip = bars.status || bars.column || !runsUnderBars(bars.screen.id);
+  if (bars.platform !== "safari" || !strip || !page) return look.background;
   const held = look.top !== look.background;
   const top = bars.scrim && !held ? rgbOf(underAt(look, bars.scrim.at.x, bars.scrim.at.y)) : look.top;
   if (top === look.background && look.bottom === look.background) return look.background;

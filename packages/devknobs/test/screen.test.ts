@@ -36,6 +36,21 @@ describe("screenSizeOf", () => {
     expect(screenSizeOf(state({ device: "ipad-mini" }))).toEqual({ width: 744, height: 1133 });
   });
 
+  test("the iPhone Duo reports its cover screen on either screen, held either way, as the iOS 27.1 simulator does", () => {
+    const cover = { width: 466, height: 678 };
+    expect(screenSizeOf(state({ device: "iphone-duo", posture: "closed" }))).toEqual(cover);
+    for (const orientation of ["portrait", "landscape"] as const) {
+      expect(screenSizeOf(state({ device: "iphone-duo", posture: "open", orientation }))).toEqual(cover);
+    }
+    // The cover held across is 466 high to `availHeight` alone.
+    const across = state({ device: "iphone-duo", posture: "closed", orientation: "landscape" });
+    expect(screenSizeOf(across)).toEqual({ ...cover, availHeight: 466 });
+    const view = hostWindow();
+    apply(screenSizeOf(across), view);
+    const { screen } = view;
+    expect([screen.width, screen.height, screen.availWidth, screen.availHeight]).toEqual([466, 678, 466, 466]);
+  });
+
   test("no device, a laptop or a desktop keep the window's own", () => {
     expect(screenSizeOf(state({ device: "none" }))).toBeNull();
     expect(screenSizeOf(state({ device: "laptop" }))).toBeNull();
