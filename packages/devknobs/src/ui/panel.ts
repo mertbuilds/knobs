@@ -8,6 +8,7 @@ import { still } from "../engine/matchmedia";
 import { frameWindow, panelSized, zoomKey } from "../engine/frames";
 import { rewriteMediaText } from "../engine/media";
 import { keepMounted } from "../engine/remount";
+import { HOST_RESET, holdInTopLayer, LAYER } from "../engine/toplayer";
 import { devIconFor, devIconShown } from "../engine/tabicon";
 import { type SystemMedia, watchSystemMedia } from "../engine/system";
 import type { GrabControl } from "../grab/control";
@@ -91,9 +92,12 @@ export interface Panel {
  * the panel is doing, so it never takes a pointer: the stylesheet hands that
  * back to the handle and to a panel that is out, and every other pixel of the
  * box belongs to the page underneath. The side it lives on anchors it to the
- * left or the right edge.
+ * left or the right edge, and the other edges stay `auto`, whatever a popover
+ * would give them. Its z-index puts it over the page and grab's boxes where
+ * the browser has no top layer for it.
  */
-export const HOST_STYLE = "position:fixed;top:0;z-index:2147483646;pointer-events:none";
+export const HOST_STYLE =
+  "position:fixed;top:0;right:auto;bottom:auto;left:auto;z-index:2147483647;pointer-events:none";
 
 /**
  * Build the panel, put it on the page and keep it in step with the engine. The
@@ -166,6 +170,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   host.setAttribute("data-devknobs", "panel");
   host.style.cssText = HOST_STYLE;
   const root = host.attachShadow({ mode: "open" });
+  addStyle(root, HOST_RESET);
   const style = addStyle(root, "");
 
   const stopSystem = watchSystemMedia((media) => {
@@ -684,14 +689,19 @@ export function createPanel(options: PanelOptions = {}): Panel {
   resizes.observe(panel);
 
   function attach(): void {
-    if (document.body && host.parentNode !== document.body) document.body.append(host);
+    if (!document.body || host.parentNode === document.body) return;
+    document.body.append(host);
+    // Taken out of the page, even to go back in, it left the top layer.
+    hold.raise();
   }
 
   render();
   (document.body ?? document.documentElement).append(host);
+  // Over the page's own top layer and grab's boxes.
+  const hold = holdInTopLayer(host, LAYER.panel);
   if (!document.body) document.addEventListener("DOMContentLoaded", attach, { once: true });
   // A page that clears its <body> as it starts, such as a React root on it, takes the panel too.
-  const stopKeeping = keepMounted(host);
+  const stopKeeping = keepMounted(host, { restored: () => hold.raise() });
   layout("edge");
 
   return {
@@ -736,6 +746,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
       dockSlide.destroy();
       document.removeEventListener("DOMContentLoaded", attach);
       stopKeeping();
+      hold.release();
       host.remove();
     },
   };

@@ -821,7 +821,9 @@ describe("pointer events", () => {
   });
 
   test("the host is anchored by its side, not by its style", () => {
-    expect(HOST_STYLE).not.toMatch(/left|right/);
+    expect(HOST_STYLE).not.toMatch(/(left|right):\s*0/);
+    // A popover's inset never anchors it either.
+    expect(HOST_STYLE).toContain("right:auto;bottom:auto;left:auto");
   });
 
   test("the wrapper takes none, past its own all: initial", () => {

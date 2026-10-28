@@ -42,6 +42,7 @@
     "link": "bun scripts/link.ts link",
     "unlink": "bun scripts/link.ts unlink",
     "test": "bun test",
+    "toplayer": "node scripts/toplayer.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
