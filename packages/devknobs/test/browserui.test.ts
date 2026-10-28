@@ -556,6 +556,14 @@ describe("barsStep", () => {
     expect(run([{ type: "navigate" }], down)).toEqual(BARS_START);
   });
 
+  test("top bars minimize only once the page is far enough down to scroll back by their room", () => {
+    const room = 60;
+    const near = (y: number): BarsEvent => ({ type: "scroll", y, time: 1000, room });
+    expect(run([near(BARS_DOWN), near(room)]).minimized).toBe(false);
+    expect(run([near(room + BARS_DOWN - 1)]).minimized).toBe(false);
+    expect(run([near(room + BARS_DOWN)]).minimized).toBe(true);
+  });
+
   test("a tap counts the next way down from where the page is", () => {
     const tapped = run([scroll(500), { type: "tap" }]);
     expect(run([scroll(510)], tapped).minimized).toBe(false);

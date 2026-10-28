@@ -320,9 +320,12 @@ function browserOver(color: () => string) {
   const sized: number[] = [];
   const glass = new FakeElement();
   const browser = createBrowser(glass as unknown as HTMLElement, built.frame, () => {});
-  const show = (minimized: boolean, platform: "iphone-17-pro" | "pixel-10" = "iphone-17-pro") => {
+  const show = (
+    minimized: boolean,
+    platform: "iphone-17-pro" | "pixel-10" = "iphone-17-pro",
+    layout: "compact" | "top" = platform === "pixel-10" ? "top" : "compact",
+  ) => {
     const screen = screenOf(platform) as Screen;
-    const layout = platform === "pixel-10" ? "top" : "compact";
     const box = viewportOf(screen, "portrait", layout, minimized, true);
     browser.show({
       bars: barsOf(screen, "portrait", layout, minimized, true),
@@ -342,7 +345,7 @@ function browserOver(color: () => string) {
     frames.clear();
     for (const run of pending) run();
   };
-  return { browser, show, scroll, sized, glass };
+  return { browser, show, scroll, sized, glass, view: built.view };
 }
 
 const shrinks = () => timers.filter((timer) => timer.delay === MORPH.expand);
@@ -395,5 +398,39 @@ describe("createBrowser", () => {
     color = DARK;
     scroll();
     expect(browser.look()).toBe(chrome);
+  });
+
+  test("top bars that minimize or expand scroll the page as far as its top moves, so it stays put", () => {
+    const { show, view } = browserOver(() => BLUE);
+    const scrolled: number[] = [];
+    Object.assign(view, { scrollY: 300, scrollBy: ({ top }: { top: number }) => scrolled.push(top) });
+    const top = (minimized: boolean) => viewportOf(PRO, "portrait", "top", minimized, true).y;
+    show(false, "iphone-17-pro", "top");
+    expect(scrolled).toEqual([]);
+    show(true, "iphone-17-pro", "top");
+    // Minimized, the frame grows up at once, and the page scrolls up as far.
+    expect(scrolled).toEqual([top(true) - top(false)]);
+    expect(scrolled[0]).toBeLessThan(0);
+    show(false, "iphone-17-pro", "top");
+    for (const timer of shrinks()) timer.run();
+    expect(scrolled.at(-1)).toBe(top(false) - top(true));
+    // At the top of the page the bars come back above it, which shows from its start.
+    show(true, "iphone-17-pro", "top");
+    view.scrollY = 0;
+    const count = scrolled.length;
+    show(false, "iphone-17-pro", "top");
+    for (const timer of shrinks()) timer.run();
+    expect(scrolled.length).toBe(count);
+  });
+
+  test("bars at the bottom never scroll the page, as its top stays", () => {
+    const { show, view } = browserOver(() => BLUE);
+    const scrolled: number[] = [];
+    Object.assign(view, { scrollBy: ({ top }: { top: number }) => scrolled.push(top) });
+    show(false);
+    show(true);
+    show(false);
+    for (const timer of shrinks()) timer.run();
+    expect(scrolled).toEqual([]);
   });
 });
