@@ -272,7 +272,9 @@ function afterYield(message: PageMessage) {
     mountHost(true);
     setState({ panel: { open: true } });
   } else if (message.type === 'prefer') {
+    // Picked in another tab: the next load keeps knobs again only with the extension's.
     prefer.value = message.prefer;
+    markYielded(message.prefer === 'page');
   } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
     toBridge({ state: DEFAULT_STATE, type: 'set' });
   }

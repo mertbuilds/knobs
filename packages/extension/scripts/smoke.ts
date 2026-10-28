@@ -1701,6 +1701,16 @@ async function preferPage() {
     await set(tab, { scheme: 'system', text: 'system' });
     await tab.evaluate(() => window.devknobs!.ready());
 
+    // Picked in another tab meanwhile: the next load keeps knobs again only with the extension's.
+    const flag = () => tab.evaluate(() => sessionStorage.getItem('devknobs-extension.yielded'));
+    const pickElsewhere = (value: string) =>
+      worker.evaluate((value) => chrome.storage.local.set({ prefer: value }), value);
+    await pickElsewhere('extension');
+    await tab.waitForFunction(() => sessionStorage.getItem('devknobs-extension.yielded') === null);
+    await pickElsewhere('page');
+    await tab.waitForFunction(() => sessionStorage.getItem('devknobs-extension.yielded') === '1');
+    log('prefer picked in another tab, the flag after', await flag());
+
     // The page unmounts its copy: the toolbar button brings the extension's panel back, open.
     await tab.evaluate(() => window.pageUnmount!());
     await tab.waitForTimeout(300);
