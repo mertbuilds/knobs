@@ -1565,8 +1565,14 @@ describe("a foldable folding", () => {
     expect(byClass("fold")).toBeUndefined();
     play();
     expect(Reflect.get(frameElement().style, "width")).toBe("669px");
+    // Shut onto the cover held across, whose top turns the other way from the fold's frames: no fold in view.
     apply({ ...SHUT, orientation: "landscape", width: 678, height: 466 });
-    play();
+    expect(byClass("fold")).toBeUndefined();
+    // With less motion it lands at once.
+    reset();
+    reduce = true;
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    apply({ ...SHUT, orientation: "landscape", width: 678, height: 466 });
     expect(Reflect.get(frameElement().style, "width")).toBe("678px");
   });
 
