@@ -13,8 +13,12 @@ const OWNER = Symbol.for("devknobs.owner");
  */
 const HOST = Symbol.for("devknobs.host");
 
-/** A page copy's way to have the page from a host that steps aside, with what the host hands it. */
-export type Take = (handed: object) => boolean;
+/**
+ * A page copy's way to have the page from a host that steps aside, with what
+ * the host hands it. `pending` says whether that copy still waits, false once
+ * it unmounted, so a host never steps aside for a copy that is gone.
+ */
+export type Take = ((handed: object) => boolean) & { pending?: () => boolean };
 
 /** A host, as `HOST` holds it. */
 export interface Host {

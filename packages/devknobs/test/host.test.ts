@@ -293,6 +293,16 @@ describe("a host that prefers the page's copy", () => {
     page.release();
   });
 
+  test("stays for a page copy that unmounted since it deferred", () => {
+    devknobs.mount({ host: true, prefer: preferring("extension").setting });
+    const page = pageCopy();
+    hostOf(window)?.adopt({}, Object.assign(page.take, { pending: () => false }));
+    devknobs.setPrefer("page");
+    expect(page.handed).toEqual([]);
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+    expect(createPanel).toHaveBeenCalledTimes(1);
+  });
+
   test("with the extension preferred, keeps the page and takes the page copy's choices", () => {
     devknobs.mount({ host: true, prefer: preferring("extension").setting });
     const page = pageCopy();
@@ -378,6 +388,26 @@ describe("a page copy a host steps aside for", () => {
     free(window, again.release);
     devknobs.mount();
     expect(createPanel.mock.calls.at(-1)?.[0]?.prefer).toBeUndefined();
+  });
+
+  test("says it waits until it unmounts", () => {
+    const { takes } = host();
+    devknobs.mount();
+    expect(takes[0]?.pending?.()).toBe(true);
+    devknobs.unmount();
+    expect(takes[0]?.pending?.()).toBe(false);
+  });
+
+  test("shows the choice as the host has it now, changed in another tab say", () => {
+    const { release, takes } = host();
+    devknobs.mount();
+    free(window, release);
+    let now = "page";
+    takes[0]!({ prefer: { value: "page", change() {}, now: () => now } });
+    const prefer = createPanel.mock.calls[0]?.[0]?.prefer;
+    expect(prefer?.value()).toBe("page");
+    now = "extension";
+    expect(prefer?.value()).toBe("extension");
   });
 
   test("does not take the page once it has unmounted, or while a host still holds it", () => {

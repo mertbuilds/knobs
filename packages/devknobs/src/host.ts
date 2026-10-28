@@ -45,10 +45,13 @@ export interface PreferSetting {
   change: (value: PreferValue) => void;
   /** The host let a copy of the page's have the page, and will not take it back. */
   yielded?: () => void;
+  /** The choice as it is now, where it can change elsewhere, such as in another tab. */
+  now?: () => PreferValue;
 }
 
 /** What the settings say under the choice. */
-export const PREFER_HINT = "page uses the site's own knobs, a local build say; real browser settings are off then";
+export const PREFER_HINT =
+  "page: a site's own knobs, say a local build, runs the panel where the site has one; real browser settings are off then";
 
 /**
  * A host's preference, as a page copy reads it from the host that handed the
@@ -60,7 +63,19 @@ export function preferOf(handed: object): PreferSetting | null {
   const value: unknown = Reflect.get(prefer, "value");
   const change: unknown = Reflect.get(prefer, "change");
   if ((value !== "extension" && value !== "page") || typeof change !== "function") return null;
-  return { value, change: (next) => void Reflect.apply(change, prefer, [next]) };
+  const now: unknown = Reflect.get(prefer, "now");
+  return {
+    value,
+    change: (next) => void Reflect.apply(change, prefer, [next]),
+    ...(typeof now === "function"
+      ? {
+          now: () => {
+            const current: unknown = Reflect.apply(now, prefer, []);
+            return current === "extension" ? "extension" : "page";
+          },
+        }
+      : {}),
+  };
 }
 
 /**

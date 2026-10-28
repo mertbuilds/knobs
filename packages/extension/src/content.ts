@@ -237,6 +237,7 @@ const prefer: PreferSetting = {
       }
     });
   },
+  now: () => prefer.value,
   value: 'extension',
   yielded: () => {
     yielded = true;
@@ -275,6 +276,8 @@ function afterYield(message: PageMessage) {
     // Picked in another tab: the next load keeps knobs again only with the extension's.
     prefer.value = message.prefer;
     markYielded(message.prefer === 'page');
+    // The page's panel reads it through `now`; an empty patch draws it again.
+    window.devknobs?.setState({});
   } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
     toBridge({ state: DEFAULT_STATE, type: 'set' });
   }

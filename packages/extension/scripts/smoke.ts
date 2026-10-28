@@ -17,9 +17,10 @@ const root = join(import.meta.dirname, '..');
 const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
 const out = join(root, 'smoke-out');
 const devknobsDist = join(root, '../devknobs/dist');
-const devknobsVersion = (
-  JSON.parse(await readFile(join(root, '../devknobs/package.json'), 'utf8')) as { version: string }
-).version;
+// The version the built devknobs carries, which a `bun run link` build makes a local one.
+const devknobsVersion = /VERSION = "([^"]+)"/.exec(
+  await readFile(join(devknobsDist, 'index.js'), 'utf8'),
+)![1]!;
 // The version a page's local build of devknobs carries, as `bun run link` builds one.
 const localVersion = `${devknobsVersion}-local.123`;
 
@@ -1705,10 +1706,23 @@ async function preferPage() {
     const flag = () => tab.evaluate(() => sessionStorage.getItem('devknobs-extension.yielded'));
     const pickElsewhere = (value: string) =>
       worker.evaluate((value) => chrome.storage.local.set({ prefer: value }), value);
+    const shown = () =>
+      tab.evaluate(async () => {
+        await window.devknobs!.ready();
+        return document
+          .querySelector('[data-devknobs="panel"]')
+          ?.shadowRoot?.querySelector(
+            '[aria-describedby="devknobs-prefer-hint"] [aria-checked="true"]',
+          )?.textContent;
+      });
     await pickElsewhere('extension');
     await tab.waitForFunction(() => sessionStorage.getItem('devknobs-extension.yielded') === null);
+    const elsewhere = await shown();
+    log("the page's panel shows the choice from another tab", elsewhere);
+    assert.equal(elsewhere, 'extension');
     await pickElsewhere('page');
     await tab.waitForFunction(() => sessionStorage.getItem('devknobs-extension.yielded') === '1');
+    assert.equal(await shown(), 'page');
     log('prefer picked in another tab, the flag after', await flag());
 
     // The page unmounts its copy: the toolbar button brings the extension's panel back, open.

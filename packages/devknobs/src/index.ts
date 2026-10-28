@@ -171,7 +171,10 @@ export function mount(options: MountOptions = {}): void {
     handedPrefer = null;
     hostedBy = host;
     deferred = options;
-    host.adopt(options, (handed) => takeFrom(options, handed));
+    const take: Take = Object.assign((handed: object) => takeFrom(options, handed), {
+      pending: () => deferred === options && !panel && !stopKeys,
+    });
+    host.adopt(options, take);
     return;
   }
   // A copy that is no host shows the preference it was handed, as it was handed.
@@ -224,7 +227,7 @@ function panelPrefer(options: MountOptions): PanelPrefer | undefined {
   const setting = options.prefer;
   if (!setting) return undefined;
   return {
-    value: () => preferNow ?? setting.value,
+    value: () => preferNow ?? setting.now?.() ?? setting.value,
     change: (value) => {
       // The host hears it first, as with the native switch.
       setting.change(value);
@@ -296,12 +299,18 @@ function handOver(): void {
   const take = waiting;
   const options = mounted;
   if (!take || !options?.host) return;
+  // A page copy that unmounted since it deferred takes nothing: the host stays.
+  const pending: unknown = Reflect.get(take, "pending");
+  if (typeof pending === "function" && Reflect.apply(pending, take, []) !== true) {
+    waiting = null;
+    return;
+  }
   const native = engine.nativeSwitch();
   unmount();
   const prefer = options.prefer;
   let took = false;
   try {
-    took = take(prefer ? { prefer: { value: "page", change: prefer.change } } : {}) === true;
+    took = take(prefer ? { prefer: { value: "page", change: prefer.change, now: prefer.now } } : {}) === true;
   } catch {
     // A copy that broke as it mounted leaves the page to the host.
   }
