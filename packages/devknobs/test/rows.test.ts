@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from "bun:
 import * as engine from "../src/engine";
 import { DEFAULT_PINNED, DEFAULT_STATE, merge } from "../src/engine/store";
 import type { GrabControl } from "../src/grab/control";
+import { PREFER_HINT } from "../src/host";
 import { BINDINGS, type LiveKeys } from "../src/ui/bindings";
 import { type Action, actionRow, ROWS, type Row, type RowId } from "../src/ui/catalog";
 import { rowBox, rowButton, rowsLabel } from "../src/ui/dom";
@@ -89,6 +90,8 @@ function buildSettings(more: Partial<SettingsContext> = {}): Settings {
     setDevIcon: () => {},
     native: null,
     setNative: () => {},
+    prefer: null,
+    setPrefer: () => {},
     searching: () => false,
     leaveSearch: () => {},
     ...more,
@@ -396,6 +399,35 @@ describe("the settings' native switch", () => {
     expect(fake(said).textContent).toBe("switched to in-page");
     made.drawNative(true, null);
     expect(view.find("row-hint")[0]?.textContent).toBe("uses the debugger");
+  });
+});
+
+describe("the settings' choice of who runs the panel", () => {
+  test("is not there where the host gives none", () => {
+    expect(settings().find("seg")).toHaveLength(0);
+  });
+
+  test("sits after the host's switch with its hint, shows the choice and says what the user picks", () => {
+    let now: "extension" | "page" = "extension";
+    const picked: string[] = [];
+    const made = buildSettings({
+      native: { label: "real browser settings", hint: "" },
+      prefer: { value: () => now },
+      setPrefer: (value) => picked.push(value),
+    });
+    const view = fake(made.view);
+    const row = view.children[3];
+    expect(parts(row?.children[0]?.children[0])).toEqual(["glyph", "row-label", "seg row-control"]);
+    expect(row?.children[0]?.children[0]?.children[1]?.textContent).toBe("prefer");
+    expect(row?.children[1]?.textContent).toBe(PREFER_HINT);
+    const [extension, page] = view.find("seg-item");
+    made.drawPrefer();
+    expect([extension, page].map((item) => item?.attributes.get("aria-checked"))).toEqual(["true", "false"]);
+    page?.fire("click");
+    expect(picked).toEqual(["page"]);
+    now = "page";
+    made.drawPrefer();
+    expect([extension, page].map((item) => item?.attributes.get("aria-checked"))).toEqual(["false", "true"]);
   });
 });
 

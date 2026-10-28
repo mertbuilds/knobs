@@ -7,7 +7,8 @@ import { type Combo, comboLabel, type Keys } from "./keys";
 import { COLLAPSE_WORD, pinWord, SIDE_WORD } from "./pin";
 
 /**
- * The panel's footer: the overflow badge, the fresh mode note, the keys the
+ * The panel's footer: the overflow badge, the fresh mode note, which copy
+ * runs the panel where a host and the page each have one, the keys the
  * panel answers to, grab's and inspect's with them, each a control that does
  * what its key does, the pin that docks the panel to its side, with the two
  * controls a pinned panel has before it, and the way into the settings.
@@ -15,6 +16,15 @@ import { COLLAPSE_WORD, pinWord, SIDE_WORD } from "./pin";
 
 /** What the footer says while fresh mode is on, so a panel back at its defaults is no surprise. */
 export const FRESH_NOTE = "fresh mode: nothing is kept";
+
+/**
+ * Which copy of devknobs runs the panel and its version, such as
+ * `extension 0.5.1` or `page 0.5.1-local.1767225600`: the footer says so where
+ * a host and a page can each run it.
+ */
+export function runtimeLabel(host: boolean, version: string): string {
+  return `${host ? "extension" : "page"} ${version}`;
+}
 
 /**
  * What the footer says about the overflow knob, such as `2 overflowing`.
@@ -100,6 +110,7 @@ export function createFooter(
   grab: GrabControl | null,
   mac: boolean,
   inspect: GrabControl | null = null,
+  runtime: string | null = null,
 ): Footer {
   const foot = el("div", "foot");
   const badge = el("span", "badge");
@@ -144,6 +155,7 @@ export function createFooter(
   drawPin(false);
   foot.append(badge);
   if (fresh()) foot.append(el("span", "fresh-note", FRESH_NOTE));
+  if (runtime) foot.append(el("span", "runtime", runtime));
   foot.append(meta);
 
   return {

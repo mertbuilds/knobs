@@ -1,17 +1,19 @@
 import type { GrabControl } from "../grab/control";
+import { PREFER_HINT, type PreferValue } from "../host";
 import { BINDING_WORDS, type LiveKeys, recordStep } from "./bindings";
 import { button, el, lay, mark, rowBox, rowButton, rowsLabel } from "./dom";
 import { BINDING_ICONS, icon, type IconName } from "./icons";
 import { type Binding, comboLabel, comboSpoken, type Keys } from "./keys";
 import { viewHead } from "./pane";
 import type { LivePrefs } from "./prefs";
+import { segments } from "./radio";
 import { focusOn, type View } from "./slide";
 import { createRefusal, type Tips } from "./tooltip";
 
 /**
  * The settings view, which slides in over the rows: whether the handle shows
  * while the panel is closed, the host's switch for its native driver where it
- * gives one, whether the tab's icon has the dev ribbon, and each binding's
+ * gives one, which copy runs the panel where a host gives the choice, whether the tab's icon has the dev ribbon, and each binding's
  * key, recorded from the next
  * keys pressed. A key a binding cannot take is refused, and the chip says why.
  */
@@ -60,6 +62,10 @@ export interface SettingsContext {
   native: { label: string; hint: string } | null;
   /** The user turned the native driver off or on. */
   setNative(on: boolean): void;
+  /** Whether the host or the page runs the panel, where a host gives the choice; null with none. */
+  prefer: { value(): PreferValue } | null;
+  /** The user picked who runs the panel. */
+  setPrefer(value: PreferValue): void;
   /** Whether the search is open. */
   searching(): boolean;
   leaveSearch(): void;
@@ -78,6 +84,8 @@ export interface Settings {
   drawDevIcon(shown: boolean): void;
   /** Show whether the native driver is on, and why it last went off or on in place of its hint. */
   drawNative(on: boolean, note: string | null): void;
+  /** Show who runs the panel, where a host gives the choice. */
+  drawPrefer(): void;
   /** Take a key for the binding that records, if one does, and say whether it did. */
   recordingKey(event: KeyboardEvent): boolean;
   stopRecording(): void;
@@ -138,6 +146,29 @@ export function createSettings(context: SettingsContext): Settings {
     nativeSwitch.addEventListener("click", () =>
       context.setNative(nativeSwitch.getAttribute("aria-checked") !== "true"),
     );
+  }
+  const prefer = context.prefer;
+  const preferChoice = segments({
+    options: [
+      { value: "extension", label: "extension" },
+      { value: "page", label: "page" },
+    ],
+    label: "prefer",
+    onChange: (value) => context.setPrefer(value === "page" ? "page" : "extension"),
+  });
+  if (prefer) {
+    preferChoice.node.classList.add("row-control");
+    const hint = el("div", "row-hint", PREFER_HINT);
+    hint.id = "devknobs-prefer-hint";
+    preferChoice.node.setAttribute("aria-describedby", hint.id);
+    const row = rowBox({
+      main: el("div", "main"),
+      glyph: icon("chevrons-left-right"),
+      title: "prefer",
+      ends: [preferChoice.node],
+    }).box;
+    row.append(hint);
+    keysView.append(row);
   }
   const devIconSwitch = button("switch row-control", "");
   devIconSwitch.setAttribute("role", "switch");
@@ -322,6 +353,9 @@ export function createSettings(context: SettingsContext): Settings {
       if (nativeHint.textContent === hint) return;
       nativeHint.textContent = hint;
       if (note) said.textContent = note;
+    },
+    drawPrefer(): void {
+      if (prefer) preferChoice.set(prefer.value());
     },
     recordingKey(event: KeyboardEvent): boolean {
       if (recording === null) return false;

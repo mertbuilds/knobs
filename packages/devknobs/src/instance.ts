@@ -13,12 +13,20 @@ const OWNER = Symbol.for("devknobs.owner");
  */
 const HOST = Symbol.for("devknobs.host");
 
+/** A page copy's way to have the page from a host that steps aside, with what the host hands it. */
+export type Take = (handed: object) => boolean;
+
 /** A host, as `HOST` holds it. */
 export interface Host {
   /** The host's way out, the one `OWNER` holds while the host has the page. */
   release: () => void;
-  /** Take what a copy the page mounts asks for, from its mount options. */
-  adopt: (options: object) => void;
+  /**
+   * Take what a copy the page mounts asks for, from its mount options. With
+   * `take`, that copy's way to have the page instead, should the host step
+   * aside for it, now or later: the host lets go first and hands it what it
+   * keeps for it, and it says whether it took the page. Older copies leave none.
+   */
+  adopt: (options: object, take?: Take) => void;
   /** The host's api, where a copy that defers to it sends its own calls. Older hosts leave none. */
   api?: object;
 }
@@ -40,7 +48,7 @@ function isHost(value: unknown): value is Host {
 export function claim(
   scope: object,
   release: () => void,
-  adopt?: (options: object) => void,
+  adopt?: (options: object, take?: Take) => void,
   api?: object,
 ): void {
   const previous: unknown = Reflect.get(scope, OWNER);

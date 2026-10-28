@@ -311,6 +311,15 @@ describe("link and unlink", () => {
     expect(() => unlink(empty)).toThrow("does not depend on @vinena/knobs");
   });
 
+  test("the build is handed the local version, so the code carries the one package.json says", () => {
+    const root = fakeRoot();
+    const app = fakeApp();
+    const built: string[] = [];
+    link(app, (version) => built.push(version), root, 5_000);
+    expect(built).toEqual(["1.2.3-local.5"]);
+    expect(versionAt(linkPaths(app).target)).toBe("1.2.3-local.5");
+  });
+
   test("a build that fails leaves the app as it was", () => {
     const root = fakeRoot();
     const app = fakeApp();

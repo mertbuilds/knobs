@@ -3,6 +3,7 @@ import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from '.
 import {
   type Answer,
   detachMessage,
+  PREFER_KEY,
   type Question,
   readSystemChange,
   readTabRequest,
@@ -631,6 +632,10 @@ async function answer(tabId: number, question: Question, url: string | undefined
       await queued(tabId, () => setUa(tabId, question.ua, url));
       return {};
     }
+    case 'prefer': {
+      await chrome.storage.local.set({ [PREFER_KEY]: question.prefer });
+      return {};
+    }
     case 'frame': {
       const host = url ? URL.parse(url)?.hostname : undefined;
       if (question.open && host) {
@@ -671,7 +676,8 @@ chrome.runtime.onMessage.addListener(
       request.type === 'watch' ||
       request.type === 'frame' ||
       request.type === 'bypass' ||
-      request.type === 'ua'
+      request.type === 'ua' ||
+      request.type === 'prefer'
     ) {
       answer(tabId, request, sender.url).then(reply, (error) =>
         reply({ error: error instanceof Error ? error.message : String(error) }),

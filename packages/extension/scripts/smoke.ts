@@ -17,6 +17,11 @@ const root = join(import.meta.dirname, '..');
 const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
 const out = join(root, 'smoke-out');
 const devknobsDist = join(root, '../devknobs/dist');
+const devknobsVersion = (
+  JSON.parse(await readFile(join(root, '../devknobs/package.json'), 'utf8')) as { version: string }
+).version;
+// The version a page's local build of devknobs carries, as `bun run link` builds one.
+const localVersion = `${devknobsVersion}-local.123`;
 
 // Records the root size as the parser reaches the head, before any paint.
 const head = `<meta charset="utf-8"><title>smoke</title>
@@ -152,6 +157,26 @@ const server = createServer(async (request, response) => {
   if (built) {
     response.setHeader('content-type', 'text/javascript');
     response.end(await readFile(join(devknobsDist, built)).catch(() => ''));
+    return;
+  }
+  // The module build again, as a local build of it: the same code, its version a local one.
+  const local = /^\/local\/((?:[\w-]+\/)*[\w.-]+\.js)$/.exec(path)?.[1];
+  if (local) {
+    const code = await readFile(join(devknobsDist, local), 'utf8').catch(() => '');
+    response.setHeader('content-type', 'text/javascript');
+    response.end(code.replace(`VERSION = "${devknobsVersion}"`, `VERSION = "${localVersion}"`));
+    return;
+  }
+  // A page that mounts that local build itself.
+  if (path === '/own-local') {
+    response.setHeader('content-type', 'text/html');
+    response.end(
+      page(`<script type="module">
+import { mount } from '/local/index.js';
+mount({ hotkey: 'j' });
+window.pageMounted = true;
+</script>`),
+    );
     return;
   }
   // A page that mounts devknobs itself, with a hotkey of its own, as an app does.
@@ -1551,6 +1576,142 @@ async function pageOwnCopy() {
   await tab.close();
 }
 
+/** What the panel's footer names as the copy that runs it, and whether its settings offer the choice. */
+const runtimeOf = (tab: Page) =>
+  tab.evaluate(() =>
+    [...document.querySelectorAll('[data-devknobs="panel"]')].map((host) => ({
+      extension:
+        host.shadowRoot?.querySelector('[aria-describedby="devknobs-native-hint"]') != null,
+      prefer: host.shadowRoot?.querySelector('[aria-describedby="devknobs-prefer-hint"]') != null,
+      runtime: host.shadowRoot?.querySelector('.runtime')?.textContent ?? null,
+    })),
+  );
+
+/** Open the settings of the one panel on the page, and pick who runs it there. */
+async function pick(tab: Page, value: 'extension' | 'page') {
+  await tab.evaluate(() => window.devknobs!.setState({ panel: { open: true } }));
+  await tab.evaluate(() => window.devknobs!.ready());
+  await tab.evaluate((value) => {
+    const root = document.querySelector('[data-devknobs="panel"]')!.shadowRoot!;
+    if (root.querySelector('.keys-toggle')!.getAttribute('aria-pressed') !== 'true') {
+      root.querySelector<HTMLElement>('.keys-toggle')!.click();
+    }
+    const item = [
+      ...root.querySelectorAll<HTMLElement>('[aria-describedby="devknobs-prefer-hint"] .seg-item'),
+    ].find((node) => node.textContent === value);
+    item!.click();
+  }, value);
+}
+
+/** The settings open on the one panel, for a shot of the choice with the footer under it. */
+async function showSettings(tab: Page) {
+  await tab.evaluate(() => window.devknobs!.setState({ panel: { open: true } }));
+  await tab.evaluate(() => window.devknobs!.ready());
+  await tab.evaluate(() => {
+    const root = document.querySelector('[data-devknobs="panel"]')!.shadowRoot!;
+    if (root.querySelector('.keys-toggle')!.getAttribute('aria-pressed') !== 'true') {
+      root.querySelector<HTMLElement>('.keys-toggle')!.click();
+    }
+  });
+  await tab.waitForTimeout(400);
+}
+
+/**
+ * Who runs the panel on a page with its own devknobs, a local build of it, in a profile of
+ * its own. The extension's by default: one panel, its own, the footer naming it. Picking the
+ * page's in its settings hands the page over at once: one panel, the page's, the footer naming
+ * the local build, and no take-back. A load again keeps it; a page with no copy of its own
+ * keeps the extension's. Picking the extension's from the page's panel loads the page again
+ * with the extension's.
+ */
+async function preferPage() {
+  const own = await mkdtemp(join(tmpdir(), 'knobs-smoke-prefer-'));
+  const browser = await chromium.launchPersistentContext(own, {
+    args: [
+      `--disable-extensions-except=${dist}`,
+      `--load-extension=${dist}`,
+      `--window-size=${viewport.width},${viewport.height}`,
+    ],
+    channel: 'chromium',
+    colorScheme: null,
+    headless: true,
+    viewport,
+  });
+  try {
+    const worker = browser.serviceWorkers()[0] ?? (await browser.waitForEvent('serviceworker'));
+    const stored = () =>
+      worker.evaluate(async () => (await chrome.storage.local.get('prefer')).prefer as unknown);
+    const tab = browser.pages()[0] ?? (await browser.newPage());
+    const errors: Array<string> = [];
+    tab.on('pageerror', (error) => errors.push(String(error)));
+    const extension = { extension: true, prefer: true, runtime: `extension ${devknobsVersion}` };
+    const pageOwn = { extension: false, prefer: true, runtime: `page ${localVersion}` };
+
+    await tab.goto(`${url}own-local`);
+    await tab.waitForFunction(() => window.pageMounted === true);
+    await ready(tab);
+    await tab.waitForTimeout(300);
+    const first = await runtimeOf(tab);
+    log('prefer extension, a page with a local build', first);
+    assert.deepEqual(first, [extension]);
+    await showSettings(tab);
+    await tab.screenshot({ path: join(out, 'prefer-extension.png') });
+
+    await pick(tab, 'page');
+    await tab.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-devknobs="panel"]')
+          ?.shadowRoot?.querySelector('.runtime')
+          ?.textContent?.startsWith('page') === true,
+    );
+    await tab.waitForTimeout(500);
+    const picked = { panels: await runtimeOf(tab), stored: await stored() };
+    log('picked the page in the settings', picked);
+    assert.deepEqual(picked, { panels: [pageOwn], stored: 'page' });
+
+    await tab.reload();
+    await tab.waitForFunction(() => window.pageMounted === true);
+    await ready(tab);
+    await tab.waitForTimeout(800);
+    const reloaded = {
+      api: await tab.evaluate(() => window.devknobs!.getState().panel !== undefined),
+      panels: await runtimeOf(tab),
+    };
+    log('prefer page, loaded again', reloaded);
+    assert.deepEqual(reloaded, { api: true, panels: [pageOwn] });
+    await showSettings(tab);
+    await tab.screenshot({ path: join(out, 'prefer-page.png') });
+
+    await tab.goto(url);
+    await ready(tab);
+    await tab.waitForTimeout(300);
+    const plain = await runtimeOf(tab);
+    log('prefer page, a page with no copy of its own', plain);
+    assert.deepEqual(plain, [extension]);
+
+    await tab.goto(`${url}own-local`);
+    await tab.waitForFunction(() => window.pageMounted === true);
+    await ready(tab);
+    await tab.waitForTimeout(300);
+    assert.deepEqual(await runtimeOf(tab), [pageOwn]);
+    const loaded = tab.waitForEvent('load');
+    await pick(tab, 'extension');
+    await loaded;
+    await tab.waitForFunction(() => window.pageMounted === true);
+    await ready(tab);
+    await tab.waitForTimeout(500);
+    const back = { panels: await runtimeOf(tab), stored: await stored() };
+    log("picked the extension in the page's panel", back);
+    assert.deepEqual(back, { panels: [extension], stored: 'extension' });
+    assert.deepEqual(errors, []);
+    log('screenshots', [join(out, 'prefer-extension.png'), join(out, 'prefer-page.png')]);
+  } finally {
+    await browser.close();
+    await rm(own, { force: true, recursive: true });
+  }
+}
+
 const UA_KINDS = ['page', 'fetch', 'image', 'worker-fetch'];
 const hints = (headers: Record<string, string> | undefined) =>
   Object.keys(headers ?? {}).filter((name) => name.startsWith('sec-ch-ua'));
@@ -2219,6 +2380,7 @@ try {
   await uaRequests();
   await strictPolicy();
   await pageOwnCopy();
+  await preferPage();
 
   process.stdout.write('smoke passed\n');
 } finally {

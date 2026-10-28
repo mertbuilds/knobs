@@ -20,8 +20,9 @@ import * as ua from "../src/engine/ua";
 import * as width from "../src/engine/frames";
 import * as control from "../src/grab/control";
 import * as inspect from "../src/grab/inspect";
+import { preferOf, type PreferSetting, stepsAside, takesBack } from "../src/host";
 import * as devknobs from "../src/index";
-import { claim, free, hostOf, owned } from "../src/instance";
+import { claim, free, hostOf, owned, type Take } from "../src/instance";
 import * as requests from "../src/requests";
 import * as onload from "../src/storage/onload";
 import { DEFAULT_STATE } from "../src/engine/store";
@@ -82,7 +83,9 @@ beforeEach(() => {
   createKeys = spyOn(bindings, "createKeys").mockImplementation(
     (() => ({ ...destroyable(), recording: false, get: () => ({}) })) as never,
   );
-  createPanel = spyOn(panel, "createPanel").mockImplementation((() => destroyable()) as never);
+  createPanel = spyOn(panel, "createPanel").mockImplementation(
+    (() => ({ ...destroyable(), drawPrefer() {} })) as never,
+  );
 });
 
 afterEach(async () => {
@@ -205,5 +208,164 @@ describe("a host", () => {
     expect(String(warn.mock.calls[0]?.[0])).toStartWith("devknobs:");
     last();
     warn.mockRestore();
+  });
+});
+
+describe("who runs the panel", () => {
+  test("a host steps aside only where the page's copy is preferred and that copy can take the page", () => {
+    const take = () => true;
+    expect(stepsAside("page", take)).toBe(true);
+    expect(stepsAside("extension", take)).toBe(false);
+    expect(stepsAside(null, take)).toBe(false);
+    expect(stepsAside("page", undefined)).toBe(false);
+    expect(takesBack("page")).toBe(false);
+    expect(takesBack("extension")).toBe(true);
+    expect(takesBack(null)).toBe(true);
+  });
+
+  test("a page copy reads the preference a host hands it field by field", () => {
+    const heard: unknown[] = [];
+    const prefer = preferOf({ prefer: { value: "page", change: (value: unknown) => heard.push(value) } });
+    expect(prefer?.value).toBe("page");
+    prefer?.change("extension");
+    expect(heard).toEqual(["extension"]);
+    expect(preferOf({})).toBeNull();
+    expect(preferOf({ prefer: { value: "both", change() {} } })).toBeNull();
+    expect(preferOf({ prefer: { value: "page" } })).toBeNull();
+  });
+});
+
+describe("a host that prefers the page's copy", () => {
+  /** A host's preference, noting what it hears. */
+  function preferring(value: "extension" | "page") {
+    const changed: string[] = [];
+    let yielded = 0;
+    const setting: PreferSetting = {
+      value,
+      change: (next) => changed.push(next),
+      yielded: () => yielded++,
+    };
+    return { setting, changed, yielded: () => yielded };
+  }
+
+  /** A page copy that knows hosts: its way to take the page claims it, as its mount would. */
+  function pageCopy(takes = true) {
+    const handed: object[] = [];
+    const release = () => free(window, release);
+    const take: Take = (given) => {
+      handed.push(given);
+      if (takes) claim(window, release);
+      return takes;
+    };
+    return { handed, release, take };
+  }
+
+  test("lets a page copy have the page at once, hands it the choice and does not take it back", async () => {
+    const prefer = preferring("page");
+    devknobs.mount({ host: true, prefer: prefer.setting });
+    const hostPanel = createPanel.mock.results[0]?.value as { destroy(): void };
+    const destroy = spyOn(hostPanel, "destroy");
+    const page = pageCopy();
+    hostOf(window)?.adopt({ hotkey: "j" }, page.take);
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(hostOf(window)).toBeNull();
+    expect(page.handed).toHaveLength(1);
+    expect(preferOf(page.handed[0]!)?.value).toBe("page");
+    preferOf(page.handed[0]!)?.change("extension");
+    expect(prefer.changed).toEqual(["extension"]);
+    await settle();
+    expect(Reflect.get(window, Symbol.for("devknobs.owner"))).toBe(page.release);
+    expect(createPanel).toHaveBeenCalledTimes(1);
+    expect(prefer.yielded()).toBe(1);
+    page.release();
+  });
+
+  test("steps aside once the preference comes in, for a page copy that deferred before it", () => {
+    const prefer = preferring("extension");
+    devknobs.mount({ host: true, prefer: prefer.setting });
+    const page = pageCopy();
+    hostOf(window)?.adopt({}, page.take);
+    expect(page.handed).toEqual([]);
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+    devknobs.setPrefer("page");
+    expect(page.handed).toHaveLength(1);
+    expect(hostOf(window)).toBeNull();
+    page.release();
+  });
+
+  test("with the extension preferred, keeps the page and takes the page copy's choices", () => {
+    devknobs.mount({ host: true, prefer: preferring("extension").setting });
+    const page = pageCopy();
+    hostOf(window)?.adopt({ grabColor: "green" }, page.take);
+    expect(page.handed).toEqual([]);
+    expect(devknobs.getState().grabColor).toBe("green");
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+  });
+
+  test("mounts again where the page copy does not take the page, its switch as it was", async () => {
+    const setting = { label: "real", hint: "a bar", change: () => {} };
+    devknobs.mount({ host: true, prefer: preferring("page").setting, native: { setting } });
+    devknobs.setNative(false, "closed");
+    hostOf(window)?.adopt({}, pageCopy(false).take);
+    await settle();
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+    expect(createPanel).toHaveBeenCalledTimes(2);
+    expect(engine.nativeSwitch()).toEqual({ setting, on: false, note: "closed" });
+  });
+
+  test("leaves the page to a copy that knows no hosts, with no take-back and no warning", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const prefer = preferring("page");
+    devknobs.mount({ host: true, prefer: prefer.setting });
+    const release = () => free(window, release);
+    claim(window, release);
+    await settle();
+    expect(hostOf(window)).toBeNull();
+    expect(Reflect.get(window, Symbol.for("devknobs.owner"))).toBe(release);
+    expect(prefer.yielded()).toBe(1);
+    expect(warn).not.toHaveBeenCalled();
+    release();
+    warn.mockRestore();
+  });
+});
+
+describe("a page copy a host steps aside for", () => {
+  /** A host as a newer extension leaves one: it keeps the page copy's way to take the page. */
+  function host() {
+    const release = () => {};
+    const takes: Take[] = [];
+    claim(window, release, (_options, take) => {
+      if (take) takes.push(take);
+    });
+    return { release, takes };
+  }
+
+  test("mounts with its own panel, which shows the choice and names the page's copy", () => {
+    const { release, takes } = host();
+    devknobs.mount({ hotkey: "j" });
+    expect(createPanel).not.toHaveBeenCalled();
+    expect(takes).toHaveLength(1);
+    free(window, release);
+    const changed: unknown[] = [];
+    expect(takes[0]!({ prefer: { value: "page", change: (value: unknown) => changed.push(value) } })).toBe(true);
+    expect(createPanel).toHaveBeenCalledTimes(1);
+    expect(createKeys).toHaveBeenLastCalledWith({ hotkey: "j", grabKey: undefined, grab: true });
+    const prefer = createPanel.mock.calls[0]?.[0]?.prefer;
+    expect(prefer?.value()).toBe("page");
+    expect(prefer?.runtime).toBe("page source");
+    prefer?.change("extension");
+    expect(changed).toEqual(["extension"]);
+    expect(hostOf(window)).toBeNull();
+    expect(owned(window)).toBe(true);
+  });
+
+  test("does not take the page once it has unmounted, or while a host still holds it", () => {
+    const { release, takes } = host();
+    devknobs.mount();
+    expect(takes[0]!({})).toBe(false);
+    devknobs.unmount();
+    free(window, release);
+    expect(takes[0]!({})).toBe(false);
+    expect(createPanel).not.toHaveBeenCalled();
   });
 });

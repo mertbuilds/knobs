@@ -3,6 +3,7 @@ import { DEFAULT_STATE } from '../src/knobs.ts';
 import {
   detachMessage,
   readPageMessage,
+  readPrefer,
   readState,
   readSystemChange,
   readTabRequest,
@@ -46,6 +47,11 @@ describe('readPageMessage', () => {
       type: 'ua',
       ua: null,
     });
+    expect(readPageMessage({ id: 5, prefer: 'page', type: 'prefer' })).toEqual({
+      id: 5,
+      prefer: 'page',
+      type: 'prefer',
+    });
   });
 
   test("drops the extension's own messages and anything malformed", () => {
@@ -57,6 +63,8 @@ describe('readPageMessage', () => {
       { id: 1, open: 1, type: 'frame' },
       { type: 'watch' },
       { id: 1, type: 'ua', ua: { userAgent: 7 } },
+      { id: 1, prefer: 'both', type: 'prefer' },
+      { prefer: 'page', type: 'prefer' },
       { state: { ...DEFAULT_STATE, scheme: 'sepia' }, type: 'set' },
       null,
       'set',
@@ -68,6 +76,15 @@ describe('readPageMessage', () => {
 
   test('the bridge alone asks for the knobs', () => {
     expect(readTabRequest({ type: 'get' })).toEqual({ type: 'get' });
+  });
+});
+
+describe('readPrefer', () => {
+  test("is the page's copy only where the page's was chosen", () => {
+    expect(readPrefer('page')).toBe('page');
+    expect(readPrefer('extension')).toBe('extension');
+    expect(readPrefer(undefined)).toBe('extension');
+    expect(readPrefer('PAGE')).toBe('extension');
   });
 });
 

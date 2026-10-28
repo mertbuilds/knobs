@@ -14,7 +14,7 @@ install it from the [chrome web store](https://chromewebstore.google.com/detail/
 
 ## with the npm package
 
-the npm package is for your own app, in any browser. the extension is for any site, in Chrome and Edge. if the page runs devknobs too, the extension's panel wins, and the page's calls such as `setState` go to it.
+the npm package is for your own app, in any browser. the extension is for any site, in Chrome and Edge. if the page runs devknobs too, the extension's panel wins, and the page's calls such as `setState` go to it. to try a local build of devknobs on your own site, set prefer to page in the panel's settings: the page's copy then runs the panel, with real browser settings off. the panel's footer says which copy runs it.
 
 ## what Chrome sets for real
 

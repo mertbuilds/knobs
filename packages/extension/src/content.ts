@@ -6,7 +6,9 @@ import {
   getState,
   mount,
   type NativeDriver,
+  type PreferSetting,
   setNative,
+  setPrefer,
   setState,
   setSystemMedia,
 } from '@vinena/knobs';
@@ -31,7 +33,13 @@ const NOTES: Record<NativeReason, string> = {
 // devknobs names the frame it loads the page in so (`FRAME_NAME` in its engine/frame.ts).
 const FRAME_NAME = 'devknobs-frame';
 
+// On the top window once the extension's copy let the page's own have the page, so
+// devknobs' frame, which loads the page again, leaves it to the page's copy there too.
+const YIELDED = Symbol.for('devknobs-extension.yielded');
+
 const top = window === window.top;
+// The extension's copy stepped aside for the page's own, which runs the panel now.
+let yielded = false;
 let knobs: KnobState = { ...DEFAULT_STATE };
 // Until the tab says what it has, its knobs win over the page's stored ones.
 let synced = false;
@@ -186,6 +194,36 @@ const driver: NativeDriver = {
   },
 };
 
+/**
+ * Who runs the panel on a page with its own devknobs, shown in the panel's settings.
+ * The choice is kept for every site; going back to the extension's copy from the
+ * page's panel loads the page again, so the extension's holds it from the start.
+ */
+const prefer: PreferSetting = {
+  change: (value) => {
+    void ask({ prefer: value, type: 'prefer' }).then(({ error }) => {
+      if (yielded && value === 'extension' && error === undefined) {
+        location.reload();
+      }
+    });
+  },
+  value: 'extension',
+  yielded: () => {
+    yielded = true;
+    Reflect.set(window, YIELDED, true);
+  },
+};
+
+/** Once the page's copy runs the panel: the toolbar button opens it, and the tab keeps no knobs of the extension's. */
+function afterYield(message: PageMessage) {
+  if (message.type === 'toggle') {
+    const api = window.devknobs;
+    api?.setState({ panel: { open: !api.getState().panel.open } });
+  } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
+    toBridge({ state: DEFAULT_STATE, type: 'set' });
+  }
+}
+
 function onMessage(event: Event) {
   const detail = (event as CustomEvent<unknown>).detail;
   if (typeof detail !== 'string') {
@@ -195,6 +233,10 @@ function onMessage(event: Event) {
   if (message.type === 'answer') {
     answers.get(message.id)?.(message);
     answers.delete(message.id);
+  } else if (yielded) {
+    afterYield(message);
+  } else if (message.type === 'prefer') {
+    setPrefer(message.prefer);
   } else if (message.type === 'toggle') {
     setState({ panel: { open: !getState().panel.open } });
   } else if (message.type === 'detached') {
@@ -231,12 +273,22 @@ function onMessage(event: Event) {
   }
 }
 
-if (top || window.name === FRAME_NAME) {
+/** Did the extension's copy on the page above let the page's own have it? */
+function yieldedAbove(): boolean {
+  try {
+    return Reflect.get(window.parent, YIELDED) === true;
+  } catch {
+    return false;
+  }
+}
+
+if (top || (window.name === FRAME_NAME && !yieldedAbove())) {
   if (top) {
     document.addEventListener(TO_PAGE, onMessage);
   }
   // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
   // The user's own choice in the panel's settings still wins. As the host, a copy of
-  // devknobs the page mounts itself hands its keys and grab here and takes no panel.
-  mount({ handle: false, host: true, native: driver });
+  // devknobs the page mounts itself hands its keys and grab here and takes no panel,
+  // unless the user prefers the page's copy, which then takes the page from this one.
+  mount({ handle: false, host: true, native: driver, ...(top ? { prefer } : {}) });
 }

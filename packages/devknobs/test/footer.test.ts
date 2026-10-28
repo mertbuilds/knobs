@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { LiveKeys } from "../src/ui/bindings";
 import { resolveKeys } from "../src/ui/bindings";
-import { createFooter, FRESH_NOTE, keyChips } from "../src/ui/footer";
+import { createFooter, FRESH_NOTE, keyChips, runtimeLabel } from "../src/ui/footer";
 import { defaultKeys } from "../src/ui/keys";
 import { collapseTip, COLLAPSE_WORD, SIDE_WORD } from "../src/ui/pin";
 import { CSS } from "../src/ui/styles";
@@ -74,6 +74,21 @@ describe("createFooter", () => {
 
   test("says nothing of it with the mode off", () => {
     page("");
+    expect(parts()).toEqual(["badge", "meta"]);
+  });
+});
+
+describe("the copy that runs the panel", () => {
+  test("is named for where it comes from, with its version", () => {
+    expect(runtimeLabel(true, "0.5.1")).toBe("extension 0.5.1");
+    expect(runtimeLabel(false, "0.5.1-local.1767225600")).toBe("page 0.5.1-local.1767225600");
+  });
+
+  test("shows between the badge and the keys where a host gives the choice, and nowhere else", () => {
+    page("");
+    const footer = createFooter(keys, null, true, null, "page 0.5.1-local.1");
+    expect(Array.from(footer.foot.children, (node) => fake(node).className)).toEqual(["badge", "runtime", "meta"]);
+    expect(fake(footer.foot.children[1]).textContent).toBe("page 0.5.1-local.1");
     expect(parts()).toEqual(["badge", "meta"]);
   });
 });

@@ -1,4 +1,11 @@
-import type { NativeUa, NativeViewport, SystemMedia, UaBrand, UaHints } from '@vinena/knobs';
+import type {
+  NativeUa,
+  NativeViewport,
+  PreferValue,
+  SystemMedia,
+  UaBrand,
+  UaHints,
+} from '@vinena/knobs';
 import type { KnobState } from './knobs.ts';
 import type { FrameLoad } from './refusal.ts';
 
@@ -23,14 +30,17 @@ export type Response = {
  * what the tab's debugger saw of `url`'s load, `watch` turns the debugger on to
  * see the next one, `frame` says the frame opened or went, `bypass` has the
  * tab's loads skip service workers while it stays open, and `ua` is the user
- * agent the tab's requests carry, null for the browser's own. `id` pairs the answer.
+ * agent the tab's requests carry, null for the browser's own. `prefer` keeps
+ * whose copy of devknobs runs the panel on a page with its own, for every site.
+ * `id` pairs the answer.
  */
 export type Ask =
   | { type: 'why'; url: string }
   | { type: 'watch' }
   | { open: boolean; type: 'frame' }
   | { type: 'bypass' }
-  | { type: 'ua'; ua: NativeUa | null };
+  | { type: 'ua'; ua: NativeUa | null }
+  | { prefer: PreferValue; type: 'prefer' };
 export type Question = Ask & { id: number };
 
 /** What a page sends, through the bridge: the bridge asks for the tab's knobs itself. */
@@ -52,9 +62,22 @@ export type TabMessage =
 /** Between the service worker and the offscreen document, which reads the user's own media. */
 export type SystemMessage = { type: 'read-system' } | { media: SystemMedia; type: 'system' };
 
-/** From the bridge to the page's devknobs: the tab's knobs once loaded, or a tab message. */
+/**
+ * In `chrome.storage.local`: who runs the panel on a page that mounts its own
+ * devknobs, the extension's copy or the page's, for every site in the profile.
+ * The bridge reads it as the page starts and hands it on as it changes.
+ */
+export const PREFER_KEY = 'prefer';
+
+/** The preference as stored, the extension's copy where none is. */
+export function readPrefer(value: unknown): PreferValue {
+  return value === 'page' ? 'page' : 'extension';
+}
+
+/** From the bridge to the page's devknobs: the tab's knobs once loaded, the preference, or a tab message. */
 export type PageMessage =
   | TabMessage
+  | { prefer: PreferValue; type: 'prefer' }
   | (Answer & { id: number; type: 'answer' })
   | {
       base: string;
@@ -255,6 +278,11 @@ export function readPageMessage(value: unknown): PageRequest | null {
     case 'ua': {
       const ua = readUa(value.ua);
       return ua === undefined ? null : { id, type: 'ua', ua };
+    }
+    case 'prefer': {
+      return value.prefer === 'extension' || value.prefer === 'page'
+        ? { id, prefer: value.prefer, type: 'prefer' }
+        : null;
     }
     default: {
       return null;
