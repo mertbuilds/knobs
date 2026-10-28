@@ -182,6 +182,23 @@ describe("screenFill", () => {
     expect(screenFill(look({ top: RED }), across, pageOf(false), 402)).toBe(WHITE);
     expect(screenFill(look({ top: RED }), expanded, null, 874)).toBe(WHITE);
   });
+
+  test("on the Duo's cover screen, the column takes the page's color all the way down, over the fill under the page", () => {
+    const cover = screenOf("iphone-duo-closed") as Screen;
+    for (const orientation of ["portrait", "landscape"] as const) {
+      const bars = barsOf(cover, orientation, "compact", false);
+      const at = viewportOf(cover, orientation, "compact", false);
+      if (!bars) throw new Error("no bars");
+      const [W, H] = orientation === "portrait" ? [466, 678] : [678, 466];
+      const fill = screenFill(look({ top: BLUE, background: BLUE, bottom: GREEN }), bars, at, H);
+      const right = (at.width / W) * 100;
+      const end = (at.height / H) * 100;
+      expect(fill).toBe(
+        `linear-gradient(to right, transparent ${right}%, ${BLUE} ${right}%), ` +
+          `linear-gradient(to bottom, ${BLUE} 0%, ${BLUE} 0%, ${BLUE} ${end}%, ${GREEN} ${end}%)`,
+      );
+    }
+  });
 });
 
 /** Just enough of an element for the bars to be built and placed. */

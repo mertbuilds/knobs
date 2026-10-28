@@ -10,6 +10,7 @@ import {
   SAFARI_TEXT,
   type Shape,
   type StatusBar,
+  type StatusColumn,
 } from "./browserui";
 import type { Rect } from "./mock";
 
@@ -274,6 +275,15 @@ export const STATUS_GLYPHS = {
 
 type Glyphs = (typeof STATUS_GLYPHS)[keyof typeof STATUS_GLYPHS];
 
+/** Wifi's size: its box, the bands' radii in pairs, their angle each side of up, and their rounding. */
+interface WifiSize {
+  width: number;
+  height: number;
+  bands: readonly number[];
+  angle: number;
+  round: number;
+}
+
 /** A ring sector `from` to `to` px out of the corner, `angle` degrees each side of up. */
 function fan(from: number, to: number, angle: number): string {
   const rad = (angle * Math.PI) / 180;
@@ -284,7 +294,7 @@ function fan(from: number, to: number, angle: number): string {
 }
 
 /** Wifi, its bottom on `bottom`: a dot and two bands fanning out of the bottom corner. */
-function wifi(x: number, bottom: number, size: Glyphs["wifi"]): SVGSVGElement {
+function wifi(x: number, bottom: number, size: WifiSize): SVGSVGElement {
   const { width, height, bands, angle, round } = size;
   const viewBox = `${-width / 2} ${round / 2 - height} ${width} ${height}`;
   const svg = svgNode("svg", { class: "status", viewBox });
@@ -397,6 +407,79 @@ function statusBar(status: StatusBar): Element[] {
     signal(left, icons.y + bars.drop, bars),
     wifi(middle, icons.y + air.drop, air),
     battery(right, icons.y + cell.drop, cell),
+  ];
+}
+
+/**
+ * The Duo cover screen's status column, measured on Apple's picture of it in
+ * pt: the ring is open at the bottom, its ends 55 degrees each side of
+ * straight down, and the signal's four dots, 4.4 round, sit on its circle in
+ * the gap, 11 and 32 degrees each side. Wifi in the ring is 17.9 by 14.3,
+ * its bands the large set's to that height. The ring's arc is the battery:
+ * as much of it as the charge, the rest at 35%.
+ */
+export const DUO_GLYPHS = {
+  time: { spacing: 0, drop: 0.8 },
+  ends: 55,
+  dots: [-32, -11, 11, 32],
+  dot: 2.2,
+  rest: 0.35,
+  wifi: {
+    width: 17.9,
+    height: 14.3,
+    bands: [0, 3.57, 6.93, 8.91, 12.27, 14.3],
+    angle: 38.7,
+    round: 1.1,
+    drop: 0,
+  },
+} as const;
+
+/** The point `angle` degrees round from the right, clockwise on screen, `r` out. */
+function onCircle(r: number, angle: number): string {
+  const rad = (angle * Math.PI) / 180;
+  return `${(r * Math.cos(rad)).toFixed(2)} ${(r * Math.sin(rad)).toFixed(2)}`;
+}
+
+/** An arc of radius `r` from `from` to `to` degrees, clockwise on screen. */
+function arc(r: number, from: number, to: number): string {
+  const large = to - from > 180 ? 1 : 0;
+  return `M${onCircle(r, from)}A${r} ${r} 0 ${large} 1 ${onCircle(r, to)}`;
+}
+
+/** The ring, centered on `x`, `y`: the battery's arc over the top, the signal's dots in its gap. */
+function ring(x: number, y: number, size: StatusColumn["ring"]): SVGSVGElement {
+  const { radius, stroke } = size;
+  const reach = radius + stroke;
+  const svg = svgNode("svg", { class: "status ring", viewBox: `${-reach} ${-reach} ${2 * reach} ${2 * reach}` });
+  place(svg, x - reach, y - reach, 2 * reach, 2 * reach);
+  // Down is 90 degrees: from the left end, over the top, round to the right end.
+  const from = 90 + DUO_GLYPHS.ends;
+  const to = 450 - DUO_GLYPHS.ends;
+  const charged = from + ((to - from) * CHARGE) / 100;
+  const line = { fill: "none", stroke: "currentColor", "stroke-width": stroke, "stroke-linecap": "round" };
+  svg.append(
+    svgNode("path", { d: arc(radius, charged, to), ...line, "stroke-opacity": DUO_GLYPHS.rest }),
+    svgNode("path", { d: arc(radius, from, charged), ...line }),
+    ...DUO_GLYPHS.dots.map((angle) => {
+      const rad = ((90 + angle) * Math.PI) / 180;
+      return svgNode("circle", { cx: radius * Math.cos(rad), cy: radius * Math.sin(rad), r: DUO_GLYPHS.dot });
+    }),
+  );
+  return svg;
+}
+
+/** The Duo's status column: the time, and under it the ring round wifi. */
+function statusColumn(column: StatusColumn): Element[] {
+  const time = el("div", "time", "04:20");
+  time.style.left = `${column.x}px`;
+  time.style.top = `${column.time.y + DUO_GLYPHS.time.drop}px`;
+  time.style.fontSize = `${column.time.size}px`;
+  time.style.letterSpacing = `${DUO_GLYPHS.time.spacing}px`;
+  const air = DUO_GLYPHS.wifi;
+  return [
+    time,
+    ring(column.x, column.ring.y, column.ring),
+    wifi(column.x - air.width / 2, column.ring.y + air.height / 2, air),
   ];
 }
 
@@ -583,6 +666,8 @@ function placeFade(node: HTMLElement, fade: Fade | null, look: Look, edge: Color
   const tone = edge ? edgeTone(edge) : bottom;
   node.hidden = fade === null || tone === null;
   if (!fade || !tone) return;
+  node.style.right = fade.width === undefined ? "0" : "";
+  node.style.width = fade.width === undefined ? "" : `${fade.width}px`;
   node.style.top = `${fade.y}px`;
   node.style.height = `${fade.height}px`;
   // Reach the tone at the last stop's opacity: the shade's own color sits that much further from the content.
@@ -647,6 +732,7 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
   const scrim = el("div", "scrim");
   root.append(scrim, fade);
   if (full.status) root.append(...statusBar(full.status));
+  if (full.column) root.append(...statusColumn(full.column));
   const pill = mini.shapes.find((shape) => shape.kind === "pill") ?? null;
   // The shape that becomes the pill: the one with the domain, or Bottom's card.
   const main = pill
@@ -735,8 +821,10 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
     apply(minimized, sight) {
       root.dataset.state = minimized ? "min" : "max";
       const behind = scrimOver(scrim, mini, sight);
-      // The status bar's glyphs follow the strip they are on, or minimized the page under them.
-      const strip = (minimized ? behind : null) ?? parseColor(sight.top) ?? WHITE;
+      // The status bar's glyphs follow the strip they are on, or minimized the
+      // page under them. The Duo's column is the page's own color.
+      const own = full.column ? sight.background : sight.top;
+      const strip = (minimized ? behind : null) ?? parseColor(own) ?? WHITE;
       const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
       root.className = darkStrip ? "safari dark" : "safari light";
       const shown = minimized ? mini : full;
