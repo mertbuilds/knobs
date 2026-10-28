@@ -31,6 +31,7 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
       configs:
         Debug:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev
@@ -44,8 +45,8 @@ targets:
 
 - Commit `DevIcon.xcassets`, so a fresh clone builds before the script ever runs and the stamp keeps the phase cheap.
 - `xcrun --sdk macosx` matters for iOS targets: Xcode sets `SDKROOT` to the iPhone SDK, and a bare `swift` then fails to load the standard library.
-- With `ENABLE_USER_SCRIPT_SANDBOXING: YES` the phase may only touch declared files. Either list the `.icon` files as `inputFiles` and the set's files as `outputFiles`, or set it to `NO` for the target.
-- Release builds keep `AppIcon`; the dev set is in the bundle's asset catalog but unused.
+- The phase needs `ENABLE_USER_SCRIPT_SANDBOXING: NO` on the target: the sandbox allows only the exact declared paths, not files inside a declared folder, and ImageIO writes through a temp file next to each target, so declaring inputs and outputs cannot work.
+- Release builds keep `AppIcon`; actool leaves the unused `AppIcon-Dev` set out of the bundle. Optionally exclude `DevIcon.xcassets` in Release with `EXCLUDED_SOURCE_FILE_NAMES` for clarity.
 
 ## Spec
 

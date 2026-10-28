@@ -9,7 +9,7 @@ import CoreText
 import Foundation
 import ImageIO
 
-let toolVersion = "devicon 1 (ribbon w0.30 d0.22 text32, mac tile 824)"
+let toolVersion = "devicon 2 (ribbon w0.30 d0.22 text32, mac tile 824)"
 
 let usage = """
   usage:
@@ -21,24 +21,32 @@ let usage = """
     --check   exit 1 if the set is stale, 0 if fresh; renders nothing
   """
 
+var tempDir: URL?
+
 func fail(_ message: String) -> Never {
+  if let tempDir { try? FileManager.default.removeItem(at: tempDir) }
   FileHandle.standardError.write(Data("devicon: \(message)\n".utf8))
   exit(2)
 }
 
 enum Platform: String { case macOS, iOS }
 
+enum Source {
+  case icon(URL)
+  case png(URL)
+}
+
 struct Options {
-  var icon: URL?
-  var png: URL?
-  var platform: Platform?
-  var out: URL?
-  var force = false
-  var check = false
+  let source: Source
+  let platform: Platform
+  let out: URL
+  let force: Bool
+  let check: Bool
 }
 
 func parseOptions(_ args: [String]) -> Options {
-  var o = Options()
+  var icon: URL?, png: URL?, platform: Platform?, out: URL?
+  var force = false, check = false
   var i = 0
   func value() -> String {
     i += 1
@@ -47,15 +55,15 @@ func parseOptions(_ args: [String]) -> Options {
   }
   while i < args.count {
     switch args[i] {
-    case "--icon": o.icon = URL(fileURLWithPath: value()).standardizedFileURL
-    case "--png": o.png = URL(fileURLWithPath: value()).standardizedFileURL
+    case "--icon": icon = URL(fileURLWithPath: value()).standardizedFileURL
+    case "--png": png = URL(fileURLWithPath: value()).standardizedFileURL
     case "--platform":
       let v = value()
       guard let p = Platform(rawValue: v) else { fail("--platform must be macOS or iOS, got \(v)") }
-      o.platform = p
-    case "--out": o.out = URL(fileURLWithPath: value()).standardizedFileURL
-    case "--force": o.force = true
-    case "--check": o.check = true
+      platform = p
+    case "--out": out = URL(fileURLWithPath: value()).standardizedFileURL
+    case "--force": force = true
+    case "--check": check = true
     case "-h", "--help":
       print(usage)
       exit(0)
@@ -63,10 +71,15 @@ func parseOptions(_ args: [String]) -> Options {
     }
     i += 1
   }
-  if (o.icon == nil) == (o.png == nil) { fail("pass exactly one of --icon or --png\n\(usage)") }
-  if o.platform == nil { fail("--platform is required\n\(usage)") }
-  if o.out == nil { fail("--out is required\n\(usage)") }
-  return o
+  let source: Source
+  switch (icon, png) {
+  case let (icon?, nil): source = .icon(icon)
+  case let (nil, png?): source = .png(png)
+  default: fail("pass exactly one of --icon or --png\n\(usage)")
+  }
+  guard let platform else { fail("--platform is required\n\(usage)") }
+  guard let out else { fail("--out is required\n\(usage)") }
+  return Options(source: source, platform: platform, out: out, force: force, check: check)
 }
 
 // MARK: Stamp
@@ -86,8 +99,11 @@ struct Hasher64 {
 }
 
 func inputFiles(_ o: Options) -> [(String, URL)] {
-  if let png = o.png { return [(png.lastPathComponent, png)] }
-  let root = o.icon!
+  let root: URL
+  switch o.source {
+  case .png(let png): return [(png.lastPathComponent, png)]
+  case .icon(let icon): root = icon
+  }
   guard let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
   else { return [] }
   var files: [(String, URL)] = []
@@ -103,7 +119,7 @@ func inputFiles(_ o: Options) -> [(String, URL)] {
 func inputStamp(_ o: Options) -> String {
   var h = Hasher64()
   h.add(toolVersion)
-  h.add(o.platform!.rawValue)
+  h.add(o.platform.rawValue)
   for (rel, url) in inputFiles(o) {
     guard let data = try? Data(contentsOf: url) else { fail("cannot read \(url.path)") }
     h.add(rel)
@@ -219,7 +235,10 @@ func renderIcon(ictool: String, icon: URL, platform: Platform, pixels: Int, tmp:
 
 let yellow = CGColor(srgbRed: 1, green: 0xd6 / 255.0, blue: 0x0a / 255.0, alpha: 1)
 let ink = CGColor(srgbRed: 0x11 / 255.0, green: 0x11 / 255.0, blue: 0x11 / 255.0, alpha: 1)
-let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
+let srgb: CGColorSpace = {
+  guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { fail("cannot make the sRGB color space") }
+  return space
+}()
 
 struct Box { var x, y, s: Double }
 
@@ -304,7 +323,8 @@ func makeIcon(source: CGImage, tile: Int, pixels n: Int, platform: Platform) -> 
       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
   else { fail("cannot make a \(n) px bitmap") }
   flat.draw(img, in: full)
-  return flat.makeImage()!
+  guard let flatImage = flat.makeImage() else { fail("cannot read back the \(n) px bitmap") }
+  return flatImage
 }
 
 func writePNG(_ img: CGImage, _ url: URL) {
@@ -318,17 +338,19 @@ func writePNG(_ img: CGImage, _ url: URL) {
 // MARK: Main
 
 let opts = parseOptions(Array(CommandLine.arguments.dropFirst()))
-let platform = opts.platform!
-let outDir = opts.out!
+let platform = opts.platform
+let outDir = opts.out
 let fm = FileManager.default
 
-if let icon = opts.icon {
+switch opts.source {
+case .icon(let icon):
   var isDir: ObjCBool = false
   guard fm.fileExists(atPath: icon.path, isDirectory: &isDir), isDir.boolValue,
     fm.fileExists(atPath: icon.appendingPathComponent("icon.json").path)
   else { fail("\(icon.path) is not an Icon Composer .icon folder (no icon.json)") }
+case .png(let png):
+  if !fm.fileExists(atPath: png.path) { fail("\(png.path) does not exist") }
 }
-if let png = opts.png, !fm.fileExists(atPath: png.path) { fail("\(png.path) does not exist") }
 if outDir.pathExtension != "appiconset" { fail("--out must be a folder ending in .appiconset") }
 
 let stampURL = outDir.appendingPathComponent(".devicon-source")
@@ -354,13 +376,14 @@ if fresh && !opts.force {
 
 let pixelSizes = Array(Set(entries(platform).map(\.pixels))).sorted()
 var rendered: [Int: CGImage] = [:]
-if let icon = opts.icon {
+switch opts.source {
+case .icon(let icon):
   let ictool = findIctool()
   let tmp = fm.temporaryDirectory.appendingPathComponent("devicon-\(UUID().uuidString)")
   do { try fm.createDirectory(at: tmp, withIntermediateDirectories: true) } catch {
     fail("cannot make a temp folder: \(error)")
   }
-  defer { try? fm.removeItem(at: tmp) }
+  tempDir = tmp
   for n in pixelSizes {
     // ictool exports the shape full bleed; macOS icons keep Apple's 824/1024 tile with a clear margin.
     let tile = platform == .macOS ? Int((Double(n) * 824 / 1024).rounded()) : n
@@ -368,9 +391,10 @@ if let icon = opts.icon {
     rendered[n] = makeIcon(source: render, tile: tile, pixels: n, platform: platform)
   }
   try? fm.removeItem(at: tmp)
-} else {
-  let master = loadImage(opts.png!)
-  if master.width != master.height { fail("\(opts.png!.path) must be square, got \(master.width)x\(master.height)") }
+  tempDir = nil
+case .png(let png):
+  let master = loadImage(png)
+  if master.width != master.height { fail("\(png.path) must be square, got \(master.width)x\(master.height)") }
   for n in pixelSizes { rendered[n] = makeIcon(source: master, tile: n, pixels: n, platform: platform) }
 }
 
@@ -386,9 +410,14 @@ if catalog.pathExtension == "xcassets", !fm.fileExists(atPath: catalogContents.p
 let keep = Set(entries(platform).map(\.file))
 for name in (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
 where name.hasPrefix("icon_") && name.hasSuffix(".png") && !keep.contains(name) {
-  try? fm.removeItem(at: outDir.appendingPathComponent(name))
+  let url = outDir.appendingPathComponent(name)
+  guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+  try? fm.removeItem(at: url)
 }
-for entry in entries(platform) { writePNG(rendered[entry.pixels]!, outDir.appendingPathComponent(entry.file)) }
+for entry in entries(platform) {
+  guard let img = rendered[entry.pixels] else { fail("no render for \(entry.pixels) px") }
+  writePNG(img, outDir.appendingPathComponent(entry.file))
+}
 do {
   try Data(contentsJSON(platform).utf8).write(to: outDir.appendingPathComponent("Contents.json"))
   try Data(stamp.utf8).write(to: stampURL)
