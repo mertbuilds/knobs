@@ -161,11 +161,11 @@ describe("a device that turns", () => {
     expect(turnOf("frame", "closed")).toBe(0);
   });
 
-  test("turns the open Duo clockwise to be held across, as its own picture held across is turned", () => {
+  test("turns the Duo clockwise to be held across, open as its own picture held across is turned, folded as the simulator holds it", () => {
     expect(turnOf("iphone-duo|portrait|open", "iphone-duo|landscape|open")).toBe(90);
     expect(turnOf("iphone-duo|landscape|open", "iphone-duo|portrait|open")).toBe(-90);
-    // Folded, it turns as any phone does.
-    expect(turnOf("iphone-duo|portrait|closed", "iphone-duo|landscape|closed")).toBe(-90);
+    // Folded, its top goes to the right too, the camera hole clear of Safari's top bar.
+    expect(turnOf("iphone-duo|portrait|closed", "iphone-duo|landscape|closed")).toBe(90);
   });
 
   // The Duo's cover screen fitted upright, and where it is drawn held across, a bit bigger.
@@ -273,7 +273,7 @@ describe("what moves", () => {
     // Open and held upright is a change of screen, not a fold, nor a turn.
     expect(folds(shut, "iphone-duo|portrait|open")).toBe(false);
     expect(turnOf(shut, "iphone-duo|portrait|open")).toBe(0);
-    expect(turnOf(shut, "iphone-duo|landscape|closed")).toBe(-90);
+    expect(turnOf(shut, "iphone-duo|landscape|closed")).toBe(90);
     expect(folds("iphone-18-pro|portrait", "iphone-18-pro|landscape")).toBe(false);
   });
 

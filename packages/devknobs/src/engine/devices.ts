@@ -92,7 +92,9 @@ export const DEVICES: readonly DevicePreset[] = [
     touch: true,
     kind: "phone",
     postures: {
-      closed: { id: "iphone-duo-closed", label: "iPhone Duo (closed)" },
+      // Held across, its top goes to the right, the camera hole to the bottom
+      // right, clear of Safari's top bar, as on the iOS 27.1 simulator.
+      closed: { id: "iphone-duo-closed", label: "iPhone Duo (closed)", clockwise: true },
       open: {
         id: "iphone-duo-open",
         label: "iPhone Duo (open)",

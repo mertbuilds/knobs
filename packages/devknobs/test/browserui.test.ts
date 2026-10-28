@@ -17,6 +17,7 @@ import {
   viewportOf,
 } from "../src/engine/browserui";
 import { SCREENS, screenOf } from "../src/engine/devices";
+import { mockOf } from "../src/engine/mock";
 import type { OrientationValue } from "../src/types";
 
 function device(id: string): Screen {
@@ -444,6 +445,14 @@ describe("bars", () => {
     ]);
     const mini = barsOf(device("iphone-duo-closed"), "landscape", "compact", true);
     expect(mini?.shapes.map((shape) => [shape.kind, shape.x, shape.y, shape.height])).toEqual([["pill", 339, 3, 20]]);
+    // The camera hole turns to the bottom right, clear of the bar.
+    const mock = mockOf("iphone-duo-closed", "landscape");
+    const hole = mock?.parts.find((part) => part.kind === "sensor");
+    if (!mock || !hole) throw new Error("no camera hole");
+    const at = { x: hole.x - mock.inset.left, y: hole.y - mock.inset.top };
+    expect(at.x).toBeGreaterThan(678 / 2);
+    expect(at.y).toBeGreaterThan(466 / 2);
+    for (const shape of across?.shapes ?? []) expect(shape.y + shape.height).toBeLessThan(at.y);
   });
 
   test("the Duo's inner screen keeps Safari's row and its status in one bar at the top, held either way", () => {

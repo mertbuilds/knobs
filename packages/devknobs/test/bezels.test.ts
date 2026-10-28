@@ -213,21 +213,21 @@ describe("bezelMock", () => {
     }
   });
 
-  test("turns the upright image with the device, its top to the left", () => {
+  test("turns the Duo cover's upright image with the device, its top to the right", () => {
     const upright = bezelMock("iphone-duo-closed", "portrait");
     const turned = bezelMock("iphone-duo-closed", "landscape");
     if (!upright?.image || !turned) throw new Error("no bezel");
-    expect(turned.image).toEqual({ ...upright.image, turn: upright.width });
+    expect(turned.image).toEqual({ ...upright.image, turn: upright.height, clockwise: true });
     expect(turned.width).toBe(upright.height);
     expect(turned.inset).toEqual({
-      top: upright.inset.right,
-      right: upright.inset.bottom,
-      bottom: upright.inset.left,
-      left: upright.inset.top,
+      top: upright.inset.left,
+      right: upright.inset.top,
+      bottom: upright.inset.right,
+      left: upright.inset.bottom,
     });
-    // The hinge side's square corners go to the bottom.
+    // The hinge side's square corners go to the top.
     expect(upright.screenRadius).toEqual([8, 58, 58, 8]);
-    expect(turned.screenRadius).toEqual([58, 58, 8, 8]);
+    expect(turned.screenRadius).toEqual([8, 8, 58, 58]);
   });
 
   test("the open iPhone Duo held across has an image of its own, not turned", () => {

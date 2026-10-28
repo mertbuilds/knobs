@@ -338,6 +338,7 @@ export function bezelMock(id: string, orientation: OrientationValue): Mock | nul
   const own = orientation === "landscape" ? found.landscape : undefined;
   const bezel = own ?? found.portrait;
   const turned = orientation === "landscape" && !own;
+  const clockwise = turned && device.clockwise === true;
   const screen = turn(device, own ? "landscape" : "portrait");
   const scale = density(screen, bezel);
   const [x, y, w, h] = bezel.opening;
@@ -355,17 +356,17 @@ export function bezelMock(id: string, orientation: OrientationValue): Mock | nul
   };
   const width = (right - left) / scale;
   const height = (bottom - top) / scale;
-  const sides = turned ? turnSides(inset) : inset;
+  const sides = turned ? turnSides(inset, clockwise) : inset;
   const size = turned ? { width: height, height: width } : { width, height };
   // The island flat black over the image's, which shows the camera through it, as the simulator draws it.
   const island = islandOf(id);
   const flat = island && round("sensor", { ...island, x: inset.left + island.x, y: inset.top + island.y });
-  const parts = flat ? [turned ? turnRect(flat, width, height, false) : flat] : [];
+  const parts = flat ? [turned ? turnRect(flat, width, height, clockwise) : flat] : [];
   return {
     ...size,
     inset: sides,
     body: { x: 0, y: 0, ...size },
-    screenRadius: turned ? turnRadius(bezel.radius) : bezel.radius,
+    screenRadius: turned ? turnRadius(bezel.radius, clockwise) : bezel.radius,
     continuous: island !== null,
     bodyRadius: 0,
     parts,
@@ -375,7 +376,8 @@ export function bezelMock(id: string, orientation: OrientationValue): Mock | nul
       y: -top / scale,
       width: bezel.size[0] / scale,
       height: bezel.size[1] / scale,
-      turn: turned ? width : null,
+      turn: turned ? (clockwise ? height : width) : null,
+      ...(clockwise ? { clockwise } : {}),
     },
   };
 }
