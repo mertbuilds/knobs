@@ -404,8 +404,13 @@ do { try fm.createDirectory(at: outDir, withIntermediateDirectories: true) } cat
 let catalog = outDir.deletingLastPathComponent()
 let catalogContents = catalog.appendingPathComponent("Contents.json")
 if catalog.pathExtension == "xcassets", !fm.fileExists(atPath: catalogContents.path) {
-  try? Data("{\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n".utf8)
-    .write(to: catalogContents)
+  do {
+    try Data("{\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n".utf8)
+      .write(to: catalogContents)
+  } catch { fail("cannot write \(catalogContents.path): \(error)") }
+}
+if fm.fileExists(atPath: stampURL.path) {
+  do { try fm.removeItem(at: stampURL) } catch { fail("cannot remove \(stampURL.path): \(error)") }
 }
 let keep = Set(entries(platform).map(\.file))
 for name in (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
