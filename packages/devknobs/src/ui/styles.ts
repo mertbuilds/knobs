@@ -1064,11 +1064,17 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
    its slots, and starts where the view's layout says. Its body under that scrolls on its own. The view asks for the panel's tallest and the panel's
    own limit shrinks it to what the window has, so the panel is as tall as it
    gets whatever the view holds. The body is a container, so what a view
-   holds can lay itself out by how wide the view is. */
+   holds can lay itself out by how wide the view is. A view takes the
+   window's whole height, past the limit a list keeps. */
+.wrap[data-mode="view"] .panel {
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+}
 .view {
   flex: 0 1 auto;
   min-height: 0;
-  height: 672px;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1422,9 +1428,13 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
    as deep lines do in the browser's tools. The selected line has a ground of
    its own, a blue one while the tree has the focus, and ends with a quiet
    reference to it. A node that changed lights for a moment. */
-.elements { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+/* The tree takes what the styles leave of the view, and keeps the height its
+   edge was dragged to once it was. */
+.elements { display: flex; flex-direction: column; min-height: 100%; gap: 4px; }
+.elements > * { min-width: 0; }
 .dom {
   position: relative;
+  flex: 1 0 auto;
   height: 40vh;
   min-height: 96px;
   max-height: 85vh;
@@ -1434,6 +1444,7 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+.dom[style*="height"] { flex-grow: 0; }
 .dom-tree { width: min-content; min-width: 100%; font: 11px/1.6 var(--mono); }
 .dom-row {
   display: flex;
