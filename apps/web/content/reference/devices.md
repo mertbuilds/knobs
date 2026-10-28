@@ -107,14 +107,14 @@ and 402 × 660 at the top (the page starts under the address bar, at 122),
 754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
 `position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
 and `screen.height` are the device's own size, 402 × 874 on a 17 Pro: an
-iPhone keeps it upright however it is held, an Android phone turns it. the screen under the bars, where the frame
-ends, takes the color of a fixed bar at the bottom of the viewport, else of
-the content at the page's bottom edge, as one solid fill where the phone
-shows the page itself. the strip over the page takes the color of a fixed or
+iPhone keeps it upright however it is held, an Android phone turns it. under the bars, where the frame
+ends, the page runs on to the bottom of the screen, as a picture of the
+document past the viewport that follows the scroll, or the color of a fixed
+bar at the bottom of the viewport, carried down as on the phone. the strip over the page takes the color of a fixed or
 sticky bar at the top, else the page's background. minimized, the strip
 goes: the content at the top of the page shows under the status bar, in a
 wash of the page's color that fades out over 100 px, and the status bar's
-glyphs follow it. the fill is shaded with Safari's light scroll edge. the edge to edge switch
+glyphs follow it. the page under the bars is shaded with Safari's light scroll edge. the edge to edge switch
 is offered only with the iPhone held sideways, where it still changes the
 frame: on, by default, the page runs under the top row of bars; off, it
 starts under it. upright it is not offered, and a value set earlier is kept

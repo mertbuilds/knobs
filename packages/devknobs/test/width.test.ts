@@ -1866,6 +1866,7 @@ describe("the touch cursor over the screen", () => {
       background: "rgb(255, 255, 255)",
       top: "rgb(255, 255, 255)",
       bottom: "rgb(255, 255, 255)",
+      footer: false,
       under: [],
       dark: false,
       scheme: "light",

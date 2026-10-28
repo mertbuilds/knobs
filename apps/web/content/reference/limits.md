@@ -101,12 +101,14 @@ the frame.
 
 the bars follow the scroll of the document only, as on the phone, so a page
 that scrolls an inner box keeps them as they are, and they do not come back
-at the bottom of the page. upright, the page is never drawn under the
-glass (turned across with edge to edge on, it runs under the top row): the
-screen there takes one color, a fixed footer's or the content's at the
-page's bottom edge, where on the phone the page runs on under the bars, and
-minimized, the content under the status bar is that at the page's top, not
-what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
+at the bottom of the page. upright, what shows of the page under Safari's
+bottom bars, past the viewport, is a picture of it, not the page itself:
+what is fixed to the screen is left out, pictures, videos and drawings show
+as the background of their box, it is taken again at most four times a
+second while the page changes, and a page from another origin gets one
+color there, the content's at the page's bottom edge. a fixed footer's
+color is carried down, as on the phone. minimized, the content under the
+status bar is that at the page's top, not what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
 height, where Safari keeps `svh` at the expanded height and `lvh` and `vh`
 at the minimized one (the whole screen in top). the edge to edge switch
 only works with the phone held sideways. the top edge has no fade, as Safari
