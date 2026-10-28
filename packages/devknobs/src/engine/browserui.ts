@@ -804,7 +804,11 @@ export interface BarsMotion {
 }
 
 export type BarsEvent =
-  | { type: "scroll"; y: number; time: number }
+  /**
+   * The page scrolled to `y` at `time`. `room` is how far up minimizing
+   * moves the page's top, as Safari's top bars do.
+   */
+  | { type: "scroll"; y: number; time: number; room?: number }
   | { type: "tap" }
   | { type: "navigate" }
   /** The frame was resized for the bars, at `time`. */
@@ -834,6 +838,9 @@ export function barsStep(state: BarsMotion, event: BarsEvent): BarsMotion {
     return { ...state, y, anchor };
   }
   const anchor = Math.min(state.anchor, y);
-  if (y - anchor >= BARS_DOWN) return { ...state, minimized: true, y, anchor: y };
+  // Top bars give their room back by scrolling the page as far up, so the
+  // content stays put: only from far enough down that it stays clear of the top.
+  const clear = y - (event.room ?? 0) >= BARS_DOWN;
+  if (y - anchor >= BARS_DOWN && clear) return { ...state, minimized: true, y, anchor: y };
   return { ...state, y, anchor };
 }

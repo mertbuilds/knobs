@@ -736,6 +736,27 @@ function patchPointer(event: PointerEvent): void {
   Object.defineProperty(event, "isPrimary", { configurable: true, get: () => true });
 }
 
+/**
+ * Where the pointer is on the screen, in the page's css px: its place in the
+ * viewport, from where the frame is. Safari's top bars move the frame as
+ * they minimize, under a finger that stays put, and a finger read in the
+ * viewport alone would seem to move as far and scroll the page back.
+ */
+function fingerAt(event: PointerEvent): { x: number; y: number } {
+  let origin = { x: 0, y: 0 };
+  try {
+    const host = window.frameElement;
+    if (host && "offsetWidth" in host && typeof host.offsetWidth === "number" && host.offsetWidth > 0) {
+      const box = host.getBoundingClientRect();
+      const scale = box.width / host.offsetWidth;
+      if (scale > 0) origin = { x: box.left / scale, y: box.top / scale };
+    }
+  } catch {
+    // The page above is on another origin.
+  }
+  return { x: event.clientX + origin.x, y: event.clientY + origin.y };
+}
+
 function onPointerDown(event: PointerEvent): void {
   stopFling();
   finish();
@@ -747,15 +768,16 @@ function onPointerDown(event: PointerEvent): void {
     isNative(target) ||
     onScrollbar(target, event);
   if (native || !(target instanceof Element)) return;
+  const finger = fingerAt(event);
   const current: Gesture = {
     id: nextId++,
     pointerId: event.pointerId,
     target,
-    startX: event.clientX,
-    startY: event.clientY,
-    lastX: event.clientX,
-    lastY: event.clientY,
-    samples: [{ t: performance.now(), x: event.clientX, y: event.clientY }],
+    startX: finger.x,
+    startY: finger.y,
+    lastX: finger.x,
+    lastY: finger.y,
+    samples: [{ t: performance.now(), x: finger.x, y: finger.y }],
     dragged: false,
     claimed: false,
     quiet: false,
@@ -773,14 +795,15 @@ function onPointerMove(event: PointerEvent): void {
   const current = gesture;
   if (!current || current.ended || event.pointerId !== current.pointerId) return;
   const now = performance.now();
-  const stepX = event.clientX - current.lastX;
-  const stepY = event.clientY - current.lastY;
-  current.lastX = event.clientX;
-  current.lastY = event.clientY;
-  current.samples.push({ t: now, x: event.clientX, y: event.clientY });
+  const finger = fingerAt(event);
+  const stepX = finger.x - current.lastX;
+  const stepY = finger.y - current.lastY;
+  current.lastX = finger.x;
+  current.lastY = finger.y;
+  current.samples.push({ t: now, x: finger.x, y: finger.y });
   while ((current.samples[0]?.t ?? now) < now - VELOCITY_WINDOW * 2) current.samples.shift();
-  const dx = event.clientX - current.startX;
-  const dy = event.clientY - current.startY;
+  const dx = finger.x - current.startX;
+  const dy = finger.y - current.startY;
   if (!current.dragged && passedSlop(dx, dy)) {
     current.dragged = true;
     ensureStyle("touch-drag").textContent = DRAG_CSS;

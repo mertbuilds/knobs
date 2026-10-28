@@ -5,6 +5,7 @@ import {
   type BarsMotion,
   barsOf,
   barsStep,
+  viewportOf,
 } from "./browserui";
 import { type Actions, el, FONT, type Look, MORPH, type Painted, place } from "./browserkit";
 import { buildChrome, CHROME_CSS } from "./chromedraw";
@@ -432,10 +433,18 @@ export function createBrowser(
     placeBand();
     painted?.apply(bars.minimized, look);
   };
+  /** How far up minimizing moves the page's top: the room Safari's top bars give it. */
+  const room = (): number => {
+    const bars = view?.bars;
+    if (!bars || bars.platform !== "safari") return 0;
+    const { screen, orientation, layout, edge } = bars;
+    const top = (minimized: boolean) => viewportOf(screen, orientation, layout, minimized, edge).y;
+    return Math.max(0, top(false) - top(true));
+  };
   const onScroll = () => {
     band.move();
     const page = frame.contentWindow;
-    if (page) step({ type: "scroll", y: page.scrollY, time: performance.now() });
+    if (page) step({ type: "scroll", y: page.scrollY, time: performance.now(), room: room() });
     if (!sampling) sampling = window.requestAnimationFrame(resample);
   };
   const actions: Actions = {
@@ -454,12 +463,31 @@ export function createBrowser(
     },
     expand: () => step({ type: "tap" }),
   };
-  /** Give the frame its page box. A new size locks the scroll, as the page settles into it. */
+  /**
+   * Give the frame its page box. A new size locks the scroll, as the page
+   * settles into it. Top bars that minimize or expand move the page's top,
+   * and the page scrolls as far, so its content stays where it is on the
+   * screen, as Safari's does: the bars give or take room, never push it.
+   */
   const sizeFrame = () => {
     if (!view) return;
+    const before = applied;
     view.sizeFrame();
-    if (!same(view.page, applied)) step({ type: "resize", time: performance.now() });
-    applied = view.page;
+    const page = view.page;
+    if (!same(page, applied)) step({ type: "resize", time: performance.now() });
+    applied = page;
+    const moved = before && page && before.y !== page.y && before.x === page.x && before.width === page.width;
+    if (moved) {
+      try {
+        const inner = frame.contentWindow;
+        // At the top of the page the bars come back above it, and it shows from its start.
+        const atTop = page.y > before.y && (inner?.scrollY ?? 0) <= 1;
+        // Instant, past a page's own smooth scrolling.
+        if (!atTop) inner?.scrollBy({ top: page.y - before.y, behavior: "instant" });
+      } catch {
+        // The frame went to another origin.
+      }
+    }
     placeBand();
   };
   const stopShrink = () => {
