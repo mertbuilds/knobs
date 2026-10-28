@@ -111,10 +111,11 @@ describe("mockOf", () => {
     };
     close("iphone-18-pro", [154, 14.3, 94, 36.1]);
     close("iphone-18-pro-max", [173.2, 14.5, 93.6, 35.8]);
-    close("iphone-17", [138.8, 14.3, 124.5, 35.9]);
-    close("iphone-17-pro", [138.8, 14.4, 124.4, 35.8]);
-    close("iphone-17-pro-max", [157.8, 14.5, 124.4, 35.8]);
-    close("iphone-air", [147.8, 20.4, 124.6, 36]);
+    // The 17 family's and the Air's are the simulator's.
+    close("iphone-17", [138.33, 14, 125.33, 36.67]);
+    close("iphone-17-pro", [138.33, 14, 125.33, 36.67]);
+    close("iphone-17-pro-max", [157.33, 14, 125.33, 36.67]);
+    close("iphone-air", [147.33, 20, 125.33, 36.67]);
     close("iphone-16-plus", [152.3, 11.3, 125.4, 36.7]);
     close("iphone-duo-closed", [400.2, 29.6, 36.3, 36.3]);
     expect(sensor("iphone-duo-open")).toBeNull();
@@ -154,9 +155,9 @@ describe("mockOf", () => {
     const mock = mockOf("iphone-16-pro", "portrait");
     const screen = { x: mock?.inset.left ?? 0, y: mock?.inset.top ?? 0 };
     const [island] = parts(mock, "sensor");
-    expect(island).toMatchObject({ width: 125.2, height: 36.7, radius: 18.35 });
-    expect((island?.x ?? 0) - screen.x).toBeCloseTo(138.4);
-    expect((island?.y ?? 0) - screen.y).toBeCloseTo(13.5);
+    expect(island).toMatchObject({ width: 125.33, height: 36.67, radius: 18.335 });
+    expect((island?.x ?? 0) - screen.x).toBeCloseTo(138.33);
+    expect((island?.y ?? 0) - screen.y).toBeCloseTo(14);
     const buttons = parts(mock, "button");
     expect(buttons.map((part) => [part.y, part.height])).toEqual([
       [185, 41.7],
@@ -233,8 +234,8 @@ describe("mockOf", () => {
     }
     // The island goes to the left, the left buttons to the bottom, the right ones to the top.
     const [island] = parts(turned, "sensor");
-    expect(island).toMatchObject({ width: 36.7, height: 125.2 });
-    expect(island?.x).toBeCloseTo((turned?.inset.left ?? 0) + 13.5);
+    expect(island).toMatchObject({ width: 36.67, height: 125.33 });
+    expect(island?.x).toBeCloseTo((turned?.inset.left ?? 0) + 14);
     const bottom = (turned?.body.y ?? 0) + (turned?.body.height ?? 0);
     const [action, , , side, control] = parts(turned, "button");
     expect(action?.y ?? 0).toBeGreaterThan(bottom - 2.7 - 1e-9);

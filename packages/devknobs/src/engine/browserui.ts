@@ -28,7 +28,17 @@ interface SafariSpec {
   side: number;
   /** A Face ID phone: the island the status bar sits around, and its bars higher off the bottom. */
   faceId: boolean;
+  /** The time's center and the right edge of the icons, where measured. */
+  status?: { time: number; right: number };
 }
+
+/**
+ * The status bar of the 17, 17 Pro and 16 Pro, of the Pro Max and of the
+ * Air, measured on the iOS 26.5 simulator. The 16 Pro Max is the 17 Pro
+ * Max's, the same screen round the same island.
+ */
+const STATUS_PRO = { time: 73.83, right: 366.67 };
+const STATUS_MAX = { time: 83.17, right: 399.33 };
 
 /**
  * The 16 family and the SE are measured. The 17 family and the Air have the
@@ -44,14 +54,14 @@ const SAFARI: Record<string, SafariSpec> = {
   "iphone-18-pro-max": { top: 62, side: 62, faceId: true },
   "iphone-duo-closed": { top: 82, side: 82, faceId: true },
   "iphone-duo-open": { top: 40, side: 24, faceId: true },
-  "iphone-air": { top: 68, side: 68, faceId: true },
-  "iphone-17": { top: 62, side: 62, faceId: true },
-  "iphone-17-pro": { top: 62, side: 62, faceId: true },
-  "iphone-17-pro-max": { top: 62, side: 62, faceId: true },
+  "iphone-air": { top: 68, side: 68, faceId: true, status: { time: 77.17, right: 385.33 } },
+  "iphone-17": { top: 62, side: 62, faceId: true, status: STATUS_PRO },
+  "iphone-17-pro": { top: 62, side: 62, faceId: true, status: STATUS_PRO },
+  "iphone-17-pro-max": { top: 62, side: 62, faceId: true, status: STATUS_MAX },
   "iphone-16": { top: 59, side: 59, faceId: true },
   "iphone-16-plus": { top: 59, side: 59, faceId: true },
-  "iphone-16-pro": { top: 62, side: 62, faceId: true },
-  "iphone-16-pro-max": { top: 62, side: 62, faceId: true },
+  "iphone-16-pro": { top: 62, side: 62, faceId: true, status: STATUS_PRO },
+  "iphone-16-pro-max": { top: 62, side: 62, faceId: true, status: STATUS_MAX },
   "iphone-se": { top: 20, side: 0, faceId: false },
 };
 
@@ -260,6 +270,8 @@ export interface StatusBar {
   icons: { x: number; y: number; align: "end" | "start" };
   /** The SE keeps the battery alone on the right, the bars and wifi on the left. */
   battery?: { x: number; y: number };
+  /** iOS draws the time and the icons a size up on the big screens, 420 and wider. */
+  large: boolean;
 }
 
 export interface Bars {
@@ -501,6 +513,7 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
       time: { x: W / 2, y: 10, size: 15 },
       icons: { x: 6, y: 10, align: "start" },
       battery: { x: W - 7, y: 10 },
+      large: false,
     };
   }
   if (!island) {
@@ -509,6 +522,7 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
       height: spec.top,
       time: { x: 58, y, size: 17 },
       icons: { x: W - 36, y, align: "end" },
+      large: false,
     };
   }
   const left = island.x - island.width / 2;
@@ -517,14 +531,17 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
       height: spec.top,
       time: { x: 52, y: island.y, size: 17 },
       icons: { x: left - 12, y: island.y, align: "end" },
+      large: false,
     };
   }
-  // Measured on the 16 Pro: the time a little right of the ear's middle, the
-  // battery 35.4 in from the edge.
+  // Where not measured: the time a little right of the ear's middle, and the
+  // battery as far in from the edge as on the 17 Pro, or on the Pro Max.
+  const large = W >= 420;
   return {
     height: spec.top,
-    time: { x: left * 0.535, y: island.y, size: 17 },
-    icons: { x: W - 35.4, y: island.y, align: "end" },
+    time: { x: spec.status?.time ?? left * 0.535, y: island.y, size: large ? 18 : 17 },
+    icons: { x: spec.status?.right ?? W - (large ? 40.67 : 35.33), y: island.y, align: "end" },
+    large,
   };
 }
 
@@ -544,6 +561,7 @@ function chromeStatus(
     height,
     time: { x: side, y, size: 14 },
     icons: { x: W - side, y, align: "end" },
+    large: false,
   };
 }
 
