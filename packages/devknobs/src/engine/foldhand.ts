@@ -1,6 +1,5 @@
 import type { DevknobsState } from "../types";
 import { foldRest, holdingHinge, releaseFold, scrubFold, watchFold, watchHinge } from "./foldrun";
-import { foldsInView } from "./morph";
 import { running, still } from "./morphrun";
 import { merge } from "./store";
 import { turning } from "./turnrun";
@@ -22,9 +21,6 @@ export { foldRest, holdingHinge, watchFold, watchHinge };
  */
 export function takeHinge(state: DevknobsState): boolean {
   if (running() || turning()) return false;
-  // Open, the folded screen is held the other way.
-  const shut = state.posture === "closed" ? state.orientation : state.orientation === "portrait" ? "landscape" : "portrait";
-  if (!foldsInView(state.device, shut)) return false;
   return foldDevice(merge(state, { posture: state.posture === "open" ? "closed" : "open" }), true);
 }
 
