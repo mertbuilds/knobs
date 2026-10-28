@@ -26,7 +26,12 @@ async function build(config: Parameters<typeof Bun.build>[0]) {
   }
 }
 
+// A local build's stamp, in `build.json` and in its service worker, which reloads the
+// extension once the two differ: a rebuild of the folder Chrome loads takes effect by itself.
+const stamp = label ? JSON.stringify({ label, time: new Date().toISOString() }) : null;
+
 await build({
+  define: { KNOBS_STAMP: JSON.stringify(stamp) },
   entrypoints: [join(root, 'src/background.ts'), join(root, 'src/offscreen.ts')],
   format: 'esm',
 });
@@ -61,7 +66,15 @@ await writeFile(content, code);
 await cp(join(root, 'static'), dist, { recursive: true });
 if (label) {
   const manifest = join(dist, 'manifest.json');
-  const json = JSON.parse(await readFile(manifest, 'utf8')) as Record<string, unknown>;
-  await writeFile(manifest, `${JSON.stringify({ ...json, version_name: label }, null, 2)}\n`);
+  const json = JSON.parse(await readFile(manifest, 'utf8')) as {
+    permissions: Array<string>;
+  } & Record<string, unknown>;
+  // `alarms` wakes the service worker to check the stamp; the store's manifest never asks for it.
+  const permissions = [...json.permissions, 'alarms'].toSorted();
+  await writeFile(
+    manifest,
+    `${JSON.stringify({ ...json, permissions, version_name: label }, null, 2)}\n`,
+  );
+  await writeFile(join(dist, 'build.json'), `${stamp}\n`);
 }
 await cp(join(devknobs, 'bezels'), join(dist, 'bezels'), { recursive: true });

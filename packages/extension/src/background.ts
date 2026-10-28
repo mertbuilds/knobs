@@ -721,3 +721,34 @@ Object.assign(globalThis, {
     loads: (tabId: number) => loads.get(tabId)?.loads ?? [],
   },
 });
+
+// A local build reloads itself once its folder is rebuilt: Chrome serves an unpacked
+// extension's files from disk but runs the old code until reloaded. A timer checks while the
+// worker is awake, and an alarm wakes it at least every 30 seconds.
+if (typeof KNOBS_STAMP === 'string') {
+  const stamp = KNOBS_STAMP;
+  const RELOADED_KEY = 'reloadedFor';
+  const check = async () => {
+    try {
+      const response = await fetch(chrome.runtime.getURL('build.json'), { cache: 'no-store' });
+      const disk = JSON.stringify(await response.json());
+      // Once per stamp on disk, so a `build.json` its code does not match never loops reloads.
+      if (disk !== stamp && (await chrome.storage.local.get(RELOADED_KEY))[RELOADED_KEY] !== disk) {
+        await chrome.storage.local.set({ [RELOADED_KEY]: disk });
+        // oxlint-disable-next-line no-console -- the one line a local build's worker logs
+        console.warn('knobs: rebuilt, reloading the extension');
+        chrome.runtime.reload();
+      }
+    } catch {
+      // Mid rebuild the file can be missing or half written; the next check sees it.
+    }
+  };
+  setInterval(() => void check(), 2000);
+  void check();
+  void chrome.alarms.create('build', { periodInMinutes: 0.5 });
+  chrome.alarms.onAlarm.addListener(({ name }) => {
+    if (name === 'build') {
+      void check();
+    }
+  });
+}

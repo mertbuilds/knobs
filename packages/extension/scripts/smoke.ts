@@ -313,6 +313,68 @@ const url = `http://127.0.0.1:${port}/`;
 // The same server under another origin, where the page keeps no devknobs state of its own.
 const otherOrigin = `http://localhost:${port}/`;
 
+const permissions = async (dir: string) =>
+  (
+    JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as {
+      permissions: Array<string>;
+    }
+  ).permissions;
+
+/**
+ * A local build reloads itself once its `build.json` changes, as a rebuild changes it; a release
+ * build has no stamp and asks for no `alarms`. Both built into folders of their own.
+ */
+async function selfReload() {
+  const own = await mkdtemp(join(tmpdir(), 'knobs-smoke-reload-'));
+  const build = (dir: string, release: boolean) =>
+    execFileSync('bun', [join(root, 'scripts/build.ts'), dir], {
+      env: { ...process.env, CI: '', KNOBS_RELEASE: release ? '1' : '' },
+      stdio: 'inherit',
+    });
+  const local = join(own, 'local');
+  const release = join(own, 'release');
+  build(local, false);
+  build(release, true);
+  assert.equal((await permissions(release)).includes('alarms'), false, 'release asks no alarms');
+  assert.equal((await permissions(local)).includes('alarms'), true, 'local asks alarms');
+  await assert.rejects(readFile(join(release, 'build.json')), 'release has no build.json');
+  assert.doesNotMatch(await readFile(join(release, 'background.js'), 'utf8'), /build\.json/);
+
+  const browser = await chromium.launchPersistentContext(join(own, 'profile'), {
+    args: [`--disable-extensions-except=${local}`, `--load-extension=${local}`],
+    channel: 'chromium',
+    headless: true,
+  });
+  try {
+    const worker = browser.serviceWorkers()[0] ?? (await browser.waitForEvent('serviceworker'));
+    // Chrome turns a reloaded unpacked extension off outside developer mode, which a profile
+    // that loads one unpacked by hand has on.
+    const settings = await browser.newPage();
+    await settings.goto('chrome://extensions');
+    await settings.evaluate(
+      () =>
+        new Promise((resolve) => {
+          // @ts-expect-error chrome://extensions' own api, not in @types/chrome
+          chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true }, resolve);
+        }),
+    );
+    await settings.close();
+    const before = await worker.evaluate(() => performance.timeOrigin);
+    const stamp = JSON.parse(await readFile(join(local, 'build.json'), 'utf8')) as object;
+    const restarted = browser.waitForEvent('serviceworker', { timeout: 10_000 });
+    const start = Date.now();
+    await writeFile(join(local, 'build.json'), JSON.stringify({ ...stamp, time: 'rebuilt' }));
+    const after = await restarted;
+    const latency = Date.now() - start;
+    assert.notEqual(await after.evaluate(() => performance.timeOrigin), before, 'a new worker');
+    assert.ok(latency < 4000, `reloaded within the poll window (${latency} ms)`);
+    log('self reload', `${latency} ms`);
+  } finally {
+    await browser.close();
+    await rm(own, { force: true, recursive: true });
+  }
+}
+
 const viewport = { height: 800, width: 1200 };
 const profile = await mkdtemp(join(tmpdir(), 'knobs-smoke-'));
 const context = await chromium.launchPersistentContext(profile, {
@@ -2442,6 +2504,7 @@ try {
   await strictPolicy();
   await pageOwnCopy();
   await preferPage();
+  await selfReload();
 
   process.stdout.write('smoke passed\n');
   // Two copies of the extension on one page, built from this checkout into a folder of their own.

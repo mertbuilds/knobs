@@ -7,3 +7,6 @@ declare const KNOBS_CHANNEL: string | undefined;
 
 /** `local` for a local build, labeled in its manifest, else `store`. The build defines it. */
 declare const KNOBS_BUILD: 'store' | 'local' | undefined;
+
+/** A local build's stamp, as its `build.json` holds it; null for the store's. The build defines it. */
+declare const KNOBS_STAMP: string | null | undefined;
