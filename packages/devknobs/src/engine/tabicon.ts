@@ -64,11 +64,15 @@ export function isIconLink(node: unknown): node is Element {
   return relTokens(link).some((rel) => rel === "icon" || TOUCH_RELS.includes(rel));
 }
 
-/** The size a link's icon is drawn at: its first declared size, else 32, or 180 for a touch icon. */
+/** The smallest and biggest size an icon is drawn at, in px: 512 is the biggest real favicon. */
+const SIZE_MIN = 16;
+const SIZE_MAX = 512;
+
+/** The size a link's icon is drawn at: its first declared size in 16 to 512, else 32, or 180 for a touch icon. */
 export function iconSize(link: Element): number {
   const declared = /^(\d+)x(\d+)$/i.exec((link.getAttribute("sizes") ?? "").trim().split(/\s+/)[0] ?? "");
   const width = declared ? Number(declared[1]) : 0;
-  if (width > 0) return width;
+  if (width > 0) return Math.min(SIZE_MAX, Math.max(SIZE_MIN, width));
   return relTokens(link).some((rel) => TOUCH_RELS.includes(rel)) ? 180 : 32;
 }
 
@@ -129,6 +133,22 @@ export function createTabIcon(env: TabIconEnv): TabIcon {
     });
   }
 
+  /** Give a link its own address back and drop what devknobs keeps for it. */
+  function forget(link: Element): void {
+    loading.delete(link);
+    const mine = drawn.get(link);
+    if (!mine) return;
+    drawn.delete(link);
+    if (link.getAttribute("href") === mine.url) link.setAttribute("href", mine.original);
+    link.removeAttribute(ORIGINAL_HREF);
+  }
+
+  function linksIn(node: Node): Element[] {
+    if (isIconLink(node)) return [node];
+    if (node.nodeType !== 1) return [];
+    return Array.from((node as Element).querySelectorAll("link")).filter(isIconLink);
+  }
+
   /** A page with no icon link gets its `/favicon.ico` as one, where it has that file. */
   function fallback(): void {
     void env.load(FALLBACK).then((source) => {
@@ -146,20 +166,23 @@ export function createTabIcon(env: TabIconEnv): TabIcon {
   function watch(records: MutationRecord[]): void {
     for (const record of records) {
       if (record.type === "attributes") {
-        const link = record.target;
-        if (!isIconLink(link)) continue;
+        const link = record.target as Element;
+        // A link that is no icon any more has its own address back.
+        if (!isIconLink(link)) {
+          forget(link);
+          continue;
+        }
         // Its own write of the ribbon is no change.
         if (record.attributeName === "href" && drawn.get(link)?.url === link.getAttribute("href")) continue;
         swap(link);
         continue;
       }
+      // A link taken out of the page is dropped, so its picture is not held on to.
+      for (const node of Array.from(record.removedNodes)) {
+        for (const link of linksIn(node)) if (link !== added) forget(link);
+      }
       for (const node of Array.from(record.addedNodes)) {
-        const links = isIconLink(node)
-          ? [node]
-          : node.nodeType === 1
-            ? Array.from((node as Element).querySelectorAll("link")).filter(isIconLink)
-            : [];
-        for (const link of links) {
+        for (const link of linksIn(node)) {
           // The page has an icon of its own again: the one devknobs added goes.
           if (link !== added && added) {
             added.remove();

@@ -70,7 +70,7 @@ the pin is kept with the panel's place, in `localStorage` under `devknobs:place`
 
 the gear button at the end of the footer opens the settings, in place of the rows. the show handle switch there hides the handle while the panel is closed, so nothing of devknobs sits on the edge of the page; the panel key (`⇧K`) still opens it, and an open panel shows its handle as ever, to drag it or click it closed. turning the switch off says which key brings the panel back. the choice is kept in `localStorage` under `devknobs:prefs`, for every tab of the origin, and wins over the `handle` option. reset all leaves it.
 
-the dev tab icon switch draws a yellow `DEV` ribbon on every icon link of the page, the apple touch icon too, from the icon's own picture. it is `panel.devIcon`: `auto`, the default, shows it on a local host only (localhost, `*.localhost`, `*.local`, `0.0.0.0`, a loopback or private network address), `on` on any host, `off` on none, and it holds for this tab. turned off, or with devknobs unmounted, every link has its own address back.
+the dev tab icon switch draws a yellow `DEV` ribbon on every icon link of the page, the apple touch icon too, from the icon's own picture. an icon the page cannot read, from another origin that does not allow it (CORS), keeps its own picture, and below 32px the ribbon has no `DEV` text. it is `panel.devIcon`: `auto`, the default, shows it on a local host only (localhost, `*.localhost`, `*.local`, `0.0.0.0`, a loopback or private network address), `on` on any host, `off` on none, and it holds for this tab. turned off, or with devknobs unmounted, every link has its own address back.
 
 ## shortcuts
 

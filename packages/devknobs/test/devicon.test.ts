@@ -141,5 +141,7 @@ describe("the size an icon is drawn at", () => {
     expect(iconSize(link({ rel: "apple-touch-icon" }))).toBe(180);
     expect(iconSize(link({ rel: "apple-touch-icon-precomposed" }))).toBe(180);
     expect(iconSize(link({ rel: "apple-touch-icon", sizes: "152x152" }))).toBe(152);
+    expect(iconSize(link({ rel: "icon", sizes: "100000x100000" }))).toBe(512);
+    expect(iconSize(link({ rel: "icon", sizes: "1x1" }))).toBe(16);
   });
 });

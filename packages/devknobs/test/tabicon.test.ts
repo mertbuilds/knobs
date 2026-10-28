@@ -50,9 +50,11 @@ class Link {
   }
 
   remove(): void {
-    if (!this.head) return;
-    this.head.links = this.head.links.filter((link) => link !== this);
+    const head = this.head;
+    if (!head) return;
+    head.links = head.links.filter((link) => link !== this);
     this.head = null;
+    head.notify({ type: "childList", addedNodes: [], removedNodes: [this] });
   }
 
   querySelectorAll(): Link[] {
@@ -407,6 +409,31 @@ describe("the dev ribbon while icons load", () => {
     await at.resolve("/a.png");
     at.icon.stop();
     running = null;
+    expect(icon.getAttribute("href")).toBe("/a.png");
+    expect(icon.hasAttribute(ORIGINAL_HREF)).toBe(false);
+  });
+
+  test("a drawn link taken out of the page has its own address back at once", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = page([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    expect(icon.getAttribute("href")).toBe(png("/a.png", 32));
+    icon.remove();
+    await settle();
+    expect(icon.getAttribute("href")).toBe("/a.png");
+    expect(icon.hasAttribute(ORIGINAL_HREF)).toBe(false);
+  });
+
+  test("a drawn link that stops being an icon has its own address back", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = page([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    icon.setAttribute("rel", "preload");
+    await settle();
     expect(icon.getAttribute("href")).toBe("/a.png");
     expect(icon.hasAttribute(ORIGINAL_HREF)).toBe(false);
   });
