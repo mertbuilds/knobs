@@ -167,6 +167,12 @@ export type EdgeValue = "top" | "bottom" | "none";
 /** The edge of the window the panel lives on. */
 export type SideValue = "left" | "right";
 
+/**
+ * The dev ribbon on the tab's icon: `auto` on a local host, such as
+ * localhost, `*.localhost` or a private network address, or always on or off.
+ */
+export type DevIconValue = "auto" | "on" | "off";
+
 export interface PanelValue {
   open: boolean;
   /** The edge of the window the panel and its handle live on. */
@@ -189,6 +195,8 @@ export interface PanelValue {
    * `handle` option and the user's setting can still hide it.
    */
   handle: boolean;
+  /** The dev ribbon on the tab's icon, for this tab. */
+  devIcon: DevIconValue;
   /**
    * Ids of the rows set from the panel. Each stays in the list, back at its
    * default too, until a hold on its `×` takes it off. Reset all lists the default rows

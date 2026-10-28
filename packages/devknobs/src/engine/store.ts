@@ -6,6 +6,7 @@ import type {
   ContrastValue,
   DevknobsState,
   DevknobsStatePatch,
+  DevIconValue,
   DirValue,
   EdgeValue,
   GeoErrorValue,
@@ -126,6 +127,7 @@ export const DEFAULT_STATE: DevknobsState = {
     tab: "top",
     docked: false,
     handle: true,
+    devIcon: "auto",
     pinned: [...DEFAULT_PINNED],
   },
 };
@@ -145,6 +147,7 @@ export const BROWSERS: BrowserValue[] = ["auto", "compact", "bottom", "top", "of
 export const ORIENTATIONS: OrientationValue[] = ["portrait", "landscape"];
 export const EDGES: EdgeValue[] = ["top", "bottom", "none"];
 export const SIDES: SideValue[] = ["left", "right"];
+export const DEV_ICONS: DevIconValue[] = ["auto", "on", "off"];
 export const VISIONS: VisionValue[] = [
   "none",
   "protanopia",
@@ -348,6 +351,8 @@ export function parse(json: string | null | undefined, place?: string | null): D
       ...placeOf(panel, home),
       // A session stored before the handle could be hidden from it shows the handle.
       handle: bool(panel.handle, DEFAULT_STATE.panel.handle),
+      // A session stored before the ribbon shows it on a local host.
+      devIcon: oneOf(panel.devIcon, DEV_ICONS, DEFAULT_STATE.panel.devIcon),
       // A stored panel keeps its list as it is, an empty one too, and one stored
       // before rows stayed listed has none pinned. With no panel stored, a
       // fresh session, the default rows are listed.

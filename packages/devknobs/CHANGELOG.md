@@ -1,5 +1,9 @@
 # changelog
 
+## unreleased
+
+- on a local host (localhost, `*.localhost`, `*.local`, a loopback or private network address) the tab's icon and the apple-touch-icon get a yellow `DEV` ribbon across their top right corner, drawn in the page from the site's own icons, so a dev tab tells itself apart from production. `DEV` shows on icons of 32 px and up. each link keeps its own address in `data-devknobs-href` and gets it back when the ribbon goes off or devknobs unmounts. icons a framework puts in on a navigation get the ribbon too. a page with no icon link gets its `/favicon.ico`, where it has one. an icon from another origin that does not allow reading it keeps its own picture. the dev tab icon switch in the settings turns it off, or on for any host, for the tab, and `panel.devIcon` (`auto`, `on`, `off`) does the same from `setState()`
+
 ## 0.5.1
 
 - published from vinenastudio/knobs on GitHub Actions through npm trusted publishing, with provenance. no code changes

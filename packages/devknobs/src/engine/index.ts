@@ -37,6 +37,7 @@ import { replay as replayAnimations } from "./replay";
 import * as scrollbars from "./scrollbars";
 import { resume as resumeScroll } from "./scrollkeep";
 import * as spacing from "./spacing";
+import * as tabIcon from "./tabicon";
 import * as speed from "./speed";
 import { DEFAULT_STATE, keepPlace as keepPlaceOf, load, merge, resetState, save } from "./store";
 import * as text from "./text";
@@ -136,6 +137,7 @@ export function applyState(next: DevknobsState): void {
   // While the frame is up, the copy inside it looks at the page at that width.
   overflow.apply(state.overflow && !needsFrame(sized));
   outlines.apply(state.outlines);
+  tabIcon.apply(!inFrame && tabIcon.shownHere(state.panel.devIcon));
   if (persist) save(state);
   width.sync(sized);
   for (const listener of Array.from(listeners)) listener(state);
@@ -302,6 +304,7 @@ export function stop(): void {
   width.reset();
   overflow.reset();
   outlines.reset();
+  tabIcon.reset();
   if (native) release(native);
   native = null;
   enableNative(true);

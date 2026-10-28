@@ -8,6 +8,7 @@ import { still } from "../engine/matchmedia";
 import { frameWindow, panelSized, zoomKey } from "../engine/frames";
 import { rewriteMediaText } from "../engine/media";
 import { keepMounted } from "../engine/remount";
+import { devIconFor, devIconShown } from "../engine/tabicon";
 import { type SystemMedia, watchSystemMedia } from "../engine/system";
 import type { GrabControl } from "../grab/control";
 import type { InspectControl } from "../grab/inspect";
@@ -238,6 +239,9 @@ export function createPanel(options: PanelOptions = {}): Panel {
     renderKeys,
     handleShown: handleShows,
     showHandle: () => engine.setState({ panel: { handle: true } }),
+    devIconShown: () => devIconShown(engine.getState().panel.devIcon, window.location.hostname),
+    setDevIcon: (on) =>
+      engine.setState({ panel: { devIcon: devIconFor(on, window.location.hostname) } }),
     native: engine.nativeSwitch()?.setting ?? null,
     setNative: (on) => {
       // The host hears it first, so it is ready for what the driver hands it next.
@@ -358,6 +362,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     const handleShown = handleShows();
     wrap.dataset.handle = handleShown ? "shown" : "hidden";
     settings.drawHandle(handleShown);
+    settings.drawDevIcon(devIconShown(state.panel.devIcon, window.location.hostname));
     const nativeNow = engine.nativeSwitch();
     if (nativeNow) settings.drawNative(nativeNow.on, nativeNow.note);
     dockSlide.aim({

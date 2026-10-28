@@ -27,6 +27,7 @@ export type {
   ContrastValue,
   DevknobsState,
   DevknobsStatePatch,
+  DevIconValue,
   DirValue,
   DprValue,
   EdgeValue,

@@ -51,6 +51,13 @@ or with no bundler, a script tag that mounts itself:
 press `⇧K`, or click the handle on the right edge of the window, to open the
 panel. react, next.js and the early script are in the docs.
 
+on a local host (localhost, `*.localhost`, `*.local`, `0.0.0.0`, a loopback
+or private network address, IPv6 local ones too) the tab's icon gets a yellow
+`DEV` ribbon, drawn from the site's own icon, so a dev tab never looks like
+production. an icon from another origin that does not allow it (CORS) keeps
+its own picture. the dev tab icon switch in the panel's settings turns it off,
+or on for any host.
+
 ## docs
 
 - [start](https://knobs.dev/docs/start): install @vinena/knobs and mount it in
