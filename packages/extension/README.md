@@ -29,6 +29,8 @@ pnpm --filter @knobs/extension build
 
 The content script bundles devknobs' built package, and `dist/` gets its device images. Then in Chrome: `chrome://extensions`, turn on Developer mode, Load unpacked, pick `packages/extension/dist`.
 
+A local build sets the manifest's `version_name`, and the panel footer, to `<version> · local <label> (<short sha>[+dirty])`: the label is `KNOBS_BUILD_LABEL`, else the branch, else the worktree folder. `CI=true` and `package` builds keep the plain version.
+
 ## Store
 
 `pnpm --filter @knobs/extension package` builds `dist/` and zips it to `devknobs-<version>.zip` here (gitignored), the file the Chrome Web Store takes. The version is the manifest's, the devknobs release it bundles. `store/listing.md` holds what the store's dashboard asks for (text, permission justifications, privacy answers), and `store/` the screenshots and the promo tile. The icons are `static/icon-*.png`, from the logo master (see `AGENTS.md`, "Logo"); the 128 is the logo at 96px in 16px of clear space.

@@ -22,6 +22,10 @@ const devknobsVersion = /VERSION = "([^"]+)"/.exec(
   await readFile(join(devknobsDist, 'index.js'), 'utf8'),
 )![1]!;
 // The version a page's local build of devknobs carries, as `bun run link` builds one.
+// What the extension's footer says: a local build's label from its manifest, else that version.
+const extensionVersion =
+  (JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8')) as { version_name?: string })
+    .version_name ?? devknobsVersion;
 const localVersion = `${devknobsVersion}-local.123`;
 
 // Records the root size as the parser reaches the head, before any paint.
@@ -1646,7 +1650,7 @@ async function preferPage() {
     const tab = browser.pages()[0] ?? (await browser.newPage());
     const errors: Array<string> = [];
     tab.on('pageerror', (error) => errors.push(String(error)));
-    const extension = { extension: true, prefer: true, runtime: `extension ${devknobsVersion}` };
+    const extension = { extension: true, prefer: true, runtime: `extension ${extensionVersion}` };
     const pageOwn = { extension: false, prefer: true, runtime: `page ${localVersion}` };
 
     await tab.goto(`${url}own-local`);

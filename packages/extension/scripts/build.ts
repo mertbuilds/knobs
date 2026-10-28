@@ -1,11 +1,18 @@
 import { cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { buildFacts, localLabel } from './label.ts';
 
 const root = join(import.meta.dir, '..');
 // `dist/` is what Chrome loads; a work in progress builds elsewhere: `bun scripts/build.ts <dir>`.
 const dist = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
 // devknobs' built package: run `pnpm --filter @vinena/knobs build` first (turbo does).
 const devknobs = dirname(Bun.resolveSync('@vinena/knobs', root));
+
+const { version } = JSON.parse(await readFile(join(devknobs, '../package.json'), 'utf8')) as {
+  version: string;
+};
+// Null for the store's build and CI's, which keep the manifest's version alone.
+const label = localLabel(version, buildFacts(root));
 
 await rm(dist, { force: true, recursive: true });
 
@@ -34,14 +41,21 @@ await build({
 
 // Chrome refuses a content script with a Unicode noncharacter in it as not UTF-8, and
 // the bundle carries one raw in a regex. Its escape means the same there and in a string.
+// A local build's panel footer names it as chrome://extensions does.
 const content = join(dist, 'content.js');
-await writeFile(
-  content,
-  (await readFile(content, 'utf8')).replaceAll(
-    /[\uFDD0-\uFDEF\uFFFE\uFFFF]/g,
-    (char) => `\\u${char.charCodeAt(0).toString(16)}`,
-  ),
+let code = (await readFile(content, 'utf8')).replaceAll(
+  /[\uFDD0-\uFDEF\uFFFE\uFFFF]/g,
+  (char) => `\\u${char.charCodeAt(0).toString(16)}`,
 );
+if (label) {
+  code = code.replace(/(?<![\w$])VERSION = "[^"]+"/, `VERSION = ${JSON.stringify(label)}`);
+}
+await writeFile(content, code);
 
 await cp(join(root, 'static'), dist, { recursive: true });
+if (label) {
+  const manifest = join(dist, 'manifest.json');
+  const json = JSON.parse(await readFile(manifest, 'utf8')) as Record<string, unknown>;
+  await writeFile(manifest, `${JSON.stringify({ ...json, version_name: label }, null, 2)}\n`);
+}
 await cp(join(devknobs, 'bezels'), join(dist, 'bezels'), { recursive: true });

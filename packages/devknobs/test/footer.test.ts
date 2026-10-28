@@ -82,6 +82,9 @@ describe("the copy that runs the panel", () => {
   test("is named for where it comes from, with its version", () => {
     expect(runtimeLabel(true, "0.5.1")).toBe("extension 0.5.1");
     expect(runtimeLabel(false, "0.5.1-local.1767225600")).toBe("page 0.5.1-local.1767225600");
+    expect(runtimeLabel(true, "0.5.1 · local ios26-preview (9e966ae)")).toBe(
+      "extension 0.5.1 · local ios26-preview (9e966ae)",
+    );
   });
 
   test("shows between the badge and the keys where a host gives the choice, and nowhere else", () => {
