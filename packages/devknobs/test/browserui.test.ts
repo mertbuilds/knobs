@@ -7,8 +7,8 @@ import {
   type BarsEvent,
   type BarsMotion,
   barsOf,
+  alphaAt,
   barsStep,
-  endRoom,
   type BrowserLayout,
   layoutOf,
   layoutOptions,
@@ -182,19 +182,45 @@ describe("viewportOf", () => {
   });
 });
 
+/**
+ * Page top and `innerHeight` per layout and state on the 17 Pro, 402 x 874,
+ * measured on the iOS 26.5 simulator (minimized by a real swipe). The fixed
+ * `bottom: 0` edge, `visualViewport.height` and `100dvh` are the same height.
+ */
+const SECTION_11: [BrowserLayout, boolean, number, number][] = [
+  ["compact", false, 62, 714],
+  ["compact", true, 62, 754],
+  ["bottom", false, 62, 654],
+  ["bottom", true, 62, 754],
+  ["top", false, 122, 660],
+  ["top", true, 106, 768],
+];
+
 describe("edge to edge", () => {
-  test("Safari's page runs to the bottom of the screen in every layout and state", () => {
+  test("Safari's page is the viewport the phone gives it, upright, in every layout and state", () => {
+    const pro = device("iphone-17-pro");
+    for (const [layout, minimized, top, height] of SECTION_11) {
+      for (const edge of [true, false]) {
+        const page = viewportOf(pro, "portrait", layout, minimized, edge);
+        expect(page).toEqual({ x: 0, y: top, width: 402, height });
+      }
+    }
+    // The Air's strip is 68: the same bars under it.
+    expect(viewportOf(device("iphone-air"), "portrait", "compact", false, true)).toEqual({
+      x: 0,
+      y: 68,
+      width: 420,
+      height: 912 - 68 - 98,
+    });
+  });
+
+  test("turned across, the page runs under Safari's top row in both states", () => {
     for (const layout of ["compact", "bottom", "top"] as const) {
       for (const minimized of [false, true]) {
-        const pro = viewportOf(device("iphone-16-pro"), "portrait", layout, minimized, true);
-        expect(pro).toEqual({ x: 0, y: 62, width: 402, height: 812 });
-        const se = viewportOf(device("iphone-se"), "portrait", layout, minimized, true);
-        expect(`${se.width}x${se.height}`).toBe("375x647");
         const across = viewportOf(device("iphone-16-pro"), "landscape", layout, minimized, true);
         expect(across).toEqual({ x: 62, y: 0, width: 750, height: 402 });
       }
     }
-    expect(viewportOf(device("iphone-16"), "portrait", "compact", false, true).height).toBe(793);
   });
 
   test("Chrome keeps its true viewport, and off is the whole screen either way", () => {
@@ -205,44 +231,24 @@ describe("edge to edge", () => {
     expect(`${off.width}x${off.height}`).toBe("402x874");
   });
 
-  test("the page's end gets the room the frame runs past Safari's viewport, bars as they are", () => {
-    for (const [id, , heights] of SAFARI_TABLE) {
-      const drawn = viewportOf(device(id), "portrait", "compact", false, true).height;
-      for (const layout of ["compact", "bottom"] as const) {
-        const [expanded, minimized] = heights[layout];
-        expect(endRoom(device(id), "portrait", layout, false, true)).toBe(drawn - expanded);
-        expect(endRoom(device(id), "portrait", layout, true, true)).toBe(drawn - minimized);
-      }
-    }
-    const pro = device("iphone-16-pro");
-    expect(endRoom(pro, "portrait", "compact", true, true)).toBe(58);
-    expect(endRoom(pro, "portrait", "compact", false, true)).toBe(98);
-    expect(endRoom(pro, "portrait", "bottom", true, true)).toBe(58);
-    expect(endRoom(pro, "portrait", "bottom", false, true)).toBe(158);
-    expect(endRoom(device("iphone-se"), "portrait", "bottom", false, true)).toBe(152);
-  });
-
-  test("Top's room is its bottom capsule's alone, and none under its pill or turned across", () => {
-    for (const [id] of SAFARI_TABLE) {
-      expect(endRoom(device(id), "portrait", "top", false, true)).toBe(92);
-      expect(endRoom(device(id), "portrait", "top", true, true)).toBe(0);
-      for (const layout of ["compact", "bottom", "top"] as const) {
-        expect(endRoom(device(id), "landscape", layout, false, true)).toBe(0);
-        expect(endRoom(device(id), "landscape", layout, true, true)).toBe(0);
-      }
-    }
-  });
-
-  test("no room with edge to edge off, the browser off, on Chrome or without a browser", () => {
-    const pro = device("iphone-16-pro");
-    for (const minimized of [false, true]) {
-      expect(endRoom(pro, "portrait", "compact", minimized, false)).toBe(0);
-      expect(endRoom(pro, "portrait", "off", minimized, true)).toBe(0);
-      expect(endRoom(pro, "portrait", null, minimized, true)).toBe(0);
-      expect(endRoom(device("pixel-9"), "portrait", "top", minimized, true)).toBe(0);
-      expect(endRoom(device("pixel-9"), "portrait", "bottom", minimized, true)).toBe(0);
-      expect(endRoom(device("ipad-mini"), "portrait", null, minimized, true)).toBe(0);
-    }
+  test("a minimized Safari washes the top 100 px in the page's color, read at the page's top", () => {
+    const pro = device("iphone-17-pro");
+    const mini = barsOf(pro, "portrait", "compact", true, true);
+    expect(mini?.scrim).toMatchObject({ y: 0, height: 100, at: { x: 201, y: 63 } });
+    expect(barsOf(pro, "portrait", "top", true, true)?.scrim?.at.y).toBe(107);
+    // White over #111 at 0, 20, 40, 60, 80 and 100 px: #d1, #b0, #72, #37, #19, #11.
+    const scrim = mini?.scrim;
+    if (!scrim) throw new Error("no scrim");
+    const gray = (y: number) => Math.round(255 * alphaAt(scrim, y) + 17 * (1 - alphaAt(scrim, y)));
+    const sim = [0xd1, 0xb0, 0x72, 0x37, 0x19, 0x11];
+    [0, 20, 40, 60, 80, 100].forEach((y, at) => {
+      expect(Math.abs(gray(y) - (sim[at] ?? 0))).toBeLessThanOrEqual(1);
+    });
+    expect(alphaAt(scrim, 30)).toBeCloseTo(0.54, 2);
+    expect(alphaAt(scrim, 200)).toBe(0);
+    expect(barsOf(pro, "portrait", "compact", false, true)?.scrim).toBeNull();
+    expect(barsOf(pro, "landscape", "compact", true, true)?.scrim).toBeNull();
+    expect(barsOf(device("pixel-9"), "portrait", "top", true)?.scrim).toBeNull();
   });
 
   test("the scroll edge is light, 0.55 at the bottom at most, and short when minimized", () => {

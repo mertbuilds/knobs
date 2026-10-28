@@ -5,16 +5,14 @@ import {
   type BarsMotion,
   barsOf,
   barsStep,
-  endRoom,
 } from "./browserui";
 import { type Actions, el, FONT, type Look, MORPH, type Painted, place } from "./browserkit";
 import { buildChrome, CHROME_CSS } from "./chromedraw";
 import { type Color, luminance, parseColor } from "./color";
-import { give } from "./endroom";
 import { baseMatchMedia } from "./matchmedia";
 import type { Rect } from "./mock";
 import { navigationOf } from "./reload";
-import { buildSafari, SAFARI_CSS } from "./safaridraw";
+import { buildSafari, SAFARI_CSS, underAt } from "./safaridraw";
 import { keep } from "./scrollkeep";
 
 /**
@@ -136,7 +134,8 @@ function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | 
  */
 function edgeBar(doc: Document, view: Window, edge: "top" | "bottom"): string | null {
   const width = view.innerWidth;
-  const y = edge === "top" ? 0.5 : view.innerHeight - 0.5;
+  // A whole px up from the bottom: a zoomed frame finds nothing in its last half px.
+  const y = edge === "top" ? 0.5 : view.innerHeight - 1;
   const colors = [width / 2, 1, width - 1].map((x) => barAt(doc, view, x, y, edge));
   const [middle = null] = colors;
   return colors.every((color) => color !== null) ? middle : null;
@@ -182,7 +181,9 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
     const [r, g, b] = backgroundOf(doc, view, scheme === "dark");
     const background = `rgb(${r}, ${g}, ${b})`;
     const top = edgeBar(doc, view, "top") ?? background;
-    const bottom = edgeBar(doc, view, "bottom") ?? background;
+    // Under the bars the phone shows the page's content, so the content at its bottom edge stands for it.
+    const last = () => colorAt(doc, view, view.innerWidth / 2, view.innerHeight - 1);
+    const bottom = edgeBar(doc, view, "bottom") ?? last() ?? background;
     const under = (probe?.points ?? []).map(({ x, y }) => {
       const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
       const inside = { x: x - page.x, y: y - page.y };
@@ -214,14 +215,21 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
 
 /**
  * What fills Safari's screen around the frame: the strip's color over the
- * page and the bottom's under it, the page's color everywhere else.
+ * page and the bottom's under it, the page's color everywhere else. Under
+ * the bars the phone shows the page's content, or a fixed footer's color
+ * carried down. The frame ends above them, so a solid fill of the content
+ * at its bottom edge stands for it, or of the footer. A
+ * minimized Safari has no strip: the page's content goes up under the status
+ * bar, with the scrim over it, unless a fixed or sticky bar holds the top.
  */
 function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
   if (bars.platform !== "safari" || bars.orientation !== "portrait" || !page) return look.background;
-  if (look.top === look.background && look.bottom === look.background) return look.background;
+  const held = look.top !== look.background;
+  const top = bars.scrim && !held ? rgbOf(underAt(look, bars.scrim.at.x, bars.scrim.at.y)) : look.top;
+  if (top === look.background && look.bottom === look.background) return look.background;
   const start = (page.y / height) * 100;
   const end = ((page.y + page.height) / height) * 100;
-  const { top, background: middle, bottom } = look;
+  const { background: middle, bottom } = look;
   return `linear-gradient(to bottom, ${top} ${start}%, ${middle} ${start}%, ${middle} ${end}%, ${bottom} ${end}%)`;
 }
 
@@ -348,6 +356,8 @@ export function createBrowser(
       x: shape.x + shape.width / 2,
       y: shape.y + shape.height / 2,
     }));
+    const scrim = bars.scrim ?? other?.scrim;
+    if (scrim) points.push(scrim.at);
     return { page: view.page ?? { x: 0, y: 0, ...view.size }, points };
   };
   const lookNow = () => readLook(frame, probe());
@@ -381,38 +391,12 @@ export function createBrowser(
     },
     expand: () => step({ type: "tap" }),
   };
-  /**
-   * Give the page the room its end needs under the bars it is drawn under.
-   * Another room moves the end of the page's scroll as another size does, so
-   * it locks the scroll too, and a page at its end stays at its end as the
-   * room grows, clear of the bars that came back.
-   */
-  const roomFrame = () => {
-    const bars = view?.bars ?? null;
-    try {
-      const page = frame.contentWindow;
-      const doc = frame.contentDocument;
-      if (!page || !doc?.documentElement) return;
-      const room = bars
-        ? endRoom(bars.screen, bars.orientation, bars.layout, bars.minimized, bars.edge)
-        : 0;
-      const had = give(doc, room);
-      if (had === room) return;
-      step({ type: "resize", time: performance.now() });
-      const end = doc.documentElement.scrollHeight - page.innerHeight;
-      if (room < had || page.scrollY <= 1 || page.scrollY < end - (room - had) - 1) return;
-      page.scrollTo({ top: end, behavior: still() ? "instant" : "smooth" });
-    } catch {
-      // Another origin: no page there to give room.
-    }
-  };
   /** Give the frame its page box. A new size locks the scroll, as the page settles into it. */
   const sizeFrame = () => {
     if (!view) return;
     view.sizeFrame();
     if (!same(view.page, applied)) step({ type: "resize", time: performance.now() });
     applied = view.page;
-    roomFrame();
   };
   /** The frame grows at once, under bars that are leaving, and shrinks once the bars are in. */
   const placeFrame = (instant: boolean) => {
