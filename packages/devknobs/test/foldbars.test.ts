@@ -28,42 +28,34 @@ describe("the bars drawn into the picture of a screen", () => {
     expect(cover?.screen.id).toBe("iphone-duo-closed");
     expect(inner?.screen.id).toBe("iphone-duo-open");
     expect(glass("closed", "portrait", "compact", false)).toEqual([
-      { rect: { x: 34, y: 596, width: 48, height: 48 }, radius: 24 },
-      { rect: { x: 90, y: 596, width: 286, height: 48 }, radius: 24 },
-      { rect: { x: 384, y: 596, width: 48, height: 48 }, radius: 24 },
+      { rect: { x: 23, y: 598, width: 336, height: 48 }, radius: 24 },
+      { rect: { x: 395.5, y: 193.8, width: 48, height: 48 }, radius: 24 },
+      { rect: { x: 395.5, y: 254.2, width: 48, height: 48 }, radius: 24 },
+      { rect: { x: 395.5, y: 544, width: 48, height: 102 }, radius: 24 },
     ]);
-    expect(glass("open", "portrait", "compact", false)).toEqual([
-      { rect: { x: 34, y: 869, width: 48, height: 48 }, radius: 24 },
-      { rect: { x: 90, y: 869, width: 489, height: 48 }, radius: 24 },
-      { rect: { x: 587, y: 869, width: 48, height: 48 }, radius: 24 },
-    ]);
+    expect(glass("open", "portrait", "compact", false)?.map((pane) => pane.rect.y)).toEqual([38, 38, 38, 38]);
   });
 
-  test("blur under Bottom's card but not under the field inside it", () => {
-    expect(glass("closed", "portrait", "bottom", false)).toEqual([{ rect: { x: 14, y: 536, width: 438, height: 128 }, radius: 40 }]);
-    expect(glass("open", "portrait", "bottom", false)).toEqual([{ rect: { x: 14, y: 809, width: 641, height: 128 }, radius: 40 }]);
-  });
-
-  test("blur under Top's address bar and its toolbar", () => {
-    expect(glass("closed", "portrait", "top", false)?.map((pane) => pane.rect.y)).toEqual([82, 602]);
-    expect(glass("open", "portrait", "top", false)?.map((pane) => pane.rect.y)).toEqual([40, 875]);
+  test("take the Duo's own layout for any other the knob asks for", () => {
+    for (const browser of ["bottom", "top"] as const) {
+      expect(glass("closed", "portrait", browser, false)).toEqual(glass("closed", "portrait", "compact", false));
+      expect(glass("open", "landscape", browser, false)).toEqual(glass("open", "landscape", "compact", false));
+    }
   });
 
   test("minimized, blur only under the pill as wide as the host sets in it, its capsules faded out", () => {
-    for (const browser of ["compact", "bottom"] as const) {
-      const [pill, ...rest] = glass("closed", "portrait", browser, true) ?? [];
-      expect(rest).toEqual([]);
-      expect(pill?.radius).toBe(16);
-      expect(pill?.rect.y).toBe(632);
-      // Centered on the screen.
-      expect((pill?.rect.x ?? 0) + (pill?.rect.width ?? 0) / 2).toBe(466 / 2);
-    }
-    expect(glass("open", "portrait", "compact", true)?.[0]?.rect.y).toBe(905);
+    const [pill, ...rest] = glass("closed", "portrait", "compact", true) ?? [];
+    expect(rest).toEqual([]);
+    expect(pill?.radius).toBe(16);
+    expect(pill?.rect.y).toBe(632);
+    // Centered on the page, left of the column.
+    expect((pill?.rect.x ?? 0) + (pill?.rect.width ?? 0) / 2).toBe(382 / 2);
+    expect(glass("open", "portrait", "compact", true)?.[0]?.rect.y).toBe(4);
   });
 
-  test("held across, are one row at the top, gone once minimized", () => {
-    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([10, 10, 10, 10]);
-    expect(glass("closed", "landscape", "bottom", true)).toEqual([]);
+  test("held across, the cover keeps its column and the inner screen its row at the top", () => {
+    expect(glass("open", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([38, 38, 38, 38]);
+    expect(glass("closed", "landscape", "compact", false)?.map((pane) => pane.rect.y)).toEqual([386, 193.8, 254.2, 332]);
   });
 
   test("are not glass in Chrome, whose bars hide the page", () => {

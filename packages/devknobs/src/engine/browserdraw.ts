@@ -9,6 +9,7 @@ import {
 import { type Actions, el, FONT, type Look, MORPH, type Painted, place } from "./browserkit";
 import { buildChrome, CHROME_CSS } from "./chromedraw";
 import { type Color, luminance, parseColor } from "./color";
+import { turn } from "./devices";
 import { baseMatchMedia } from "./matchmedia";
 import type { Rect } from "./mock";
 import { navigationOf } from "./reload";
@@ -216,6 +217,8 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
       const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
       const inside = { x: x - page.x, y: y - page.y };
       if (inside.y < 0) return { x, y, color: top };
+      // Right of the page, the Duo's column, takes the page's own color.
+      if (inside.x >= page.width) return { x, y, color: background };
       if (inside.y >= page.height) return { x, y, color: bottom };
       const across = Math.min(Math.max(inside.x, 0), page.width - 1);
       return { x, y, color: colorAt(doc, view, across, inside.y, base) ?? background };
@@ -251,14 +254,19 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
  * bar, with the scrim over it, unless a fixed or sticky bar holds the top.
  */
 export function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
-  if (bars.platform !== "safari" || bars.orientation !== "portrait" || !page) return look.background;
+  // Turned across an iPhone has no status bar, and its screen takes the page's color.
+  if (bars.platform !== "safari" || (!bars.status && !bars.column) || !page) return look.background;
   const held = look.top !== look.background;
   const top = bars.scrim && !held ? rgbOf(underAt(look, bars.scrim.at.x, bars.scrim.at.y)) : look.top;
   if (top === look.background && look.bottom === look.background) return look.background;
   const start = (page.y / height) * 100;
   const end = ((page.y + page.height) / height) * 100;
   const { background: middle, bottom } = look;
-  return `linear-gradient(to bottom, ${top} ${start}%, ${middle} ${start}%, ${middle} ${end}%, ${bottom} ${end}%)`;
+  const strips = `linear-gradient(to bottom, ${top} ${start}%, ${middle} ${start}%, ${middle} ${end}%, ${bottom} ${end}%)`;
+  if (!bars.column) return strips;
+  // The Duo's cover column takes the page's color all the way down, over the strips.
+  const right = ((page.x + page.width) / turn(bars.screen, bars.orientation).width) * 100;
+  return `linear-gradient(to right, transparent ${right}%, ${middle} ${right}%), ${strips}`;
 }
 
 /** Can the frame's page be read? Not on another origin, or behind an error page. */
