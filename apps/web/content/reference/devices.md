@@ -114,10 +114,11 @@ shows the page itself. the strip over the page takes the color of a fixed or
 sticky bar at the top, else the page's background. minimized, the strip
 goes: the content at the top of the page shows under the status bar, in a
 wash of the page's color that fades out over 100 px, and the status bar's
-glyphs follow it. the edge to edge switch, on by default, shades that fill
-with Safari's light scroll edge, and turned across runs the page under the
-top row. off, the page fades into the fill over its last 64 px instead, and
-turned across starts under the top row. Chrome always gives
+glyphs follow it. the fill is shaded with Safari's light scroll edge. the edge to edge switch
+is offered only with the iPhone held sideways, where it still changes the
+frame: on, by default, the page runs under the top row of bars; off, it
+starts under it. upright it is not offered, and a value set earlier is kept
+for the next turn. Chrome always gives
 its real viewport, as its toolbar is opaque: a Pixel 9 is 412 × 777 with the
 toolbar and 412 × 857 without. the 9s' status bars are AOSP's own. Google
 publishes none for the 10s, so theirs are derived from where the punch hole

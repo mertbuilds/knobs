@@ -53,7 +53,7 @@ these put the page in a frame, a real viewport, so media queries and `vw` follow
 | device, orientation    | a phone, tablet or laptop, turned          |
 | posture                | folds a foldable                           |
 | mock, browser, bars    | the phone's body and its browser           |
-| edge to edge           | Safari's look under its bars on an iPhone  |
+| edge to edge           | the page under Safari's top row, sideways  |
 | touch pointer          | the mouse acts as a finger                 |
 | device pixel ratio     | 1, 2 or 3                                  |
 | frame, zoom, mat       | the frame alone, its zoom, the mat's color |

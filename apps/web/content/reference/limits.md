@@ -108,9 +108,8 @@ page's bottom edge, where on the phone the page runs on under the bars, and
 minimized, the content under the status bar is that at the page's top, not
 what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
 height, where Safari keeps `svh` at the expanded height and `lvh` and `vh`
-at the minimized one (the whole screen in top). with edge to edge off,
-Safari's scroll edge fades the last 64 px of the page into that color,
-eased from clear to 0.85 opaque at the frame's end and 0.92 at the bottom. the top edge has no fade, as Safari
+at the minimized one (the whole screen in top). the edge to edge switch
+only works with the phone held sideways. the top edge has no fade, as Safari
 shows none there. `env(safe-area-inset-*)` stays 0. there is no keyboard, and the tabs, the
 menus and the share sheet do not open. a page that changes its background
 without a load, a navigation or a scheme change keeps the old color around
