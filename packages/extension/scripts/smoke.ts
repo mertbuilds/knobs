@@ -3,6 +3,7 @@
 // text size, preferences and offline for real, with no rewrite of its own.
 // Then shoots the panel next to the npm build's, into smoke-out/. Build first.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -2443,6 +2444,8 @@ try {
   await preferPage();
 
   process.stdout.write('smoke passed\n');
+  // Two copies of the extension on one page, built from this checkout into a folder of their own.
+  execFileSync('node', [join(root, 'scripts/pair.ts')], { stdio: 'inherit' });
 } finally {
   await context.close();
   server.close();

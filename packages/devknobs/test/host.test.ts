@@ -20,7 +20,7 @@ import * as ua from "../src/engine/ua";
 import * as width from "../src/engine/frames";
 import * as control from "../src/grab/control";
 import * as inspect from "../src/grab/inspect";
-import { preferOf, type PreferSetting, stepsAside, takesBack } from "../src/host";
+import { type HostRank, outranks, preferOf, type PreferSetting, rankOf, stepsAside, stoodDownNote, takesBack } from "../src/host";
 import * as devknobs from "../src/index";
 import { claim, free, hostOf, owned, type Take } from "../src/instance";
 import * as requests from "../src/requests";
@@ -418,5 +418,112 @@ describe("a page copy a host steps aside for", () => {
     free(window, release);
     expect(takes[0]!({})).toBe(false);
     expect(createPanel).not.toHaveBeenCalled();
+  });
+});
+
+describe("which host holds a page two hosts meet on", () => {
+  const store = (version: string): HostRank => ({ build: "store", version });
+  const local = (version: string): HostRank => ({ build: "local", version });
+
+  test("a local build over a store one, then the newer version, then the version as text, whichever came first", () => {
+    const ranks = [
+      store("0.5.0"),
+      store("0.5.1"),
+      store("0.10.0"),
+      local("0.4.0 · local old (1111111)"),
+      local("0.5.1 · local a (1111111)"),
+      local("0.5.1 · local b (2222222)"),
+    ];
+    for (const [index, rank] of ranks.entries()) {
+      expect(outranks(rank, null)).toBe(true);
+      for (const [other, than] of ranks.entries()) {
+        expect(outranks(rank, than)).toBe(index > other);
+      }
+    }
+  });
+
+  test("reads a rank field by field, and names a host that stood down", () => {
+    expect(rankOf({ rank: { build: "local", version: "0.5.1" } })).toEqual(local("0.5.1"));
+    expect(rankOf({ rank: { build: "beta", version: "0.5.1" } })).toBeNull();
+    expect(rankOf({})).toBeNull();
+    expect(stoodDownNote(store("0.5.1"))).toBe("store extension stood down");
+    expect(stoodDownNote(null)).toBe("older extension stood down");
+  });
+});
+
+describe("two hosts on a page", () => {
+  const prefer: PreferSetting = { value: "extension", change() {} };
+  /** Another host, as another copy of the extension leaves it, noting what it hears. */
+  function other(rank?: HostRank) {
+    const heard: object[] = [];
+    let released = 0;
+    const release = () => {
+      released++;
+      free(window, release);
+    };
+    claim(window, release, () => {}, {}, rank ? { rank, outranked: (loser) => heard.push(loser) } : {});
+    return { heard, release, released: () => released };
+  }
+  const runtime = () => createPanel.mock.lastCall?.[0]?.prefer?.runtime;
+
+  test("a host that ranks lower stands down for the one that holds the page, and tells it", () => {
+    const holder = other({ build: "local", version: "0.5.1 · local a (1111111)" });
+    let stood = 0;
+    devknobs.mount({ host: true, build: "store", stoodDown: () => stood++ });
+    expect(stood).toBe(1);
+    expect(holder.released()).toBe(0);
+    expect(hostOf(window)?.release).toBe(holder.release);
+    expect(createPanel).not.toHaveBeenCalled();
+    expect(holder.heard).toEqual([{ build: "store", version: "source" }]);
+    holder.release();
+  });
+
+  test("a host that ranks higher takes the page, and its footer says the other stood down", () => {
+    const holder = other({ build: "store", version: "0.5.1" });
+    devknobs.mount({ host: true, build: "local", prefer });
+    expect(holder.released()).toBe(1);
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+    expect(rankOf(hostOf(window)!)).toEqual({ build: "local", version: "source" });
+    expect(runtime()).toBe("extension source · store extension stood down");
+  });
+
+  test("a host takes the page back from an older host that takes it from any copy", async () => {
+    let stood = 0;
+    devknobs.mount({ host: true, build: "store", prefer, stoodDown: () => stood++ });
+    const old = other();
+    await settle();
+    expect(old.released()).toBe(1);
+    expect(hostOf(window)?.release).toBe(devknobs.unmount);
+    expect(stood).toBe(0);
+    expect(runtime()).toBe("extension source · older extension stood down");
+  });
+
+  test("a host stands down for a higher one that comes after it, with no take-back", async () => {
+    let stood = 0;
+    devknobs.mount({ host: true, build: "store", stoodDown: () => stood++ });
+    const higher = other({ build: "local", version: "0.5.1 · local a (1111111)" });
+    await settle();
+    expect(stood).toBe(1);
+    expect(hostOf(window)?.release).toBe(higher.release);
+    expect(higher.heard).toEqual([{ build: "store", version: "source" }]);
+    higher.release();
+  });
+
+  test("a host stands down for one whose rank it cannot read, a newer build's say", () => {
+    const release = () => free(window, release);
+    claim(window, release, () => {}, {}, { rank: { build: "nightly", version: "9.0.0" } });
+    let stood = 0;
+    devknobs.mount({ host: true, build: "local", stoodDown: () => stood++ });
+    expect(stood).toBe(1);
+    expect(hostOf(window)?.release).toBe(release);
+    release();
+  });
+
+  test("a host draws its footer again once a lower host stands down for it", () => {
+    devknobs.mount({ host: true, build: "local", prefer });
+    const calls = createPanel.mock.calls.length;
+    hostOf(window)?.outranked?.({ build: "store", version: "0.5.1" });
+    expect(createPanel).toHaveBeenCalledTimes(calls + 1);
+    expect(runtime()).toBe("extension source · store extension stood down");
   });
 });

@@ -10,7 +10,19 @@ import { UA_PRESETS } from "./engine/ua";
 import { createGrab, type GrabControl } from "./grab/control";
 import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
 import type { GrabOptions, GrabResult } from "./grab/types";
-import { pageChoices, type PreferSetting, type PreferValue, preferOf, stepsAside, takesBack } from "./host";
+import {
+  type HostBuild,
+  type HostRank,
+  outranks,
+  pageChoices,
+  type PreferSetting,
+  type PreferValue,
+  preferOf,
+  rankOf,
+  stepsAside,
+  stoodDownNote,
+  takesBack,
+} from "./host";
 import { claim, expose, free, type Host, hostOf, owned, superseded, type Take, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
 import type { DevknobsState, DevknobsStatePatch, GrabColorValue } from "./types";
@@ -69,7 +81,7 @@ export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
 export type { FrameRefusal, NativeDriver, NativeMedia, NativeSetting, NativeUa, NativeViewport } from "./engine/native";
 export type { SystemMedia } from "./engine/system";
-export type { PreferSetting, PreferValue } from "./host";
+export type { HostBuild, PreferSetting, PreferValue } from "./host";
 export type {
   GrabEntry,
   GrabFrame,
@@ -119,6 +131,16 @@ export interface MountOptions extends engine.EngineOptions {
    * once `setPrefer` says so, and this one does not take it back.
    */
   prefer?: PreferSetting;
+  /**
+   * For a host: which build it is. Where two hosts meet on a page, such as a
+   * store and a local build of the extension, the one that ranks higher holds
+   * it whichever mounted first, and the other stands down for that page load:
+   * a local build over a store one, then the newer version. A host with none
+   * takes the page as before, from any copy.
+   */
+  build?: HostBuild;
+  /** For a host with a `build`: it stood down for another host, which holds the page for this load. */
+  stoodDown?: () => void;
 }
 
 export const PRESETS = {
@@ -154,6 +176,8 @@ let deferred: MountOptions | null = null;
  * page's next mount of it, such as a remount on a hot update, until it defers to a host again.
  */
 let handedPrefer: PreferSetting | null = null;
+/** The host that stood down for this one on this page load, for the footer: its rank, null for an older host. */
+let beaten: { other: HostRank | null } | null = null;
 
 /**
  * Start the knobs and put the panel on the page. Patches go in right away, even
@@ -177,12 +201,20 @@ export function mount(options: MountOptions = {}): void {
     host.adopt(options, take);
     return;
   }
+  if (options.host && options.build) {
+    const holder = hostOf(window);
+    if (holder && !beats(options.build, holder)) {
+      standDown(options, holder);
+      return;
+    }
+    if (holder) beaten = { other: rankOf(holder) };
+  }
   // A copy that is no host shows the preference it was handed, as it was handed.
   preferNow = options.host ? (options.prefer?.value ?? null) : null;
   if (!options.host && !options.prefer && handedPrefer) options = { ...options, prefer: handedPrefer };
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
-  if (options.host) claim(window, unmount, adopt, api);
+  if (options.host) claim(window, unmount, adopt, api, options.build ? { rank: rankFor(options.build), outranked } : {});
   else claim(window, unmount);
   expose(window, api);
   engine.start(options);
@@ -233,8 +265,37 @@ function panelPrefer(options: MountOptions): PanelPrefer | undefined {
       setting.change(value);
       setPrefer(value);
     },
-    runtime: runtimeLabel(options.host === true, VERSION),
+    runtime: [runtimeLabel(options.host === true, VERSION), ...(options.host && beaten ? [stoodDownNote(beaten.other)] : [])].join(" · "),
   };
+}
+
+/** This copy's rank as a host of `build`. */
+function rankFor(build: HostBuild): HostRank {
+  return { build, version: VERSION };
+}
+
+/**
+ * Does this copy, a host of `build`, outrank `holder`? A rank this version cannot read, a
+ * newer build's say, outranks it, so two hosts never take the page from each other in turn.
+ */
+function beats(build: HostBuild, holder: Host): boolean {
+  const theirs = rankOf(holder);
+  if (!theirs && holder.rank !== undefined) return false;
+  return outranks(rankFor(build), theirs);
+}
+
+/** A host that outranks this one holds the page: hold nothing on this load, and let both say so. */
+function standDown(options: MountOptions, holder: Host): void {
+  options.stoodDown?.();
+  if (options.build) holder.outranked?.(rankFor(options.build));
+}
+
+/** A host stood down for this one: the footer names it. */
+function outranked(other: object): void {
+  beaten = { other: rankOf({ rank: other }) };
+  if (!mounted || !panel) return;
+  detach();
+  attach(mounted);
 }
 
 /** A host stepped aside for this copy: mount as on a page with no host, its preference in the settings. */
@@ -354,7 +415,20 @@ export function unmount(): void {
 }
 
 function retake(options: MountOptions, native: { on: boolean; note: string | null } | null): void {
-  if (mounted || !owned(window) || hostOf(window)) return;
+  if (mounted || !owned(window)) return;
+  const holder = hostOf(window);
+  // Another host took the page: where this one outranks it, such as an older
+  // build that takes the page from any copy, it takes the page back; else it stands down.
+  if (holder) {
+    if (!options.build) return;
+    if (!beats(options.build, holder)) {
+      standDown(options, holder);
+      return;
+    }
+    if (native && !native.on) engine.setNative(false, native.note);
+    mount(current(options));
+    return;
+  }
   // The user prefers the page's copy: it keeps the page.
   if (!takesBack(preferNow)) {
     options.prefer?.yielded?.();

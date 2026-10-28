@@ -103,6 +103,21 @@ the extension's panel wins. it mounts before any of the page's scripts, as the p
 
 prefer, in the panel's settings, picks who runs the panel on such a page: extension (the default, as above) or page. with page, the extension's copy steps aside once the page mounts its own: it takes its panel, frame and patches away, hands the page's knobs back to Chrome, and the page's copy mounts as on a page with no extension, with its own panel and `window.devknobs`. the extension does not take the page back; if the page unmounts its copy, the toolbar button brings the extension's panel back. real browser settings are off in that tab, since the debugger is the extension's. pages without a copy of their own keep the extension's panel. the choice is kept for every site in the Chrome profile; picking extension in the page's panel loads the page again with the extension's. the page's copy needs to know about prefer (devknobs after 0.5.1, or a local build of it); an older one stays under the extension's panel, and one that does not know about the extension (0.3.0 and before) keeps the page. the panel's footer names the copy that runs it and its version, such as `extension 0.5.1` or `page 0.5.1-local.1767225600` for a build `bun run link` put in the site.
 
+### two copies of the extension
+
+with the store's extension and a build of your own (loaded unpacked, its version in `chrome://extensions` such as `0.5.1 · local my-branch (9e966ae)`) both on, one of them holds each page, whichever Chrome runs first: a local build over the store's, then the newer version. the other stands down for that page load: no panel, no patches, no debugger, and its toolbar button opens the panel of the one that holds the page. the footer says so, such as `extension 0.5.1 · local my-branch (9e966ae) · store extension stood down`. prefer is the holding copy's choice.
+
+| on the page                               | who runs the panel                                                               |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| the page's copy only                      | the page's                                                                       |
+| the store extension only                  | the extension's                                                                  |
+| the store extension and the page's copy   | the extension's; the page's with prefer set to page                              |
+| a local extension and the page's copy     | the extension's; the page's with prefer set to page                              |
+| the store extension and a local extension | the local extension's; the store's stands down                                   |
+| all three                                 | the local extension's; the page's with prefer set to page in the local extension |
+
+the store's 0.5.1 and older know no ranks. they stand down the same way for any build that has them, in either order, with `older extension stood down` in the footer: they let another copy of the extension have the page and never take it back from one. knobs such an older copy set in that tab before the local build came on stay set by Chrome until the tab closes or you turn that extension off.
+
 ## permissions
 
 | permission                                                         | what it is for                                                                                                                                                                                |

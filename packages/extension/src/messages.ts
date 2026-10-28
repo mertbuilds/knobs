@@ -101,10 +101,15 @@ export function detachMessage(reason: `${chrome.debugger.DetachReason}`): TabMes
 /**
  * Events on `document` between the page world, where devknobs runs, and the
  * bridge in the extension's own world: a `Request` up, a `PageMessage` down.
- * The detail is json: an object would not cross between the worlds.
+ * The detail is json: an object would not cross between the worlds. Each build's
+ * names are its own (`KNOBS_CHANNEL`).
  */
-export const TO_BRIDGE = 'devknobs-extension:native';
-export const TO_PAGE = 'devknobs-extension:tab';
+const CHANNEL = typeof KNOBS_CHANNEL === 'string' ? `:${KNOBS_CHANNEL}` : '';
+export const TO_BRIDGE = `devknobs-extension:native${CHANNEL}`;
+export const TO_PAGE = `devknobs-extension:tab${CHANNEL}`;
+
+/** `TO_PAGE` of the store's 0.5 builds and older, one name for every copy of the extension. */
+export const LEGACY_TO_PAGE = 'devknobs-extension:tab';
 
 // What a tab sends is the page's to forge: each message is read field by field, and anything
 // else is dropped. devknobs' own bounds hold the numbers in.

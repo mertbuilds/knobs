@@ -33,8 +33,14 @@ await build({
 // Content scripts are classic scripts, one file each. devknobs finds its device
 // images beside `import.meta.url`, which in the page world is the extension's
 // root, handed over by the bridge.
+// Its page world and bridge share an event channel no other build of the extension has, and the
+// page world tells the build's kind, which decides who holds a page two copies of the extension meet on.
 await build({
-  define: { 'import.meta.url': 'globalThis.devknobsExtensionBase' },
+  define: {
+    'import.meta.url': 'globalThis.devknobsExtensionBase',
+    KNOBS_BUILD: JSON.stringify(label ? 'local' : 'store'),
+    KNOBS_CHANNEL: JSON.stringify(crypto.randomUUID().slice(0, 8)),
+  },
   entrypoints: [join(root, 'src/content.ts'), join(root, 'src/bridge.ts')],
   format: 'iife',
 });
