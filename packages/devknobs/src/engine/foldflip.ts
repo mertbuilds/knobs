@@ -1,3 +1,4 @@
+import { formOf } from "./devices";
 import type { Point } from "./fold";
 import type { Face, Picture } from "./foldpage";
 import type { Mock, Radius, Rect } from "./mock";
@@ -36,11 +37,7 @@ function flipRadius(radius: Radius): Radius {
   return [bottomRight, bottomLeft, topLeft, topRight];
 }
 
-/**
- * A mock turned half round. A picture turned with the device turns the other
- * way. One that is not stays as it is, so it is seen half round once the
- * fold is turned back, as the frames' open end is.
- */
+/** A mock turned half round, its picture too: one turned with the device turns the other way. */
 export function flipMock(mock: Mock): Mock {
   const room = { width: mock.width, height: mock.height };
   const { top, right, bottom, left } = mock.inset;
@@ -52,10 +49,39 @@ export function flipMock(mock: Mock): Mock {
     bodyRadius: flipRadius(mock.bodyRadius),
     parts: mock.parts.map((part) => flipRect(part, room)),
   };
-  if (!mock.image || mock.image.turn === null) return flipped;
+  if (!mock.image) return flipped;
+  if (mock.image.turn === null) {
+    const { over, ...still } = mock.image;
+    return { ...flipped, image: over ? still : { ...still, over: true } };
+  }
   // Turned the other way, `turn` is the upright mock's other side.
   const { clockwise, ...image } = mock.image;
   return { ...flipped, image: clockwise ? { ...image, turn: mock.height } : { ...image, turn: mock.width, clockwise: true } };
+}
+
+/** Is the shape `device|orientation|posture` a foldable's cover held across, its top to the right? */
+function coverAcross(shape: string): boolean {
+  const [device = "", held, posture] = shape.split("|");
+  return held === "landscape" && posture === "closed" && formOf(device, "closed")?.clockwise === true;
+}
+
+/** Is the shape such a foldable open and held upright? */
+export function openUpright(shape: string): boolean {
+  const [device = "", held, posture] = shape.split("|");
+  return held === "portrait" && posture === "open" && formOf(device, "closed")?.clockwise === true;
+}
+
+/**
+ * Is the case held the other way up, going from the shape `from` to `to`, `over`
+ * before? Unfolded from the cover held across, the open phone is the same
+ * phone, so its case is half round, its screen's page upright as iOS keeps
+ * it. Its cover across keeps it so, and it stays so while it stays open
+ * upright. Anything else is the case as it is drawn.
+ */
+export function caseOver(from: string, to: string, over: boolean): boolean {
+  if (coverAcross(to)) return true;
+  if (!openUpright(to)) return false;
+  return coverAcross(from) || (from === to && over);
 }
 
 /** A side of a fold in a letterbox `room` big, turned half round. */
