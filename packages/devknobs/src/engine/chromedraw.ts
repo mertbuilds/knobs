@@ -95,7 +95,6 @@ const GLYPHS: Record<Glyph, () => Shapes> = {
   tabs: () => [],
   reload: () => [],
   page: () => [],
-  more: () => [],
 };
 
 function box(className: string, rect: Rect): HTMLElement {

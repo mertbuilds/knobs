@@ -25,28 +25,32 @@ function near(actual: string, expected: string, levels = 3) {
 }
 
 describe("Safari's status bar", () => {
-  test("the battery is iOS 26's: an outline, a gap, a bar as wide as the charge and a cap apart", () => {
+  test("the battery is iOS 27's: a solid body, charged in the glyph's color, the rest gray, a cap apart", () => {
     const { regular, large } = STATUS_GLYPHS;
-    // Measured on the simulator at 69%: 27.33 x 13 on the 17 Pro, 31 x 14.33 on the Pro Max.
-    expect(batteryWidth(regular.battery)).toBeCloseTo(27.33);
-    expect(batteryWidth(large.battery)).toBeCloseTo(31);
+    // Measured on the iOS 27.0 simulator: 29 x 13.67 on the 17 Pro, 32.33 x 15 on the Pro Max.
+    expect(batteryWidth(regular.battery)).toBeCloseTo(29);
+    expect(batteryWidth(large.battery)).toBeCloseTo(32.33);
     const small = batteryParts(regular.battery, 69);
-    expect(small.outline).toMatchObject({ x: 0.5, y: 0.5, width: 24, height: 12, "stroke-width": 1 });
-    expect(small.level).toMatchObject({ x: 2, y: 2, height: 9 });
-    expect(small.level.width).toBeCloseTo(14.49);
-    expect(small.cap).toMatchObject({ x: 26, width: 1.33, height: 4.33 });
+    expect(small.body).toMatchObject({ x: 0, y: 0, width: 26.33, height: 13.67, rx: 4.67 });
+    expect(small.cap).toMatchObject({ x: 27, width: 2, height: 5 });
     expect(small.cap.y).toBeCloseTo(4.335);
+    // The charged part is cut straight at 69% of the body, its left corners the body's.
+    expect(small.level.d).toBe("M18.168 0H4.67A4.67 4.67 0 0 0 0 4.67V9A4.67 4.67 0 0 0 4.67 13.67H18.168Z");
     const big = batteryParts(large.battery, 69);
-    expect(big.level).toMatchObject({ x: 2.33, y: 2.33 });
-    expect(big.level.width).toBeCloseTo(16.33);
-    expect(big.level.height).toBeCloseTo(9.67);
-    expect(big.cap).toMatchObject({ x: 29.33, width: 1.67, height: 5 });
+    expect(big.cap).toMatchObject({ x: 30.33, width: 2, height: 5 });
+    expect(big.cap.y).toBeCloseTo(5);
   });
 
-  test("a nearly empty battery's bar stays round at both ends", () => {
-    const { level } = batteryParts(STATUS_GLYPHS.regular.battery, 5);
-    expect(level.width).toBeCloseTo(1.05);
-    expect(level.rx).toBeCloseTo(0.525);
+  test("a nearly empty or full battery's charged part keeps to the body's round corners", () => {
+    const { battery } = STATUS_GLYPHS.regular;
+    // 5%: inside the left corner, so it starts and ends on the corner's curve.
+    const low = batteryParts(battery, 5).level.d;
+    expect(low.startsWith("M1.316 ")).toBe(true);
+    expect(low).not.toContain("H");
+    // 100%: the whole body, round at all four corners.
+    const full = batteryParts(battery, 100).level.d;
+    expect(full.match(/A/g)).toHaveLength(4);
+    expect(full.startsWith("M26.33 4.67")).toBe(true);
   });
 
   test("the bars, wifi and battery are the simulator's widths and as far apart", () => {
@@ -55,41 +59,47 @@ describe("Safari's status bar", () => {
       const bars = signal.pitch * (signal.heights.length - 1) + signal.width;
       return bars + gap + wifi.width + gap + batteryWidth(battery);
     };
-    // 17 Pro: the bars at 288.33 to the battery's cap at 366.67. Pro Max: 312.33 to 399.33.
-    expect(width(STATUS_GLYPHS.regular)).toBeCloseTo(366.67 - 288.33, 1);
-    expect(width(STATUS_GLYPHS.large)).toBeCloseTo(399.33 - 312.33, 1);
+    // iOS 27.0, 17 Pro: the bars at 284.67 to the battery's cap at 369.67. Pro Max: 309.67 to 401.67.
+    expect(width(STATUS_GLYPHS.regular)).toBeCloseTo(369.67 - 284.67, 1);
+    expect(width(STATUS_GLYPHS.large)).toBeCloseTo(401.67 - 309.67, 1);
+  });
+
+  test("the glyphs are about 7% bigger than iOS 26's 16.33 x 12.33 wifi and 27.33 x 13 battery", () => {
+    const { wifi, signal } = STATUS_GLYPHS.regular;
+    expect([wifi.width, wifi.height]).toEqual([18.67, 13.67]);
+    expect(Math.max(...signal.heights)).toBe(13.67);
+    expect(STATUS_GLYPHS.large.wifi).toMatchObject({ width: 20.33, height: 15 });
   });
 });
 
 describe("Safari's glass", () => {
-  // Sampled inside the capsules on the iOS 26.5 simulator, 17 Pro.
-  test("white content gives near-white glass, grayer in dark, with no hairline", () => {
-    expect(glassTint(hex("#ffffff"), "light")).toEqual({ fill: "#fefefe", glyph: "dark", rim: "none" });
-    expect(glassTint(hex("#ffffff"), "dark")).toEqual({ fill: "#f8f8f8", glyph: "dark", rim: "none" });
+  // Sampled inside the capsules on the iOS 27.0 simulator, 17 Pro.
+  test("white content gives near-white glass in light, gray glass with white glyphs in dark", () => {
+    expect(glassTint(hex("#ffffff"), "light")).toEqual({ fill: "#f8f8f8", glyph: "dark", rim: "none" });
+    expect(glassTint(hex("#ffffff"), "dark")).toEqual({ fill: "#b3b3b3", glyph: "light", rim: "highlight" });
   });
 
-  test("black content gives #191919 glass with a highlight, whatever the scheme", () => {
-    for (const scheme of ["light", "dark"] as const) {
-      expect(glassTint(hex("#000000"), scheme)).toEqual({
-        fill: "#191919",
-        glyph: "light",
-        rim: "highlight",
-      });
-    }
-    expect(glassTint(hex("#111111"), "light").glyph).toBe("light");
+  test("black content gives gray glass with black glyphs in light, #222222 in dark", () => {
+    expect(glassTint(hex("#000000"), "light")).toEqual({ fill: "#898989", glyph: "dark", rim: "none" });
+    expect(glassTint(hex("#000000"), "dark")).toEqual({ fill: "#222222", glyph: "light", rim: "highlight" });
+    // A #111 band on a white page: #8b8b8b in light, #303030 in dark.
+    near(glassTint(hex("#111111"), "light").fill, "#8b8b8b", 6);
+    near(glassTint(hex("#111111"), "dark").fill, "#303030", 6);
   });
 
-  test("saturated content gives glass in its own hue: lighter in light, deeper in dark", () => {
+  test("saturated content gives glass in its own hue: lighter in light, a little brighter in dark", () => {
     const light = glassTint(hex("#1e5bd7"), "light");
-    near(light.fill, "#78b8ff");
+    near(light.fill, "#7eb1ff", 7);
     expect(light).toMatchObject({ glyph: "dark", rim: "tint" });
     const dark = glassTint(hex("#1e5bd7"), "dark");
-    near(dark.fill, "#1661fd");
+    near(dark.fill, "#2a6ef2", 7);
     expect(dark).toMatchObject({ glyph: "light", rim: "tint" });
+    near(glassTint(hex("#13a538"), "light").fill, "#5ce37e", 7);
+    near(glassTint(hex("#13a538"), "dark").fill, "#0ead37", 7);
   });
 
-  test("a dull dark color stays mostly dark glass, a little in its hue", () => {
-    const navy = hex(glassTint(hex("#0a1a40"), "light").fill);
+  test("a dull dark color stays mostly gray glass, a little in its hue", () => {
+    const navy = hex(glassTint(hex("#0a1a40"), "dark").fill);
     expect(navy.blue).toBeGreaterThan(navy.red);
     expect(navy.blue).toBeLessThan(0x80);
   });

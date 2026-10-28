@@ -110,13 +110,16 @@ color there, the content's at the page's bottom edge. a fixed footer's
 color is carried down, as on the phone. minimized, the content under the
 status bar is that at the page's top, not what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
 height, where Safari keeps `svh` at the expanded height and `lvh` and `vh`
-at the minimized one (the whole screen in top). the edge to edge switch
+at the minimized one (the whole screen in top), and so does
+`document.documentElement.clientHeight`, which Safari keeps at the expanded
+height: both are the frame's own layout viewport, which a page's script and
+css cannot set apart from `innerHeight`. the edge to edge switch
 only works with the phone held sideways. the top edge has no fade, as Safari
 shows none there. `env(safe-area-inset-*)` stays 0. there is no keyboard, and the tabs, the
 menus and the share sheet do not open. a page that changes its background
 without a load, a navigation or a scheme change keeps the old color around
-the bars until the next one. Safari is drawn as iOS 26.5 has it, with the
-more button in compact, where iOS 27 has the tabs button. Chrome is its
+the bars until the next one. Safari is drawn as iOS 27.0 has it; the dynamic
+island keeps its iOS 26.5 size, as the iOS 27 simulator does not draw it. Chrome is its
 classic toolbar, with no theme color and no dynamic color.
 
 ## the frame

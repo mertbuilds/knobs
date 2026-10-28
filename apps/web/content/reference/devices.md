@@ -101,8 +101,8 @@ none are switched. the browser knob picks the layout, Safari's compact, bottom
 or top and Chrome's top or bottom, or off for the whole screen. the readout
 says the size the page gets.
 
-upright, the page gets Safari's real viewport, measured in iOS 26.5 on an
-iPhone 17 Pro: 402 × 714 in compact, 402 × 654 with the bar at the bottom
+upright, the page gets Safari's real viewport, measured in iOS 27.0 (the same
+as in iOS 26.5) on an iPhone 17 Pro: 402 × 714 in compact, 402 × 654 with the bar at the bottom
 and 402 × 660 at the top (the page starts under the address bar, at 122),
 754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
 `position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
@@ -114,7 +114,8 @@ bar at the bottom of the viewport, carried down as on the phone. the strip over 
 sticky bar at the top, else the page's background. minimized, the strip
 goes: the content at the top of the page shows under the status bar, in a
 wash of the page's color that fades out over 100 px, and the status bar's
-glyphs follow it. the page under the bars is shaded with Safari's light scroll edge. the edge to edge switch
+glyphs follow it. iOS 27 draws no scroll edge under the bottom bars, so the page
+runs on under them at full strength; only the iPhone Duo keeps a light one. the edge to edge switch
 is offered only with the iPhone held sideways, where it still changes the
 frame: on, by default, the page runs under the top row of bars; off, it
 starts under it. upright it is not offered, and a value set earlier is kept
@@ -155,8 +156,15 @@ switch. turned across, Safari keeps one row at the top and leaves room for
 the island at both sides. Chrome's numbers come from the Chromium and AOSP
 sources. the screen around
 the bars takes the page's own background, read again on each load,
-navigation and scheme change, and Safari's glass and glyphs go dark on a
-dark page as they do on the phone. the address shows the frame's host, back
+navigation and scheme change. Safari is drawn as iOS 27.0 has it on the
+simulator: its glass takes its tint from the page under it and from the
+scheme, #f8f8f8 over white and gray with black glyphs over black in light,
+gray with white glyphs over white and #222222 over black in dark, and a
+saturated page's own hue, lighter in light. compact ends in the tabs button,
+the page menu is three lines, and the status bar's glyphs are iOS 27's, about
+7% bigger than iOS 26's, with a flat battery: the charged part in the glyph's
+color, the rest gray, no outline. the iOS 27 simulator does not draw the
+dynamic island, so the island keeps its iOS 26.5 size. the address shows the frame's host, back
 and forward step through the frame's history and reload reloads it, and the
 rest is drawn only. the glyphs are drawn for devknobs, none come from Apple
 or Google. tablets, laptops and desktops have no browser drawn.

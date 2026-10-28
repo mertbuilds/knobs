@@ -15,7 +15,7 @@ import {
 import type { Rect } from "./mock";
 
 /**
- * iOS 26 Safari: Liquid Glass capsules over the page's own color and the
+ * iOS 27 Safari: Liquid Glass capsules over the page's own color and the
  * status bar. No home indicator: it goes once you switch apps, and here none
  * are switched. The glyphs are drawn here from the common ideas
  * (a chevron, a box with an arrow, an open book), not from Apple's symbols.
@@ -53,18 +53,30 @@ export const SAFARI_CSS = `
 }
 .safari [data-tone="light"] { color: #000; }
 .safari [data-tone="dark"] { color: #fff; }
-/* Light glass has no hairline, only a soft wide shadow. */
-.safari [data-rim="none"] { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.065); }
-/* Glass in a page's hue: a lighter rim of its own color. */
+/* Light glass: a thin darker ring outside (#c8c8c8 on white), a white highlight inside, a soft wide shadow. */
+.safari [data-rim="none"] {
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 6px 24px rgba(0, 0, 0, 0.065);
+}
+/* Glass in a page's hue: a lighter rim of its own color inside, iOS 27's darker ring outside. */
 .safari [data-rim="tint"] {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 6px 24px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 6px 24px rgba(0, 0, 0, 0.1);
 }
-/* Dark glass: a faint rim, brighter along the top, and no shadow. */
+/* Dark glass: a rim as bright at the bottom as at the top (#585858 fading to #2b2b2b on #222), the darker ring outside, and no shadow. */
 .safari [data-rim="highlight"] {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 1px 0.5px rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 1.5px 1.5px rgba(255, 255, 255, 0.04);
 }
-.safari .field { background: rgba(0, 0, 0, 0.05); }
-.safari [data-tone="dark"] .field { background: rgba(0, 0, 0, 0.14); }
+/* Bottom's field: toward #ddd in light (#fcfcfc to #f2f2f2, #888 to #a3a3a3), toward #1f1f1f in dark. */
+.safari .field { background: rgba(221, 221, 221, 0.32); }
+.safari [data-tone="dark"] .field { background: rgba(31, 31, 31, 0.73); }
 .safari .glyph {
   fill: none;
   stroke: currentColor;
@@ -72,10 +84,10 @@ export const SAFARI_CSS = `
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.safari .glyph .solid { fill: currentColor; stroke: none; }
 /* Reload and stop are a shade lighter than the other glyphs and thinner, as measured. */
 .safari .glyph .reload { stroke-width: 1.6; }
 .safari .glyph .stop { stroke-width: 1.82; }
+.safari .glyph .page { stroke-width: 2; }
 .safari [data-tone="light"] .glyph .reload, .safari [data-tone="light"] .glyph .stop { stroke: #191919; }
 /* A button that does nothing: its glyph at 30%, #babac7 on white glass, #58585b on dark. */
 .safari .glyph.off { stroke-opacity: 0.3; fill-opacity: 0.3; }
@@ -91,6 +103,9 @@ export const SAFARI_CSS = `
 }
 .safari .time { font-weight: 600; transform: translate(-50%, -50%); }
 .safari .status { fill: currentColor; }
+/* The battery's uncharged rest: #b2b2b2 on white, #808080 on black. */
+.safari .status .rest { fill-opacity: 0.3; }
+.safari.dark .status .rest { fill-opacity: 0.5; }
 /* One surface morphs: its box, corners and color, and the domain glides in it. */
 .safari .surface {
   overflow: hidden;
@@ -197,13 +212,8 @@ const GLYPHS: Record<Glyph, () => Shapes> = {
     path("M6.66 0.92A6.59 6.59 0 1 1 2.93 -5.02", "reload"),
     path("M-0.15 -8.89L3.26 -5.33L-0.16 -1.93", "reload"),
   ],
-  // 15.5 x 18, a page over two lines
-  page: () => [
-    svgNode("rect", { x: -6.8, y: -8.1, width: 13.6, height: 8.6, rx: 2.4 }),
-    path("M-6.8 4.2H6.8M-6.8 8.1H2.6"),
-  ],
-  // Three dots 4 across, 7.8 apart.
-  more: () => [-7.8, 0, 7.8].map((x) => svgNode("circle", { cx: x, cy: 0, r: 2, class: "solid" })),
+  // 16.3 x 12.2, three lines from one left edge, the last 11.3 long, 2 thick
+  page: () => [path("M-6.3 -5.1H8M-6.3 0H8M-6.3 5.1H3", "page")],
   plus: () => [path("M0 -8.5V8.5M-8.5 0H8.5")],
   home: () => [],
   tune: () => [],
@@ -217,59 +227,42 @@ function stopGlyph(): Shapes {
 }
 
 /**
- * The status bar's glyphs, measured on the iOS 26.5 simulator in pt, on the
- * 17 Pro and, a size up, on the 17 Pro Max and the Air. Each sits on the
- * island's center line: the time's digits a little under it, the bars and
- * wifi by their bottom and the battery by its middle, `drop` px down.
+ * The status bar's glyphs, measured on the iOS 27.0 simulator in pt, on the
+ * 17 Pro and, a size up, on the 17 Pro Max and the Air: each about 7% bigger
+ * than iOS 26's. Each sits on the island's center line: the time's digits a
+ * little under it, the bars and wifi by their bottom and the battery by its
+ * middle, `drop` px down.
  */
 export const STATUS_GLYPHS = {
   regular: {
-    time: { size: 17, spacing: -0.09, drop: 1 },
+    time: { size: 18, spacing: -0.09, drop: 0.33 },
     /** The gap between the bars, wifi and the battery. */
-    gap: 7.67,
-    signal: { width: 3.33, pitch: 5.33, heights: [4.67, 7, 9.67, 12.33], radius: 1, drop: 6.4 },
+    gap: 8.5,
+    signal: { width: 3.33, pitch: 5.67, heights: [6.33, 8.67, 11, 13.67], radius: 1.1, drop: 7.67 },
     // Three bands round the bottom corner, their ends rounded by a stroke `round` wide.
     wifi: {
-      width: 16.33,
-      height: 12.33,
-      bands: [0, 2.83, 5.5, 7.07, 9.73, 11.33],
-      angle: 42.6,
-      round: 1,
-      drop: 6.4,
-    },
-    battery: {
-      width: 25,
-      height: 13,
-      line: 1,
-      radius: 4.33,
-      inset: 2,
-      fill: 2.67,
-      cap: [1.33, 4.33],
-      drop: 0.17,
-    },
-  },
-  large: {
-    time: { size: 18, spacing: -0.09, drop: 0.83 },
-    gap: 7.67,
-    signal: { width: 3.67, pitch: 6, heights: [5.33, 7.67, 10.67, 13.67], radius: 1.1, drop: 6.67 },
-    wifi: {
-      width: 19,
+      width: 18.67,
       height: 13.67,
       bands: [0, 3.14, 6.09, 7.83, 10.78, 12.57],
       angle: 45.4,
       round: 1.1,
-      drop: 6.67,
+      drop: 7.33,
     },
-    battery: {
-      width: 28.33,
-      height: 14.33,
-      line: 1.1,
-      radius: 4.67,
-      inset: 2.33,
-      fill: 3,
-      cap: [1.67, 5],
-      drop: -0.17,
+    battery: { width: 26.33, height: 13.67, radius: 4.67, gap: 0.67, cap: [2, 5], drop: -0.5 },
+  },
+  large: {
+    time: { size: 19, spacing: -0.09, drop: 0.5 },
+    gap: 8.67,
+    signal: { width: 3.67, pitch: 6.11, heights: [7, 9.33, 12, 15], radius: 1.2, drop: 8.33 },
+    wifi: {
+      width: 20.33,
+      height: 15,
+      bands: [0, 3.45, 6.68, 8.59, 11.83, 13.79],
+      angle: 45,
+      round: 1.2,
+      drop: 8,
     },
+    battery: { width: 29.33, height: 15, radius: 5, gap: 1, cap: [2, 5], drop: -0.5 },
   },
 } as const;
 
@@ -320,37 +313,48 @@ function signal(x: number, bottom: number, size: Glyphs["signal"]): SVGSVGElemen
   return svg;
 }
 
-/** The battery's whole width: the cell, a 1 px gap and its cap. */
+/** The battery's whole width: the body, the gap and its cap. */
 export function batteryWidth(size: Glyphs["battery"]): number {
-  return size.width + 1 + size.cap[0];
+  return size.width + size.gap + size.cap[0];
 }
 
 /**
- * iOS 26's battery, in px of its box: a cell outlined at 40% of the glyph's
- * color, a clear gap, a bar inside as wide as the charge, and the cap apart
- * from the cell, at half. No percentage, as iOS shows it by default.
+ * The charged part of a body `width` by `height` with corners `radius`
+ * round: the body cut straight down `level` in from its left.
+ */
+function chargedPath(width: number, height: number, radius: number, level: number): string {
+  const r = Math.min(radius, height / 2, width / 2);
+  const x = Math.max(0, Math.min(width, level));
+  // How far down from the top edge the corner's curve is at `along` in from the nearer side.
+  const inset = (along: number) => r - Math.sqrt(Math.max(0, r * r - (r - along) ** 2));
+  const f = (n: number) => Number(n.toFixed(3));
+  if (x <= r) {
+    const y = inset(x);
+    return `M${f(x)} ${f(y)}A${r} ${r} 0 0 0 0 ${r}V${f(height - r)}A${r} ${r} 0 0 0 ${f(x)} ${f(height - y)}Z`;
+  }
+  const left = `H${r}A${r} ${r} 0 0 0 0 ${r}V${f(height - r)}A${r} ${r} 0 0 0 ${r} ${height}`;
+  if (x < width - r) return `M${f(x)} 0${left}H${f(x)}Z`;
+  const y = inset(width - x);
+  return (
+    `M${f(x)} ${f(y)}A${r} ${r} 0 0 0 ${f(width - r)} 0${left}` +
+    `H${f(width - r)}A${r} ${r} 0 0 0 ${f(x)} ${f(height - y)}Z`
+  );
+}
+
+/**
+ * iOS 27's battery, in px of its box: a solid flat body, as much of it as
+ * the charge in the glyph's color and the rest flat gray, no outline, and
+ * the cap apart from the body, gray too. No percentage, as iOS shows it by
+ * default. Measured on the iOS 27.0 simulator: 26.33 x 13.67 with a 2 x 5
+ * cap 0.67 off on the 17 Pro, 29.33 x 15 and 1 off on the Pro Max.
  */
 export function batteryParts(size: Glyphs["battery"], charge: number) {
-  const { width, height, line, radius, inset, fill, cap } = size;
-  const level = ((width - 2 * inset) * charge) / 100;
+  const { width, height, radius, gap, cap } = size;
   const [capWidth, capHeight] = cap;
   return {
-    outline: {
-      x: line / 2,
-      y: line / 2,
-      width: width - line,
-      height: height - line,
-      rx: radius - line / 2,
-      "stroke-width": line,
-    },
-    level: {
-      x: inset,
-      y: inset,
-      width: level,
-      height: height - 2 * inset,
-      rx: Math.min(fill, level / 2),
-    },
-    cap: { x: width + 1, y: (height - capHeight) / 2, width: capWidth, height: capHeight },
+    body: { x: 0, y: 0, width, height, rx: radius },
+    level: { d: chargedPath(width, height, radius, (width * charge) / 100) },
+    cap: { x: width + gap, y: (height - capHeight) / 2, width: capWidth, height: capHeight },
   };
 }
 
@@ -359,19 +363,19 @@ function battery(x: number, middle: number, size: Glyphs["battery"]): SVGSVGElem
   const wide = batteryWidth(size);
   const svg = svgNode("svg", { class: "status", viewBox: `0 0 ${wide} ${size.height}` });
   place(svg, x, middle - size.height / 2, wide, size.height);
-  const { outline, level, cap } = batteryParts(size, CHARGE);
+  const { body, level, cap } = batteryParts(size, CHARGE);
   // The cap's outer end is round.
   const r = Math.min(cap.width, cap.height / 2);
   const end = cap.x + cap.width;
   const bottom = cap.y + cap.height;
   svg.append(
-    svgNode("rect", { ...outline, fill: "none", stroke: "currentColor", "stroke-opacity": 0.4 }),
-    svgNode("rect", level),
+    svgNode("rect", { ...body, class: "rest" }),
+    svgNode("path", level),
     svgNode("path", {
       d:
         `M${cap.x} ${cap.y}H${end - r}A${r} ${r} 0 0 1 ${end} ${cap.y + r}` +
         `V${bottom - r}A${r} ${r} 0 0 1 ${end - r} ${bottom}H${cap.x}Z`,
-      "fill-opacity": 0.5,
+      class: "rest",
     }),
   );
   return svg;
@@ -561,26 +565,35 @@ export interface Tint {
 }
 
 /**
+ * The glass's neutral gray over black and over white content, by scheme,
+ * measured on the iOS 27.0 simulator: the scheme pulls it toward its own
+ * side, so black content in light gives gray glass and white content in dark
+ * a lighter gray.
+ */
+const GLASS_GRAY = { light: [0x89, 0xf8], dark: [0x22, 0xb3] } as const;
+
+/**
  * The glass over `under` in a page of `scheme`, from pairs measured on the
- * iOS 26.5 simulator. The glass takes its tone from the page under it, not
- * from the scheme: light content gives near-white glass (#fefefe, a little
- * grayer at #f8f8f8 in dark), dark content #191919 glass, and saturated
- * content glass in its own hue, lighter in light (#1e5bd7 gives #78b8ff with
- * dark glyphs) and deeper in dark (#1661fd with white glyphs). Colors in
- * between mix the two by how saturated they are.
+ * iOS 27.0 simulator. The glass takes its tone from the content and from the
+ * scheme: light mode gives #f8f8f8 over white and #898989 over black, dark
+ * mode #b3b3b3 over white and #222222 over black, gray in between by the
+ * content's lightness. Saturated content gives glass in its own hue, lighter
+ * in light (#1e5bd7 gives #7eb1ff, #13a538 #5ce37e) and a little brighter in
+ * dark (#2a6ef2, #0ead37). Colors in between mix the two by how saturated
+ * they are. The glyphs on it follow the scheme alone: black in light, white
+ * in dark, whatever the glass.
  */
 export function glassTint(under: Color, scheme: "light" | "dark"): Tint {
   const [hue, saturation, lightness] = hslOf(under);
-  // Light content is the content black text reads better on than white.
-  const light = luminance(under.red, under.green, under.blue) > 0.179;
-  const gray = light ? (scheme === "light" ? 0xfe : 0xf8) : 0x19;
+  const [low, high] = GLASS_GRAY[scheme];
+  const gray = low + (high - low) * lightness;
   const neutral: Color = { red: gray, green: gray, blue: gray, alpha: 1 };
-  const hued =
-    scheme === "light"
-      ? fromHsl(hue - 8, Math.min(1, saturation + 0.245), Math.min(0.9, lightness + 0.255))
-      : fromHsl(hue + 1, Math.min(1, saturation + 0.225), Math.min(0.85, lightness + 0.06));
+  const light = scheme === "light";
+  const hued = light
+    ? fromHsl(hue - 4, Math.min(1, saturation * 1.3 + 0.05), Math.min(0.9, lightness + 0.26))
+    : fromHsl(hue, Math.min(1, saturation + 0.15), Math.min(0.9, lightness * 1.4 - 0.1));
   const chroma = saturation * (1 - Math.abs(2 * lightness - 1));
-  const share = Math.min(1, chroma / 0.7);
+  const share = Math.min(1, chroma / (light ? 0.8 : 0.7));
   const mix = (a: number, b: number) => a + (b - a) * share;
   const fill: Color = {
     red: mix(neutral.red, hued.red),
@@ -588,8 +601,8 @@ export function glassTint(under: Color, scheme: "light" | "dark"): Tint {
     blue: mix(neutral.blue, hued.blue),
     alpha: 1,
   };
-  const glyph = luminance(fill.red, fill.green, fill.blue) > 0.3 ? "dark" : "light";
-  const rim = share > 0.3 ? "tint" : glyph === "light" ? "highlight" : "none";
+  const glyph = light ? "dark" : "light";
+  const rim = share > 0.3 ? "tint" : light ? "none" : "highlight";
   return { fill: hexOf(fill), glyph, rim };
 }
 

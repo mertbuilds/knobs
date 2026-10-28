@@ -5,9 +5,9 @@ import { BODIES } from "./mockdata";
 
 /**
  * The browser a phone shows the page in, drawn around it inside the screen:
- * Safari on an iPhone, Chrome on an Android phone. The numbers are iOS 26.5
- * Safari measured in the simulator, and Chrome's from the Chromium and AOSP
- * sources, in css px of the screen.
+ * Safari on an iPhone, Chrome on an Android phone. The numbers are iOS 27.0
+ * Safari measured in the simulator, where it kept iOS 26.5's geometry, and
+ * Chrome's from the Chromium and AOSP sources, in css px of the screen.
  */
 
 export type Platform = "safari" | "chrome";
@@ -99,11 +99,13 @@ interface SafariSpec {
 
 /**
  * The status bar of the 17, 17 Pro and 16 Pro, of the Pro Max and of the
- * Air, measured on the iOS 26.5 simulator. The 16 Pro Max is the 17 Pro
- * Max's, the same screen round the same island.
+ * Air: the time's center measured on the iOS 26.5 simulator, the battery's
+ * right end on the iOS 27.0 simulator, 3 and 2.33 further out for its bigger
+ * glyphs. The 16 Pro Max is the 17 Pro Max's, the same screen round the same
+ * island.
  */
-const STATUS_PRO = { time: 73.83, right: 366.67 };
-const STATUS_MAX = { time: 83.17, right: 399.33 };
+const STATUS_PRO = { time: 73.83, right: 369.67 };
+const STATUS_MAX = { time: 83.17, right: 401.67 };
 
 /**
  * The 16 family and the SE are measured. The 17 family and the Air have the
@@ -116,7 +118,7 @@ const SAFARI: Record<string, SafariSpec> = {
   "iphone-18-pro-max": { top: 62, side: 62, faceId: true },
   "iphone-duo-closed": { top: 0, side: 0, faceId: true, duo: "cover" },
   "iphone-duo-open": { top: DUO_INNER.top, side: 0, faceId: true, duo: "inner" },
-  "iphone-air": { top: 68, side: 68, faceId: true, status: { time: 77.17, right: 385.33 } },
+  "iphone-air": { top: 68, side: 68, faceId: true, status: { time: 77.17, right: 387.67 } },
   "iphone-17": { top: 62, side: 62, faceId: true, status: STATUS_PRO },
   "iphone-17-pro": { top: 62, side: 62, faceId: true, status: STATUS_PRO },
   "iphone-17-pro-max": { top: 62, side: 62, faceId: true, status: STATUS_MAX },
@@ -240,8 +242,8 @@ export function viewportOf(
   if (safari) {
     // Edge to edge turned across, the page runs under the row of bars at the
     // top. Upright, where the switch does nothing, the frame is the viewport
-    // Safari gives the page, as measured on the iOS 26.5 simulator, so
-    // `innerHeight`, `dvh` and a fixed `bottom: 0` land where they do on the
+    // Safari gives the page, as measured on the iOS 26.5 and 27.0 simulators,
+    // so `innerHeight`, `dvh` and a fixed `bottom: 0` land where they do on the
     // phone, and the screen under it takes the page's color there instead.
     if (edge && orientation === "landscape") return rect(safari.side, 0, W - 2 * safari.side, H);
     if (orientation === "landscape") {
@@ -281,7 +283,6 @@ export type Glyph =
   | "tabs"
   | "reload"
   | "page"
-  | "more"
   | "plus"
   | "home"
   | "tune"
@@ -418,10 +419,10 @@ export function alphaAt(fade: Fade, y: number): number {
 }
 
 /**
- * The scroll edge over a page drawn to the bottom of the screen, as a real
- * iPhone shows it: clear 40 px over the top of the bottom bars, rising to
- * 0.55 of the page's color at the bottom, and only over the last 24 px,
- * weaker, while the bars are minimized. Never opaque. Estimates from a
+ * The scroll edge over a page drawn to the bottom of the Duo's screen, as a
+ * real iPhone on iOS 26 showed it: clear 40 px over the top of the bottom
+ * bars, rising to 0.55 of the page's color at the bottom, and only over the
+ * last 24 px, weaker, while the bars are minimized. Never opaque. Estimates from a
  * screenshot of a real iPhone.
  */
 function edgeFade(bars: Bars, H: number, span?: { x: number; width: number }): Fade {
@@ -594,7 +595,7 @@ function safariBars(
     bars.shapes = [
       capsule("glass", rect(34, y, 48, 48), [mark("back", 58, middle)]),
       address("glass", rect(90, y, W - 180, 48), 24, 22),
-      capsule("glass", rect(W - 82, y, 48, 48), [mark("more", W - 58, middle)]),
+      capsule("glass", rect(W - 82, y, 48, 48), [mark("tabs", W - 58, middle)]),
     ];
     return bars;
   }
@@ -649,7 +650,7 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
   }
   // The size by the screen's width alone.
   const large = W >= 420;
-  const size = large ? 18 : 17;
+  const size = large ? 19 : 18;
   if (!island) {
     const y = spec.top / 2 + 2;
     return {
@@ -673,7 +674,7 @@ function safariStatus(id: string, spec: SafariSpec, W: number): StatusBar {
   return {
     height: spec.top,
     time: { x: spec.status?.time ?? left * 0.535, y: island.y, size },
-    icons: { x: spec.status?.right ?? W - (large ? 40.67 : 35.33), y: island.y, align: "end" },
+    icons: { x: spec.status?.right ?? W - (large ? 38.33 : 32.33), y: island.y, align: "end" },
     large,
   };
 }
@@ -781,7 +782,9 @@ export function barsOf(
     const { height: H } = turn(device, orientation);
     const page = viewportOf(device, orientation, layout, minimized);
     const span = safari.duo === "cover" ? { x: page.x, width: page.width } : undefined;
-    return { ...bars, edge: true, fade: upright ? edgeFade(bars, H, span) : null };
+    // iOS 27 draws no scroll edge under an iPhone's bottom bars: the content
+    // runs on at full strength, measured on the iOS 27.0 simulator.
+    return { ...bars, edge: true, fade: safari.duo ? edgeFade(bars, H, span) : null };
   }
   const chrome = CHROME[device.id];
   if (chrome) return chromeBars(device, chrome, orientation, layout, minimized);

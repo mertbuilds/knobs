@@ -272,16 +272,14 @@ describe("edge to edge", () => {
     expect(barsOf(device("pixel-9"), "portrait", "top", true)?.scrim).toBeNull();
   });
 
-  test("the scroll edge is light, 0.55 at the bottom at most, and short when minimized", () => {
+  test("iOS 27 draws no scroll edge under an iPhone's bottom bars, in any layout", () => {
     const pro = device("iphone-16-pro");
     const full = barsOf(pro, "portrait", "compact", false, true);
     expect(full?.edge).toBe(true);
-    expect(full?.fade).toMatchObject({ y: 792 - 40, height: 122 });
-    expect(full?.fade?.stops.at(-1)).toEqual({ at: 122, alpha: 0.55 });
-    expect(Math.max(...(full?.fade?.stops.map((stop) => stop.alpha) ?? []))).toBeLessThan(1);
-    const mini = barsOf(pro, "portrait", "compact", true, true);
-    expect(mini?.fade).toMatchObject({ y: 850, height: 24 });
-    expect(barsOf(pro, "portrait", "bottom", false, true)?.fade?.y).toBe(732 - 40);
+    expect(full?.fade).toBeNull();
+    expect(barsOf(pro, "portrait", "compact", true, true)?.fade).toBeNull();
+    expect(barsOf(pro, "portrait", "bottom", false, true)?.fade).toBeNull();
+    expect(barsOf(pro, "portrait", "top", false, true)?.fade).toBeNull();
     expect(barsOf(pro, "landscape", "compact", false, true)?.fade).toBeNull();
     expect(barsOf(device("pixel-9"), "portrait", "top", false, true)?.edge).toBe(false);
   });
@@ -320,14 +318,15 @@ describe("bars", () => {
 
   test("Compact floats three capsules 34 over the bottom, 8 apart", () => {
     const bars = barsOf(pro, "portrait", "compact", false);
-    const [back, field, more] = bars?.shapes ?? [];
+    const [back, field, tabs] = bars?.shapes ?? [];
     expect(back).toMatchObject({ x: 34, y: 792, width: 48, height: 48, radius: 24 });
     expect(field).toMatchObject({ x: 90, width: 222, height: 48, radius: 24 });
-    expect(more).toMatchObject({ x: 320, width: 48 });
+    expect(tabs).toMatchObject({ x: 320, width: 48 });
     expect(field?.marks.map((entry) => entry.glyph)).toEqual(["page", "reload"]);
     expect(field?.marks[0]?.x).toBe(114);
     expect(field?.marks[1]?.x).toBe(290);
-    expect(more?.marks[0]?.glyph).toBe("more");
+    // iOS 27's Compact ends in Tabs, where iOS 26 had "...".
+    expect(tabs?.marks[0]).toMatchObject({ glyph: "tabs", x: 344, y: 816 });
   });
 
   test("Bottom draws a card with the address field and five buttons", () => {
@@ -477,12 +476,13 @@ describe("bars", () => {
     for (const id of ["iphone-17-pro-max", "iphone-air", "iphone-16-pro-max", "iphone-16-plus", "iphone-18-pro-max"]) {
       expect(status(id)?.large).toBe(true);
     }
-    expect(status("iphone-17-pro")).toMatchObject({ time: { x: 73.83, size: 17 }, icons: { x: 366.67 } });
-    expect(status("iphone-17-pro-max")).toMatchObject({ time: { x: 83.17, size: 18 }, icons: { x: 399.33 } });
-    expect(status("iphone-air")).toMatchObject({ time: { x: 77.17, size: 18 }, icons: { x: 385.33 } });
+    // The battery's right end on the iOS 27.0 simulator.
+    expect(status("iphone-17-pro")).toMatchObject({ time: { x: 73.83, size: 18 }, icons: { x: 369.67 } });
+    expect(status("iphone-17-pro-max")).toMatchObject({ time: { x: 83.17, size: 19 }, icons: { x: 401.67 } });
+    expect(status("iphone-air")).toMatchObject({ time: { x: 77.17, size: 19 }, icons: { x: 387.67 } });
     // Unmeasured: as far in from the edge as the 17 Pro's, or the Pro Max's.
-    expect(status("iphone-18-pro")?.icons.x).toBeCloseTo(402 - 35.33);
-    expect(status("iphone-18-pro-max")?.icons.x).toBeCloseTo(440 - 40.67);
+    expect(status("iphone-18-pro")?.icons.x).toBeCloseTo(402 - 32.33);
+    expect(status("iphone-18-pro-max")?.icons.x).toBeCloseTo(440 - 38.33);
     expect(status("iphone-se")?.large).toBe(false);
   });
 
