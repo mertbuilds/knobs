@@ -951,9 +951,10 @@ export default function FoldTunePanel() {
     return () => clearInterval(timer);
   }, [tune]);
 
+  // Closing takes the card away and lets go of its place in the top layer.
   useEffect(() => {
     const el = card.current;
-    if (el === null) {
+    if (closed || el === null) {
       return;
     }
     el.style.transform = `translate(${place.x}px, ${place.y}px)`;
@@ -969,7 +970,7 @@ export default function FoldTunePanel() {
       gone = true;
       hold?.release();
     };
-  }, []);
+  }, [closed]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     const el = card.current;
