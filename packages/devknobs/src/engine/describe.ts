@@ -238,7 +238,7 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
             flag,
           ),
           devIcon: field(
-            "The yellow DEV ribbon on the tab's icon and the apple-touch-icon. auto shows it on a local host only: localhost, *.localhost, *.local, a loopback or private network address.",
+            "The yellow DEV ribbon on the tab's icon and the apple-touch-icon. auto shows it on a local host only: localhost, *.localhost, *.local, 0.0.0.0, a loopback or private network address.",
             oneOf(DEV_ICONS),
           ),
         },
