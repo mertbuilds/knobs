@@ -159,7 +159,42 @@ describe("bezelMock", () => {
     expect((mock?.image?.x ?? 0) + 72 / 3).toBeCloseTo(mock?.inset.left ?? 0);
     expect((mock?.image?.y ?? 0) + 69 / 3).toBeCloseTo(mock?.inset.top ?? 0);
     expect(mock?.image?.turn).toBeNull();
-    expect(mock?.parts).toEqual([]);
+    // Its island, flat black over the image's.
+    expect(mock?.parts).toEqual([
+      { kind: "sensor", x: (72 - 16) / 3 + 154, y: (69 - 22) / 3 + 14.3, width: 94, height: 36.1, radius: 18.05 },
+    ]);
+    expect(mock?.continuous).toBe(true);
+  });
+
+  test("covers the image's island with a flat one, either way up, and nothing else", () => {
+    for (const [id, { portrait }] of Object.entries(BEZELS)) {
+      const upright = bezelMock(id, "portrait");
+      const turned = bezelMock(id, "landscape");
+      const [island] = upright?.parts ?? [];
+      // An island is far wider than tall, a camera hole round.
+      const pill = portrait.cutout !== undefined && portrait.cutout[2] > 2 * portrait.cutout[3];
+      expect(upright?.parts.length).toBe(pill ? 1 : 0);
+      expect(upright?.continuous).toBe(pill);
+      if (!upright || !island || !portrait.cutout) continue;
+      const [left, top, width, height] = portrait.cutout;
+      const [x, y] = portrait.opening;
+      const density = densityAt(id, portrait);
+      // Over it, give or take a tenth of a px, and less than a px bigger.
+      const shown = { x: (left - x) / density, y: (top - y) / density, w: width / density, h: height / density };
+      const at = { x: island.x - upright.inset.left, y: island.y - upright.inset.top };
+      expect(at.x).toBeLessThanOrEqual(shown.x + 0.1);
+      expect(at.y).toBeLessThanOrEqual(shown.y + 0.1);
+      expect(at.x + island.width).toBeGreaterThanOrEqual(shown.x + shown.w - 0.1);
+      expect(at.y + island.height).toBeGreaterThanOrEqual(shown.y + shown.h - 0.1);
+      expect(island.width - shown.w).toBeLessThan(1);
+      // Held across, it is on the left, where the image's top is.
+      const [across] = turned?.parts ?? [];
+      expect(across).toMatchObject({ width: island.height, height: island.width });
+      expect(across?.x).toBeCloseTo(island.y);
+      expect(across?.y).toBeCloseTo(upright.width - island.x - island.width);
+    }
+    expect(bezelMock("pixel-10", "portrait")?.parts).toEqual([]);
+    expect(bezelMock("iphone-duo-closed", "portrait")?.continuous).toBe(false);
   });
 
   test("is the screen and the room around it, either way up", () => {

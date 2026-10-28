@@ -1604,13 +1604,17 @@ describe("a phone's body", () => {
     expect(Reflect.get(glass().style, "boxShadow")).toBe("");
     await Bun.sleep(0);
     const [image, ...rest] = mockDrawing().children;
-    expect(rest).toEqual([]);
+    // The island goes flat black over the image's.
+    expect(rest.map((element) => element.getAttribute("class"))).toEqual(["sensor"]);
     expect(image?.tagName).toBe("image");
     expect(image?.getAttribute("href")).toEndWith("/bezels/iphone-18-pro-max.webp");
     expect(image?.getAttribute("width")).toBe("490");
     expect(Reflect.get(glass().style, "left")).toBe(left);
     expect(Reflect.get(glass().style, "borderRadius")).toBe("62px 62px 62px 62px");
     expect(Reflect.get(glass().style, "boxShadow")).toBe("0 0 0 2px #000");
+    // Its continuous corners, where the browser draws them, from the same radius.
+    expect(Reflect.get(glass(), "className")).toBe("glass mocked continuous");
+    expect(glass().style.getPropertyValue("--continuous")).toBe(`${62 * 1.363}px`);
   });
 
   test("is the drawn mock when the image does not load, as with the folder deleted", async () => {

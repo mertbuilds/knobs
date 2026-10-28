@@ -353,7 +353,7 @@ describe("bars", () => {
 
   test("the status bar is the top inset, its time on the island's line", () => {
     expect(barsOf(pro, "portrait", "compact", false)?.status).toMatchObject({ height: 62 });
-    expect(barsOf(pro, "portrait", "compact", false)?.status?.time.y).toBeCloseTo(31.85);
+    expect(barsOf(pro, "portrait", "compact", false)?.status?.time.y).toBeCloseTo(32.335);
     expect(barsOf(device("iphone-se"), "portrait", "top", false)?.status).toMatchObject({
       height: 20,
       time: { x: 187.5 },
@@ -364,11 +364,11 @@ describe("bars", () => {
     const status = (id: string) => barsOf(device(id), "portrait", "compact", false)?.status;
     // The 18 Pro's island is narrower, so its left ear is wider and the time further in.
     expect(status("iphone-18-pro")?.time.x).toBeCloseTo(154 * 0.535);
-    expect(status("iphone-17-pro")?.time.x).toBeCloseTo(138.8 * 0.535);
+    expect(status("iphone-17-pro")?.time.x).toBeCloseTo(73.83);
     expect(status("iphone-18-pro")?.time.y).toBeCloseTo(14.3 + 36.1 / 2);
     // The Air's island sits 6 lower, and its status bar is 6 taller.
     expect(status("iphone-air")).toMatchObject({ height: 68 });
-    expect(status("iphone-air")?.time.y).toBeCloseTo(38.4);
+    expect(status("iphone-air")?.time.y).toBeCloseTo(38.335);
     // The cover screen: everything left of the hole, on its center line.
     const cover = status("iphone-duo-closed");
     expect(cover).toMatchObject({ height: 82, icons: { align: "end" } });
@@ -379,6 +379,23 @@ describe("bars", () => {
     // The inner screen has no cut-out: a plain bar, clear of the round corners.
     const inner = status("iphone-duo-open");
     expect(inner).toMatchObject({ height: 40, time: { x: 58, y: 22 }, icons: { x: 633, y: 22 } });
+  });
+
+  test("the big screens get iOS's larger status bar, each where the simulator has it", () => {
+    const status = (id: string) => barsOf(device(id), "portrait", "compact", false)?.status;
+    for (const id of ["iphone-17-pro", "iphone-17", "iphone-16-pro", "iphone-16", "iphone-18-pro"]) {
+      expect(status(id)?.large).toBe(false);
+    }
+    for (const id of ["iphone-17-pro-max", "iphone-air", "iphone-16-pro-max", "iphone-16-plus", "iphone-18-pro-max"]) {
+      expect(status(id)?.large).toBe(true);
+    }
+    expect(status("iphone-17-pro")).toMatchObject({ time: { x: 73.83, size: 17 }, icons: { x: 366.67 } });
+    expect(status("iphone-17-pro-max")).toMatchObject({ time: { x: 83.17, size: 18 }, icons: { x: 399.33 } });
+    expect(status("iphone-air")).toMatchObject({ time: { x: 77.17, size: 18 }, icons: { x: 385.33 } });
+    // Unmeasured: as far in from the edge as the 17 Pro's, or the Pro Max's.
+    expect(status("iphone-18-pro")?.icons.x).toBeCloseTo(402 - 35.33);
+    expect(status("iphone-18-pro-max")?.icons.x).toBeCloseTo(440 - 40.67);
+    expect(status("iphone-se")?.large).toBe(false);
   });
 
   test("Chrome draws its toolbar, pill, chin and hairline per layout", () => {

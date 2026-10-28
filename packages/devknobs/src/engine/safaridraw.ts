@@ -86,10 +86,8 @@ export const SAFARI_CSS = `
   letter-spacing: -0.2px;
   transform: translate(-50%, -50%);
 }
-.safari .time { font-weight: 600; letter-spacing: -0.3px; transform: translate(-50%, -50%); }
+.safari .time { font-weight: 600; transform: translate(-50%, -50%); }
 .safari .status { fill: currentColor; }
-.safari .level { fill: #fff; font-size: 9.5px; font-weight: 600; letter-spacing: -0.3px; }
-.safari.dark .level { fill: #000; }
 /* One surface morphs: its box, corners and color, and the domain glides in it. */
 .safari .surface {
   overflow: hidden;
@@ -212,6 +210,65 @@ function stopGlyph(): Shapes {
   return [path("M-5.66 -5.54L5.88 6M5.88 -5.54L-5.66 6", "stop")];
 }
 
+/**
+ * The status bar's glyphs, measured on the iOS 26.5 simulator in pt, on the
+ * 17 Pro and, a size up, on the 17 Pro Max and the Air. Each sits on the
+ * island's center line: the time's digits a little under it, the bars and
+ * wifi by their bottom and the battery by its middle, `drop` px down.
+ */
+export const STATUS_GLYPHS = {
+  regular: {
+    time: { size: 17, spacing: -0.09, drop: 1 },
+    /** The gap between the bars, wifi and the battery. */
+    gap: 7.67,
+    signal: { width: 3.33, pitch: 5.33, heights: [4.67, 7, 9.67, 12.33], radius: 1, drop: 6.4 },
+    // Three bands round the bottom corner, their ends rounded by a stroke `round` wide.
+    wifi: {
+      width: 16.33,
+      height: 12.33,
+      bands: [0, 2.83, 5.5, 7.07, 9.73, 11.33],
+      angle: 42.6,
+      round: 1,
+      drop: 6.4,
+    },
+    battery: {
+      width: 25,
+      height: 13,
+      line: 1,
+      radius: 4.33,
+      inset: 2,
+      fill: 2.67,
+      cap: [1.33, 4.33],
+      drop: 0.17,
+    },
+  },
+  large: {
+    time: { size: 18, spacing: -0.09, drop: 0.83 },
+    gap: 7.67,
+    signal: { width: 3.67, pitch: 6, heights: [5.33, 7.67, 10.67, 13.67], radius: 1.1, drop: 6.67 },
+    wifi: {
+      width: 19,
+      height: 13.67,
+      bands: [0, 3.14, 6.09, 7.83, 10.78, 12.57],
+      angle: 45.4,
+      round: 1.1,
+      drop: 6.67,
+    },
+    battery: {
+      width: 28.33,
+      height: 14.33,
+      line: 1.1,
+      radius: 4.67,
+      inset: 2.33,
+      fill: 3,
+      cap: [1.67, 5],
+      drop: -0.17,
+    },
+  },
+} as const;
+
+type Glyphs = (typeof STATUS_GLYPHS)[keyof typeof STATUS_GLYPHS];
+
 /** A ring sector `from` to `to` px out of the corner, `angle` degrees each side of up. */
 function fan(from: number, to: number, angle: number): string {
   const rad = (angle * Math.PI) / 180;
@@ -221,54 +278,85 @@ function fan(from: number, to: number, angle: number): string {
   return `M${at(to, -1)}A${to} ${to} 0 0 1 ${at(to, 1)}${inner}`;
 }
 
-/** Wifi, 17 x 12.3: a dot and two bands fanning out of the bottom corner. */
-function wifi(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "-8.5 -12.3 17 12.3" });
-  place(svg, x, y - 6.15, 17, 12.3);
-  svg.append(
-    ...[fan(0, 3.6, 46), fan(5.5, 8.2, 46), fan(9.9, 12.3, 46)].map((d) => {
-      const round = { "stroke-linejoin": "round", stroke: "currentColor", "stroke-width": 0.6 };
-      return svgNode("path", { d, ...round });
-    }),
-  );
+/** Wifi, its bottom on `bottom`: a dot and two bands fanning out of the bottom corner. */
+function wifi(x: number, bottom: number, size: Glyphs["wifi"]): SVGSVGElement {
+  const { width, height, bands, angle, round } = size;
+  const viewBox = `${-width / 2} ${round / 2 - height} ${width} ${height}`;
+  const svg = svgNode("svg", { class: "status", viewBox });
+  place(svg, x, bottom - height, width, height);
+  const stroke = { "stroke-linejoin": "round", stroke: "currentColor", "stroke-width": round };
+  const pairs = [0, 2, 4].map((at) => fan(bands[at] ?? 0, bands[at + 1] ?? 0, angle));
+  svg.append(...pairs.map((d) => svgNode("path", { d, ...stroke })));
   return svg;
 }
 
-/** Cellular, 18 x 12: four bars rising left to right. An estimate, the simulator shows dots. */
-function signal(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "0 0 18 12" });
-  place(svg, x, y - 6, 18, 12);
+/** Cellular, its bottom on `bottom`: four bars rising left to right. */
+function signal(x: number, bottom: number, size: Glyphs["signal"]): SVGSVGElement {
+  const { width, pitch, heights, radius } = size;
+  const tall = Math.max(...heights);
+  const wide = pitch * (heights.length - 1) + width;
+  const svg = svgNode("svg", { class: "status", viewBox: `0 0 ${wide} ${tall}` });
+  place(svg, x, bottom - tall, wide, tall);
   svg.append(
-    ...[4.4, 6.8, 9.2, 12].map((height, at) =>
-      svgNode("rect", { x: at * 4.93, y: 12 - height, width: 3.2, height, rx: 1 }),
+    ...heights.map((height, at) =>
+      svgNode("rect", { x: at * pitch, y: tall - height, width, height, rx: radius }),
     ),
   );
   return svg;
 }
 
+/** The battery's whole width: the cell, a 1 px gap and its cap. */
+export function batteryWidth(size: Glyphs["battery"]): number {
+  return size.width + 1 + size.cap[0];
+}
+
 /**
- * Battery, 27.3 x 13: the cell filled to its charge over a dimmer rest, the
- * charge written across both, as iOS 26 shows it with the percentage on, and its nub.
+ * iOS 26's battery, in px of its box: a cell outlined at 40% of the glyph's
+ * color, a clear gap, a bar inside as wide as the charge, and the cap apart
+ * from the cell, at half. No percentage, as iOS shows it by default.
  */
-function battery(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "0 0 27.3 13" });
-  place(svg, x, y - 6.5, 27.3, 13);
-  const level = svgNode("text", {
-    class: "level",
-    x: 12.6,
-    y: 6.9,
-    "text-anchor": "middle",
-    "dominant-baseline": "middle",
-  });
-  level.textContent = String(CHARGE);
-  const edge = ((25.2 * CHARGE) / 100).toFixed(2);
+export function batteryParts(size: Glyphs["battery"], charge: number) {
+  const { width, height, line, radius, inset, fill, cap } = size;
+  const level = ((width - 2 * inset) * charge) / 100;
+  const [capWidth, capHeight] = cap;
+  return {
+    outline: {
+      x: line / 2,
+      y: line / 2,
+      width: width - line,
+      height: height - line,
+      rx: radius - line / 2,
+      "stroke-width": line,
+    },
+    level: {
+      x: inset,
+      y: inset,
+      width: level,
+      height: height - 2 * inset,
+      rx: Math.min(fill, level / 2),
+    },
+    cap: { x: width + 1, y: (height - capHeight) / 2, width: capWidth, height: capHeight },
+  };
+}
+
+/** The battery, its middle on `middle`. */
+function battery(x: number, middle: number, size: Glyphs["battery"]): SVGSVGElement {
+  const wide = batteryWidth(size);
+  const svg = svgNode("svg", { class: "status", viewBox: `0 0 ${wide} ${size.height}` });
+  place(svg, x, middle - size.height / 2, wide, size.height);
+  const { outline, level, cap } = batteryParts(size, CHARGE);
+  // The cap's outer end is round.
+  const r = Math.min(cap.width, cap.height / 2);
+  const end = cap.x + cap.width;
+  const bottom = cap.y + cap.height;
   svg.append(
-    svgNode("rect", { x: 0, y: 0, width: 25.2, height: 13, rx: 4.2, "fill-opacity": 0.4 }),
-    svgNode("path", { d: `M4.2 0H${edge}V13H4.2A4.2 4.2 0 0 1 0 8.8V4.2A4.2 4.2 0 0 1 4.2 0Z` }),
-    level,
+    svgNode("rect", { ...outline, fill: "none", stroke: "currentColor", "stroke-opacity": 0.4 }),
+    svgNode("rect", level),
     svgNode("path", {
-      d: "M26.1 4.6a1.2 1.2 0 0 1 1.2 1.2v1.4a1.2 1.2 0 0 1-1.2 1.2Z",
-      "fill-opacity": 0.4,
+      d:
+        `M${cap.x} ${cap.y}H${end - r}A${r} ${r} 0 0 1 ${end} ${cap.y + r}` +
+        `V${bottom - r}A${r} ${r} 0 0 1 ${end - r} ${bottom}H${cap.x}Z`,
+      "fill-opacity": 0.5,
     }),
   );
   return svg;
@@ -276,25 +364,35 @@ function battery(x: number, y: number): SVGSVGElement {
 
 /** The time at its center, the icons beside the island, or the SE's either side of the time. */
 function statusBar(status: StatusBar): Element[] {
+  const glyphs = status.large ? STATUS_GLYPHS.large : STATUS_GLYPHS.regular;
   const time = el("div", "time", "04:20");
   time.style.left = `${status.time.x}px`;
-  time.style.top = `${status.time.y}px`;
+  time.style.top = `${status.time.y + glyphs.time.drop}px`;
   time.style.fontSize = `${status.time.size}px`;
+  time.style.letterSpacing = `${glyphs.time.spacing}px`;
   const { icons } = status;
+  const { signal: bars, wifi: air, battery: cell } = glyphs;
   if (icons.align === "start") {
-    // The SE's icons are a size smaller. An estimate from its 2x screenshots.
+    // The SE's icons are a size smaller, on the time's line. An estimate from its 2x screenshots.
     const end = status.battery ?? { x: icons.x, y: icons.y };
+    const bottom = icons.y + Math.max(...bars.heights) / 2;
     const nodes = [
-      signal(icons.x, icons.y),
-      wifi(icons.x + 23, icons.y),
-      battery(end.x - 27.3, end.y),
+      signal(icons.x, bottom, bars),
+      wifi(icons.x + 23, icons.y + air.height / 2, air),
+      battery(end.x - batteryWidth(cell), end.y, cell),
     ];
     for (const node of nodes) node.style.transform = "scale(0.85)";
     return [time, ...nodes];
   }
-  const cell = icons.x - 27.3;
-  const air = cell - 7.3 - 17;
-  return [time, signal(air - 6 - 18, icons.y), wifi(air, icons.y), battery(cell, icons.y)];
+  const right = icons.x - batteryWidth(cell);
+  const middle = right - glyphs.gap - air.width;
+  const left = middle - glyphs.gap - (bars.pitch * (bars.heights.length - 1) + bars.width);
+  return [
+    time,
+    signal(left, icons.y + bars.drop, bars),
+    wifi(middle, icons.y + air.drop, air),
+    battery(right, icons.y + cell.drop, cell),
+  ];
 }
 
 /** What a glyph does when pressed, where it does anything. */
