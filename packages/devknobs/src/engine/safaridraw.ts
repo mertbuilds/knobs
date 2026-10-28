@@ -2,6 +2,7 @@ import type { Actions, Look, Painted, Shapes } from "./browserkit";
 import { CHARGE, el, glyphAt, MORPH, place, svgNode, textWidth } from "./browserkit";
 import { type Color, luminance, parseColor, parseHex } from "./color";
 import {
+  alphaAt,
   type Bars,
   type Fade,
   type Glyph,
@@ -101,6 +102,9 @@ export const SAFARI_CSS = `
     background-color var(--main) ${MORPH.ease},
     box-shadow var(--main) ${MORPH.ease};
 }
+/* A minimized Safari's wash under the status bar comes and goes with the bars. */
+.safari .scrim { left: 0; right: 0; opacity: 0; transition: opacity var(--main) ${MORPH.ease}; }
+.safari[data-state="min"] .scrim[data-on="true"] { opacity: 1; }
 .safari .domain, .safari .fade {
   transition:
     top var(--main) ${MORPH.ease},
@@ -527,7 +531,7 @@ function glassFill(fill: Color, under: Color): string {
 const WHITE: Color = { red: 255, green: 255, blue: 255, alpha: 1 };
 
 /** The page's color under the point of the screen nearest `x`, `y`, else the page's own. */
-function underAt(look: Look, x: number, y: number): Color {
+export function underAt(look: Look, x: number, y: number): Color {
   let best: string | null = null;
   let far = Infinity;
   for (const sample of look.under) {
@@ -594,6 +598,38 @@ function placeFade(node: HTMLElement, fade: Fade | null, look: Look, edge: Color
   node.style.background = `linear-gradient(to bottom, ${stops.join(", ")})`;
 }
 
+/** `top` over `under`, `alpha` of the way. */
+function over(top: Color, under: Color, alpha: number): Color {
+  const mix = (a: number, b: number) => a * alpha + b * (1 - alpha);
+  return {
+    red: mix(top.red, under.red),
+    green: mix(top.green, under.green),
+    blue: mix(top.blue, under.blue),
+    alpha: 1,
+  };
+}
+
+/**
+ * Lay the minimized bars' scrim in the page's color, and say what the status
+ * bar then shows under its glyphs: the content at the top of the page through
+ * the scrim. Null where a fixed or sticky bar holds the top, which keeps its
+ * color as the strip, and where the bars have no scrim.
+ */
+export function scrimOver(node: HTMLElement, mini: Bars, look: Look): Color | null {
+  const { scrim, status } = mini;
+  const held = look.top !== look.background;
+  node.dataset.on = String(scrim !== null && !held);
+  if (!scrim || held) return null;
+  const page = parseColor(look.background) ?? WHITE;
+  const { red, green, blue } = page;
+  node.style.top = `${scrim.y}px`;
+  node.style.height = `${scrim.height}px`;
+  const stops = scrim.stops.map(({ at, alpha }) => `rgba(${red}, ${green}, ${blue}, ${alpha}) ${at}px`);
+  node.style.background = `linear-gradient(to bottom, ${stops.join(", ")})`;
+  const content = underAt(look, scrim.at.x, scrim.at.y);
+  return over(page, content, alphaAt(scrim, status?.time.y ?? 0));
+}
+
 /**
  * Safari's bars, drawn once for both states (the plus to menu morph of
  * transitions.dev). The address capsule, Bottom's card or Top's address bar
@@ -608,7 +644,8 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
   const fade = el("div", "fade");
   fade.style.left = "0";
   fade.style.right = "0";
-  root.append(fade);
+  const scrim = el("div", "scrim");
+  root.append(scrim, fade);
   if (full.status) root.append(...statusBar(full.status));
   const pill = mini.shapes.find((shape) => shape.kind === "pill") ?? null;
   // The shape that becomes the pill: the one with the domain, or Bottom's card.
@@ -697,8 +734,9 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
     root,
     apply(minimized, sight) {
       root.dataset.state = minimized ? "min" : "max";
-      // The status bar's glyphs follow the strip they are on.
-      const strip = parseColor(sight.top) ?? WHITE;
+      const behind = scrimOver(scrim, mini, sight);
+      // The status bar's glyphs follow the strip they are on, or minimized the page under them.
+      const strip = (minimized ? behind : null) ?? parseColor(sight.top) ?? WHITE;
       const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
       root.className = darkStrip ? "safari dark" : "safari light";
       const shown = minimized ? mini : full;

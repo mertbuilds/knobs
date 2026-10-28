@@ -148,6 +148,10 @@ function rect(x: number, y: number, width: number, height: number): Rect {
 /**
  * Where the page's viewport sits in the screen, and its size: what the page
  * reads as `innerWidth` and `innerHeight`. The whole screen without a browser.
+ * A frame of this size gives `visualViewport`, `dvh` and a fixed `bottom: 0`
+ * as Safari does. Not `svh`, `lvh` and `vh`, which a frame takes from its own
+ * height as it goes: Safari keeps `svh` at the expanded height, and `lvh` and
+ * `vh` at the minimized one, or the whole screen in Top.
  */
 export function viewportOf(
   device: Screen,
@@ -161,13 +165,12 @@ export function viewportOf(
   if (!layout || layout === "off") return whole;
   const safari = SAFARI[device.id];
   if (safari) {
-    // Edge to edge, the page runs under the bars to the bottom of the screen,
-    // in both states, as it looks on the phone. The top keeps the status bar.
-    if (edge) {
-      return orientation === "landscape"
-        ? rect(safari.side, 0, W - 2 * safari.side, H)
-        : rect(0, safari.top, W, H - safari.top);
-    }
+    // Edge to edge turned across, the page runs under the row of bars at the
+    // top. Upright, the frame is the viewport Safari gives the page, as
+    // measured on the iOS 26.5 simulator, so `innerHeight`, `dvh` and a fixed
+    // `bottom: 0` land where they do on the phone, and the screen under it
+    // takes the page's color there instead.
+    if (edge && orientation === "landscape") return rect(safari.side, 0, W - 2 * safari.side, H);
     if (orientation === "landscape") {
       const top = minimized ? 0 : SAFARI_BARS.landscape;
       return rect(safari.side, top, W - 2 * safari.side, H - top);
@@ -194,26 +197,6 @@ export function viewportOf(
   const chin = minimized ? 0 : CHROME_BARS.chin;
   const height = tall - chrome.top - toolbar - chin;
   return rect(0, chrome.top + (layout === "top" ? toolbar : 0), W, height);
-}
-
-/**
- * The room the end of a page drawn edge to edge needs so its last content
- * scrolls clear of the bars: how far the frame runs past the bottom of the
- * viewport Safari gives the page, bars as they are. On the phone the page
- * ends there, and under the bars is its plain background. None where the
- * frame is that viewport, and none for the bars at the top.
- */
-export function endRoom(
-  device: Screen,
-  orientation: OrientationValue,
-  layout: BrowserLayout | null,
-  minimized: boolean,
-  edge: boolean,
-): number {
-  if (!edge) return 0;
-  const drawn = viewportOf(device, orientation, layout, minimized, true);
-  const real = viewportOf(device, orientation, layout, minimized);
-  return drawn.y + drawn.height - (real.y + real.height);
 }
 
 /** A glyph the bars draw. */
@@ -289,7 +272,9 @@ export interface Bars {
   hairline: Rect | null;
   /** Safari's scroll edge under its bottom bars. */
   fade: Fade | null;
-  /** Safari draws the page under its bars, to the bottom of the screen. */
+  /** A minimized Safari's wash over the page under its status bar. */
+  scrim: Scrim | null;
+  /** Safari carries the page's color under its bars, to the bottom of the screen. */
   edge: boolean;
 }
 
@@ -301,6 +286,42 @@ export interface Fade {
   y: number;
   height: number;
   stops: { at: number; alpha: number }[];
+}
+
+/**
+ * What a minimized Safari shows under its status bar: the page scrolled up
+ * under it, in a wash of the page's own color that fades from 0.81 opaque at
+ * the top of the screen to none 100 px down, measured on the iOS 26.5
+ * simulator over #111 content on a white body (#d1d1d1 at 0, #727272 at 40,
+ * #111111 at 100). The frame cannot show what scrolled past its top, so `at`
+ * is where the content it stands for is read: the top of the page.
+ */
+export interface Scrim extends Fade {
+  at: { x: number; y: number };
+}
+
+const SCRIM: readonly [number, number][] = [
+  [0, 0.81],
+  [20, 0.67],
+  [40, 0.41],
+  [60, 0.16],
+  [80, 0.03],
+  [100, 0],
+];
+
+/** How opaque a fade is `y` px down the screen, between its stops. */
+export function alphaAt(fade: Fade, y: number): number {
+  const at = y - fade.y;
+  const { stops } = fade;
+  const first = stops[0];
+  if (!first || at <= first.at) return first?.alpha ?? 0;
+  for (let i = 1; i < stops.length; i++) {
+    const from = stops[i - 1];
+    const to = stops[i];
+    if (!from || !to || at > to.at) continue;
+    return from.alpha + ((to.alpha - from.alpha) * (at - from.at)) / (to.at - from.at || 1);
+  }
+  return stops.at(-1)?.alpha ?? 0;
 }
 
 /**
@@ -424,6 +445,7 @@ function safariBars(
     chin: null,
     hairline: null,
     fade: null,
+    scrim: null,
     edge: false,
   };
   if (orientation === "landscape") {
@@ -452,6 +474,8 @@ function safariBars(
   const T = spec.top;
   if (minimized) {
     bars.shapes = [layout === "top" ? domainPill(W, T) : domainPill(W, H - 46)];
+    const stops = SCRIM.map(([at, alpha]) => ({ at, alpha }));
+    bars.scrim = { y: 0, height: 100, stops, at: { x: W / 2, y: page.y + 1 } };
     return bars;
   }
   if (layout === "compact") {
@@ -587,6 +611,7 @@ function chromeBars(
     chin: null,
     hairline: null,
     fade: null,
+    scrim: null,
     edge: false,
   };
   if (minimized) return bars;
@@ -666,7 +691,7 @@ export type BarsEvent =
   | { type: "scroll"; y: number; time: number }
   | { type: "tap" }
   | { type: "navigate" }
-  /** The frame was resized for the bars, or its page given another end room, at `time`. */
+  /** The frame was resized for the bars, at `time`. */
   | { type: "resize"; time: number };
 
 /** Downward travel that minimizes, and upward travel that brings the bars back, in css px. */

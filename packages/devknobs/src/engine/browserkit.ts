@@ -13,7 +13,7 @@ export interface Look {
    * or sticky bar touching the top of the viewport, else the page's.
    */
   top: string;
-  /** What fills the screen under the viewport: a fixed bar's color touching its bottom, else the page's. */
+  /** What fills the screen under the viewport: a fixed bar's color touching its bottom, else the content at its bottom edge. */
   bottom: string;
   /** The page's color under points of the screen, where Safari's glass takes its tint from. */
   under: readonly Sample[];

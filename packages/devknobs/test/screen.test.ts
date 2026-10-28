@@ -1,0 +1,59 @@
+import { describe, expect, test } from "bun:test";
+import { apply, screenSizeOf } from "../src/engine/screen";
+import { DEFAULT_STATE, merge } from "../src/engine/store";
+import type { DevknobsStatePatch } from "../src/types";
+
+function state(patch: DevknobsStatePatch) {
+  return merge(DEFAULT_STATE, patch);
+}
+
+/** A window whose screen reads the host's, from its prototype as a browser's does. */
+function hostWindow() {
+  class Screen {
+    get width(): number {
+      return 1400;
+    }
+    get height(): number {
+      return 1250;
+    }
+    get availWidth(): number {
+      return 1400;
+    }
+    get availHeight(): number {
+      return 1200;
+    }
+  }
+  return { screen: new Screen() };
+}
+
+describe("screenSizeOf", () => {
+  test("a phone or a tablet reads its own screen, an iPhone upright either way", () => {
+    expect(screenSizeOf(state({ device: "iphone-17-pro" }))).toEqual({ width: 402, height: 874 });
+    const turned = state({ device: "iphone-17-pro", orientation: "landscape" });
+    expect(screenSizeOf(turned)).toEqual({ width: 402, height: 874 });
+    const pixel = state({ device: "pixel-9", orientation: "landscape" });
+    expect(screenSizeOf(pixel)).toEqual({ width: 924, height: 412 });
+    expect(screenSizeOf(state({ device: "ipad-mini" }))).toEqual({ width: 744, height: 1133 });
+  });
+
+  test("no device, a laptop or a desktop keep the window's own", () => {
+    expect(screenSizeOf(state({ device: "none" }))).toBeNull();
+    expect(screenSizeOf(state({ device: "laptop" }))).toBeNull();
+    expect(screenSizeOf(state({ device: "desktop" }))).toBeNull();
+  });
+});
+
+describe("apply", () => {
+  test("puts the device's size on the window's screen, and gives the host's back", () => {
+    const view = hostWindow();
+    apply({ width: 402, height: 874 }, view);
+    const { screen } = view;
+    expect([screen.width, screen.height, screen.availWidth, screen.availHeight]).toEqual([
+      402, 874, 402, 874,
+    ]);
+    apply(null, view);
+    expect([screen.width, screen.height, screen.availWidth, screen.availHeight]).toEqual([
+      1400, 1250, 1400, 1200,
+    ]);
+  });
+});
