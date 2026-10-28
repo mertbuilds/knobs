@@ -149,10 +149,10 @@ function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | 
 }
 
 /**
- * The color of a bar across the viewport's top or bottom edge, as iOS 26
+ * The color of a bar across the viewport's top or bottom edge, as iOS 27
  * Safari carries it into the strip over the page and the screen under it,
- * measured on the iOS 26.5 simulator. A bar only part of the way across
- * does not count.
+ * measured on the iOS 26.5 simulator and the same on 27.0. A bar only part
+ * of the way across does not count.
  */
 function edgeBar(doc: Document, view: Window, edge: "top" | "bottom", base: Rgb): string | null {
   const width = view.innerWidth;

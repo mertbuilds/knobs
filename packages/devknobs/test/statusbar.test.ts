@@ -59,7 +59,7 @@ describe("every iPhone's status bar", () => {
   });
 
   for (const screen of IPHONES) {
-    test(`${screen.id} draws iOS 26's time, bars, wifi and battery, a size by its width`, () => {
+    test(`${screen.id} draws iOS 27's time, bars, wifi and battery, a size by its width`, () => {
       const { status, time, glyphs } = statusOf(screen, "portrait");
       expect(status).not.toBeNull();
       const large = screen.id !== "iphone-se" && screen.width >= 420;
@@ -77,15 +77,17 @@ describe("every iPhone's status bar", () => {
       expect(wifi.children).toHaveLength(3);
       expect(shapes(wifi, "path")).toHaveLength(3);
       expect(wifi.getAttribute("viewBox")?.split(" ").slice(2).map(Number)).toEqual([set.wifi.width, set.wifi.height]);
-      // The battery: an outline, a separate bar inside it and a cap apart, no percentage.
-      expect(battery.children.map((child) => child.tag)).toEqual(["rect", "rect", "path"]);
-      const [outline, level, cap] = battery.children as [FakeNode, FakeNode, FakeNode];
-      expect(outline.getAttribute("fill")).toBe("none");
-      expect(outline.getAttribute("stroke-opacity")).toBe("0.4");
-      expect(Number(outline.getAttribute("width"))).toBeCloseTo(set.battery.width - set.battery.line);
+      // The battery: a solid gray body, the charged part over it in the glyph's color, and a gray cap apart. No outline, no percentage.
+      expect(battery.children.map((child) => child.tag)).toEqual(["rect", "path", "path"]);
+      const [body, level, cap] = battery.children as [FakeNode, FakeNode, FakeNode];
+      expect(body.classes()).toEqual(["rest"]);
+      expect(body.getAttribute("stroke")).toBeNull();
+      expect(Number(body.getAttribute("width"))).toBe(set.battery.width);
+      expect(Number(body.getAttribute("height"))).toBe(set.battery.height);
+      expect(level.classes()).toEqual([]);
       expect(level.getAttribute("fill")).toBeNull();
-      expect(Number(level.getAttribute("x"))).toBe(set.battery.inset);
-      expect(cap.getAttribute("fill-opacity")).toBe("0.5");
+      expect(level.getAttribute("d")?.startsWith("M")).toBe(true);
+      expect(cap.classes()).toEqual(["rest"]);
       expect(battery.text()).toBe("");
     });
   }
