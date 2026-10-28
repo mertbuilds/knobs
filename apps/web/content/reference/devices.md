@@ -101,21 +101,23 @@ none are switched. the browser knob picks the layout, Safari's compact, bottom
 or top and Chrome's top or bottom, or off for the whole screen. the readout
 says the size the page gets.
 
-on an iPhone the edge to edge switch, on by default, draws the page as the
-phone looks: under Safari's bars to the bottom of the screen, expanded or
-minimized, with the glass over it and a light scroll edge over its last
-stretch. the page is then the screen under the status bar, 402 × 812 on an
-iPhone 16 Pro in every layout, taller than the viewport Safari reports, so
-`position: fixed; bottom: 0` elements and `100dvh` layouts sit lower than on
-the phone: 58 px lower in compact minimized, 98 expanded, 158 in bottom
-expanded. the end of the page gets that much room after it, as a bottom
-margin on the root that follows the bars, so the last content scrolls clear
-of them with the page's background under it, as on the phone: 92 px with the
-bar at the top, none under its pill or turned across. a page that scrolls an
-inner box, or overflows a root of a set height, gets none. turn it off for Safari's real numbers, measured in iOS 26.5:
-402 × 714 in compact, 402 × 654 with the bar at the bottom and 402 × 660 at
-the top, 754, 754 and 768 minimized. the strip under the page then takes the
-page's background, and the end of the page fades into it. Chrome always gives
+upright, the page gets Safari's real viewport, measured in iOS 26.5 on an
+iPhone 17 Pro: 402 × 714 in compact, 402 × 654 with the bar at the bottom
+and 402 × 660 at the top (the page starts under the address bar, at 122),
+754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
+`position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
+and `screen.height` are the device's, 402 × 874, upright on an iPhone and
+turned with an Android phone. the screen under the bars, where the frame
+ends, takes the color of a fixed bar at the bottom of the viewport, else of
+the content at the page's bottom edge, as one solid fill where the phone
+shows the page itself. the strip over the page takes the color of a fixed or
+sticky bar at the top, else the page's background. minimized, the strip
+goes: the content at the top of the page shows under the status bar, in a
+wash of the page's color that fades out over 100 px, and the status bar's
+glyphs follow it. the edge to edge switch, on by default, shades that fill
+with Safari's light scroll edge, and turned across runs the page under the
+top row. off, the page fades into the fill over its last 64 px instead, and
+turned across starts under the top row. Chrome always gives
 its real viewport, as its toolbar is opaque: a Pixel 9 is 412 × 777 with the
 toolbar and 412 × 857 without. the 9s' status bars are AOSP's own. Google
 publishes none for the 10s, so theirs are derived from where the punch hole
@@ -130,7 +132,7 @@ from 17 to 13 px in it, the page menu, reload and the bottom buttons fade out
 early and in late, and the capsules beside it fade and drift 10 px. a scroll
 the other way mid way turns it back from where it is. Chrome's toolbar
 slides away under the status bar, or down with the chin, on the same timing.
-where the page's height changes, edge to edge off and on Chrome, it gets one
+as the page's height changes with the bars, it gets one
 resize for each change, at the start when its viewport grows and at the end
 when it shrinks, so no gap shows, and its own scrolling as it settles never
 flips the bars again. with reduced motion in the browser the bars just

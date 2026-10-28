@@ -482,8 +482,8 @@ describe("barsStep", () => {
     expect(run([scroll(500 + BARS_DOWN)], tapped).minimized).toBe(true);
   });
 
-  test("the scroll clamped by a smaller end room never brings the bars back", () => {
-    // Expanded at the end of the page, 40 px of room past where minimized bars end it.
+  test("the scroll clamped by a frame that grew never brings the bars back", () => {
+    // Expanded at the end of the page, which the frame grown by 40 for minimized bars clamps back.
     const end = 2000;
     const tapped = run([scroll(end, 1000), { type: "tap" }]);
     const down = run([scroll(end + 40, 2000)], tapped);
