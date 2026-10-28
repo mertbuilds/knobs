@@ -222,7 +222,7 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
  * minimized Safari has no strip: the page's content goes up under the status
  * bar, with the scrim over it, unless a fixed or sticky bar holds the top.
  */
-function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
+export function screenFill(look: Look, bars: Bars, page: Rect | null, height: number): string {
   if (bars.platform !== "safari" || bars.orientation !== "portrait" || !page) return look.background;
   const held = look.top !== look.background;
   const top = bars.scrim && !held ? rgbOf(underAt(look, bars.scrim.at.x, bars.scrim.at.y)) : look.top;
@@ -325,6 +325,8 @@ export function createBrowser(
   /** The page box the frame has now, and the wait to give it a smaller one. */
   let applied: Rect | null = null;
   let shrinking = 0;
+  /** The page box a pending shrink gives the frame. */
+  let shrinkTo: Rect | null = null;
   let later = 0;
   /** The frame's scheme query, which tells when the page changes scheme, and its page. */
   let query: MediaQueryList | null = null;
@@ -361,14 +363,21 @@ export function createBrowser(
     return { page: view.page ?? { x: 0, y: 0, ...view.size }, points };
   };
   const lookNow = () => readLook(frame, probe());
-  /** The page moved under the glass: read it again once a frame, and redraw only for a change. */
+  /**
+   * The page moved under the glass: read it again once a frame, and repaint
+   * only for a change. Only the colors move: the bars and the frame's box
+   * stay as they are.
+   */
   const resample = () => {
     sampling = 0;
-    if (busy || !look || !view?.bars || view.bars.platform !== "safari") return;
+    const bars = view?.bars;
+    if (busy || !look || !view || !bars || bars.platform !== "safari") return;
     const next = lookNow();
     if (JSON.stringify(next) === JSON.stringify(look)) return;
     look = next;
-    draw();
+    glass.style.background = screenFill(look, bars, view.page, view.size.height);
+    back();
+    painted?.apply(bars.minimized, look);
   };
   const onScroll = () => {
     const page = frame.contentWindow;
@@ -398,16 +407,29 @@ export function createBrowser(
     if (!same(view.page, applied)) step({ type: "resize", time: performance.now() });
     applied = view.page;
   };
-  /** The frame grows at once, under bars that are leaving, and shrinks once the bars are in. */
+  const stopShrink = () => {
+    clearTimeout(shrinking);
+    shrinking = 0;
+    shrinkTo = null;
+  };
+  /**
+   * The frame grows at once, under bars that are leaving, and shrinks once
+   * the bars are in. A redraw while it waits to shrink to the same box leaves
+   * the wait be, so the frame still gets there.
+   */
   const placeFrame = (instant: boolean) => {
     const page = view?.page ?? null;
     const shrinks = !instant && page && applied && page.height < applied.height;
-    clearTimeout(shrinking);
+    if (shrinks && shrinking && same(page, shrinkTo)) return;
+    stopShrink();
     if (!shrinks) {
       sizeFrame();
       return;
     }
+    shrinkTo = page;
     shrinking = window.setTimeout(() => {
+      shrinking = 0;
+      shrinkTo = null;
       if (same(view?.page ?? null, page)) sizeFrame();
     }, MORPH.expand);
   };
@@ -424,7 +446,7 @@ export function createBrowser(
   const draw = () => {
     const bars = view?.bars ?? null;
     if (!view || !bars) {
-      clearTimeout(shrinking);
+      stopShrink();
       layer.replaceChildren();
       glass.style.background = "";
       back();
@@ -558,7 +580,7 @@ export function createBrowser(
       sampling = 0;
       if (loadWait) window.cancelAnimationFrame(loadWait);
       loadWait = 0;
-      clearTimeout(shrinking);
+      stopShrink();
       query?.removeEventListener("change", read);
       try {
         frame.contentWindow?.removeEventListener("scroll", onScroll);
