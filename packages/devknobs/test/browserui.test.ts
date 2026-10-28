@@ -421,19 +421,17 @@ describe("bars", () => {
     expect(barsOf(pixel, "landscape", "bottom", false)?.shapes[0]).toMatchObject({ y: 24 });
   });
 
-  test("Safari fades the page into its color from over the viewport's end to the bottom", () => {
-    const fade = barsOf(pro, "portrait", "compact", false)?.fade;
-    // From 64 over the viewport's end at 776 to the bottom.
-    expect(fade).toMatchObject({ y: 712, height: 162 });
-    expect(fade?.stops[0]).toEqual({ at: 0, alpha: 0 });
-    expect(fade?.stops).toContainEqual({ at: 64, alpha: 0.85 });
-    expect(fade?.stops.at(-1)).toEqual({ at: 162, alpha: 0.92 });
-    const alphas = fade?.stops.map((stop) => stop.alpha) ?? [];
-    expect(alphas).toEqual([...alphas].sort((a, b) => a - b));
-    expect(barsOf(pro, "portrait", "bottom", false)?.fade?.y).toBe(716 - 64);
-    expect(barsOf(pro, "portrait", "top", false)?.fade?.y).toBe(782 - 64);
-    expect(barsOf(pro, "portrait", "bottom", true)?.fade?.y).toBe(816 - 64);
-    expect(barsOf(pro, "portrait", "top", true)?.fade).toBeNull();
+  test("upright, Safari's look under its bars is the same with edge to edge off or on", () => {
+    for (const layout of ["compact", "bottom", "top"] as const) {
+      for (const minimized of [false, true]) {
+        const off = barsOf(pro, "portrait", layout, minimized, false);
+        expect(off).toEqual(barsOf(pro, "portrait", layout, minimized, true));
+        expect(off?.edge).toBe(true);
+      }
+    }
+    // Turned across, the switch still decides.
+    expect(barsOf(pro, "landscape", "compact", false, false)?.edge).toBe(false);
+    expect(barsOf(pro, "landscape", "compact", false, true)?.edge).toBe(true);
     expect(barsOf(pro, "landscape", "compact", false)?.fade).toBeNull();
     expect(barsOf(device("pixel-9"), "portrait", "bottom", false)?.fade).toBeNull();
   });

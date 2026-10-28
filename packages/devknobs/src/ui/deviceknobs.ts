@@ -199,6 +199,14 @@ function safariShown(state: DevknobsState): boolean {
   return platformOf(screenNow(state)) === "safari" && barsShown(state);
 }
 
+/**
+ * Is Safari drawn on a phone held sideways? Only there does edge to edge
+ * change the frame: upright, the page is always Safari's real viewport.
+ */
+function safariSideways(state: DevknobsState): boolean {
+  return safariShown(state) && state.orientation === "landscape";
+}
+
 export const EDGE_TO_EDGE: Knob = {
   id: "edgeToEdge",
   label: "edge to edge",
@@ -206,12 +214,12 @@ export const EDGE_TO_EDGE: Knob = {
   control: "switch",
   options: OFF_ON,
   aliases: ["edge", "under bars", "true height", "full height"],
-  // On while Safari is drawn, so an iPhone is what puts it off its default.
-  read: (state) => flag(state.edgeToEdge && safariShown(state)),
+  // On while Safari is drawn sideways, so an iPhone held across is what puts it off its default.
+  read: (state) => flag(state.edgeToEdge && safariSideways(state)),
   write: (value) => ({ edgeToEdge: value === "on" }),
   reset: { edgeToEdge: DEFAULT_STATE.edgeToEdge },
   brief: () => "",
-  offers: (state) => (safariShown(state) ? ["off", "on"] : []),
+  offers: (state) => (safariSideways(state) ? ["off", "on"] : []),
 };
 
 export const WIDTH: Knob = {
