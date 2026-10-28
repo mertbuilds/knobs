@@ -82,6 +82,11 @@ describe("the hosts the ribbon shows on", () => {
       "172.16.0.1",
       "172.31.255.255",
       "192.168.1.20",
+      "0.0.0.0",
+      "[fd12:3456::1]",
+      "[fc00::1]",
+      "[fe80::1]",
+      "[febf::1]",
     ]) {
       expect([host, localHost(host)]).toEqual([host, true]);
     }
@@ -100,6 +105,10 @@ describe("the hosts the ribbon shows on", () => {
       "11.0.0.1",
       "300.0.0.1",
       "[2001:db8::1]",
+      "[fec0::1]",
+      "[ff02::1]",
+      "fd.example.com",
+      "[fe8::1]",
     ]) {
       expect([host, localHost(host)]).toEqual([host, false]);
     }

@@ -31,7 +31,7 @@ while the panel is out and the focus is in no field:
 | `⇧S`          | shows the [storage](/docs/requests-and-storage)  |
 | `⇧` backspace | resets every knob                                |
 
-every other key goes to the page. the gear in the footer opens the settings, where you can change every key but `/` and hide the handle.
+every other key goes to the page. the gear in the footer opens the settings, where you can change every key but `/` and hide the handle. the dev tab icon switch there puts a `DEV` ribbon on the tab's icon: on local hosts only by default, or on any host or none, for this tab. turned off or unmounted, the page has its own icons back.
 
 ## pinning
 

@@ -284,3 +284,130 @@ describe("the dev ribbon on the page's icons", () => {
     expect(own.getAttribute("href")).toBe(png("/own.png", 32));
   });
 });
+
+interface SlowPage {
+  head: Head;
+  icon: TabIcon;
+  /** Every address loaded, in order. */
+  loads: string[];
+  /** Let the first pending load of an address finish. */
+  resolve(href: string): Promise<void>;
+}
+
+/** A page whose loads wait until the test lets each one in. */
+function slowPage(links: Link[]): SlowPage {
+  const head = new Head();
+  for (const link of links) head.append(link);
+  const pending: { href: string; done: () => void }[] = [];
+  const loads: string[] = [];
+  const doc = {
+    head,
+    documentElement: head,
+    querySelectorAll: () => [...head.links],
+    createElement: () => new Link(),
+  };
+  const icon = createTabIcon({
+    document: doc as unknown as Document,
+    load: (href) =>
+      new Promise((done) => {
+        loads.push(href);
+        pending.push({ href, done: () => done({ width: 64, height: 64, href } as unknown as Loaded) });
+      }),
+    render: (source, size) => png((source as Loaded).href, size),
+    Observer: class {
+      constructor(callback: (records: object[]) => void) {
+        return new Observer(head, callback) as unknown as object;
+      }
+    } as unknown as typeof MutationObserver,
+  });
+  return {
+    head,
+    icon,
+    loads,
+    async resolve(href) {
+      const at = pending.findIndex((one) => one.href === href);
+      expect(at).toBeGreaterThanOrEqual(0);
+      const [one] = pending.splice(at, 1);
+      one?.done();
+      await settle();
+    },
+  };
+}
+
+describe("the dev ribbon while icons load", () => {
+  test("a link pointed elsewhere while it loads gets the new address's ribbon, and keeps that address when off", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = slowPage([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    icon.setAttribute("href", "/b.png");
+    await settle();
+    await at.resolve("/b.png");
+    await at.resolve("/a.png");
+    expect(icon.getAttribute("href")).toBe(png("/b.png", 32));
+    expect(icon.getAttribute(ORIGINAL_HREF)).toBe("/b.png");
+    at.icon.stop();
+    running = null;
+    expect(icon.getAttribute("href")).toBe("/b.png");
+  });
+
+  test("the old load coming in last starts no second load of the new address", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = slowPage([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    icon.setAttribute("href", "/b.png");
+    await settle();
+    await at.resolve("/a.png");
+    icon.setAttribute("sizes", "64x64");
+    await settle();
+    expect(at.loads).toEqual(["/a.png", "/b.png"]);
+    await at.resolve("/b.png");
+    expect(icon.getAttribute("href")).toBe(png("/b.png", 64));
+  });
+
+  test("a link that stops being an icon while it loads keeps the page's address", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = slowPage([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    icon.setAttribute("rel", "stylesheet");
+    icon.setAttribute("href", "/app.css");
+    await settle();
+    await at.resolve("/a.png");
+    expect(icon.getAttribute("href")).toBe("/app.css");
+    expect(icon.hasAttribute(ORIGINAL_HREF)).toBe(false);
+  });
+
+  test("a drawn link the page points elsewhere keeps the page's address when off, its load still out", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = slowPage([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    await at.resolve("/a.png");
+    expect(icon.getAttribute("href")).toBe(png("/a.png", 32));
+    icon.setAttribute("href", "/c.png");
+    await settle();
+    at.icon.stop();
+    running = null;
+    expect(icon.getAttribute("href")).toBe("/c.png");
+  });
+
+  test("a link taken out while it loads has its own address back when off", async () => {
+    const icon = new Link({ rel: "icon", href: "/a.png" });
+    const at = slowPage([icon]);
+    running = at.icon;
+    at.icon.start();
+    await settle();
+    icon.remove();
+    await at.resolve("/a.png");
+    at.icon.stop();
+    running = null;
+    expect(icon.getAttribute("href")).toBe("/a.png");
+    expect(icon.hasAttribute(ORIGINAL_HREF)).toBe(false);
+  });
+});

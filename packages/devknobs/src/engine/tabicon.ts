@@ -25,7 +25,9 @@ const TOUCH_RELS = ["apple-touch-icon", "apple-touch-icon-precomposed"];
 export function localHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/\.$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
-  if (host === "[::1]" || host === "::1") return true;
+  if (host === "[::1]" || host === "::1" || host === "0.0.0.0") return true;
+  // IPv6 unique local (fc00::/7) and link-local (fe80::/10) addresses.
+  if (/^\[?(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(host)) return true;
   const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (!ip) return false;
   const [a = 0, b = 0, ...rest] = ip.slice(1).map(Number);
@@ -144,7 +146,8 @@ export function createTabIcon(env: TabIconEnv): TabIcon {
   function watch(records: MutationRecord[]): void {
     for (const record of records) {
       if (record.type === "attributes") {
-        const link = record.target as Element;
+        const link = record.target;
+        if (!isIconLink(link)) continue;
         // Its own write of the ribbon is no change.
         if (record.attributeName === "href" && drawn.get(link)?.url === link.getAttribute("href")) continue;
         swap(link);
