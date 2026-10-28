@@ -88,8 +88,9 @@ still get hover moves, and ones it put there before devknobs loaded read
 `Touch` constructor, so they get the cursor, the pointer type and the scrolling
 but no touch events. turn the switch off for the mouse as it is: clicks,
 hover and `pointerType: "mouse"`. `ontouchstart` is on the window only, not on
-elements or the document. `screen.width`,
-`screen.height` and `screen.orientation` keep the real screen's.
+elements or the document. in a phone's or tablet's frame `screen.width`,
+`screen.height`, `availWidth` and `availHeight` are the device's;
+`screen.orientation` keeps the real screen's.
 
 a touch device's scrollbars are hidden, not drawn as a phone draws them: the
 thin indicator that shows over the page while it scrolls is left out, and a
@@ -100,11 +101,15 @@ the frame.
 
 the bars follow the scroll of the document only, as on the phone, so a page
 that scrolls an inner box keeps them as they are, and they do not come back
-at the bottom of the page. with edge to edge off the page is not drawn under
-the glass: the screen there takes the page's background color, and Safari's
-scroll edge fades the last 64 px of the page into that color, eased from
-clear to 0.85 opaque at the frame's end and 0.92 at the bottom, where on the
-phone the page runs on under the bars. the top edge has no fade, as Safari
+at the bottom of the page. the page is never drawn under the glass: the
+screen there takes one color, a fixed footer's or the content's at the
+page's bottom edge, where on the phone the page runs on under the bars, and
+minimized, the content under the status bar is that at the page's top, not
+what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
+height, where Safari keeps `svh` at the expanded height and `lvh` and `vh`
+at the minimized one (the whole screen in top). with edge to edge off,
+Safari's scroll edge fades the last 64 px of the page into that color,
+eased from clear to 0.85 opaque at the frame's end and 0.92 at the bottom. the top edge has no fade, as Safari
 shows none there. `env(safe-area-inset-*)` stays 0. there is no keyboard, and the tabs, the
 menus and the share sheet do not open. a page that changes its background
 without a load, a navigation or a scheme change keeps the old color around
