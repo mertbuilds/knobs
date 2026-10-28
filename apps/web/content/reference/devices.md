@@ -124,6 +124,18 @@ toolbar and 412 × 857 without. the 9s' status bars are AOSP's own. Google
 publishes none for the 10s, so theirs are derived from where the punch hole
 sits, as AOSP lines the 9s' bars up with theirs.
 
+the iPhone Duo has Safari 27.1's own layout, the only one it offers. on the
+cover screen the status bar and Safari's buttons stack in a column on the
+right, under the camera hole, as Apple's picture shows it: the time, a ring
+for the battery round wifi with the signal's four dots in its gap, back,
+reader, and new tab with tabs. the address floats at the bottom of the
+page. the page never runs under the column, which takes the page's color.
+the inner screen keeps a status bar and one row of bars at the top, held
+either way, an estimate in the iPad's manner, as Apple shows none. the page
+gets WebKit's viewports: 382 × 580 and 618 minimized on the cover screen
+upright, 594 × 368 and 406 across, 669 × 867 and 902 on the inner screen
+upright, 951 × 585 and 620 across.
+
 the bars minimize and come back with the page's scroll, or stay one way with
 the bars knob. Safari's address capsule, or the bottom layout's card, is one
 glass shape that becomes the minimized pill: its box and corners tween over
