@@ -101,19 +101,37 @@ function rgbOf(color: Color): string {
   return `rgb(${Math.round(color.red)}, ${Math.round(color.green)}, ${Math.round(color.blue)})`;
 }
 
-/** A background that hides what is under it, or nearly. */
-function solidOf(view: Window, node: Element): string | null {
+type Rgb = [number, number, number];
+
+/** `color` laid over `under`, as the page paints it. */
+function blend({ red, green, blue, alpha }: Color, [r, g, b]: Rgb): Rgb {
+  const over = (top: number, below: number) => Math.round(top * alpha + below * (1 - alpha));
+  return [over(red, r), over(green, g), over(blue, b)];
+}
+
+function rgbText([r, g, b]: Rgb): string {
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** A node's background, where it paints one. */
+function paintOf(view: Window, node: Element): Color | null {
   const color = toRgb(view.getComputedStyle(node).backgroundColor);
-  return color && color.alpha >= 0.5 ? rgbOf(color) : null;
+  return color && color.alpha > 0 ? color : null;
+}
+
+/** A background that hides what is under it, or nearly. */
+function solidOf(view: Window, node: Element): Color | null {
+  const color = paintOf(view, node);
+  return color && color.alpha >= 0.5 ? color : null;
 }
 
 /**
  * The color of a fixed or sticky bar at `x`, `y` of the viewport whose box
  * touches its top or bottom edge: the first solid background from what is
- * there up to the bar.
+ * there up to the bar, over the page's `base` where it lets it through.
  */
-function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | "bottom") {
-  let paint: string | null = null;
+function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | "bottom", base: Rgb) {
+  let paint: Color | null = null;
   for (let node = doc.elementFromPoint(x, y); node; node = node.parentElement) {
     if (node === doc.body || node === doc.documentElement) return null;
     paint ??= solidOf(view, node);
@@ -121,7 +139,7 @@ function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | 
     if (position !== "fixed" && position !== "sticky") continue;
     const box = node.getBoundingClientRect();
     const touches = edge === "top" ? box.top <= 0.5 : box.bottom >= view.innerHeight - 0.5;
-    return touches ? paint : null;
+    return touches && paint ? rgbText(blend(paint, base)) : null;
   }
   return null;
 }
@@ -132,22 +150,31 @@ function barAt(doc: Document, view: Window, x: number, y: number, edge: "top" | 
  * measured on the iOS 26.5 simulator. A bar only part of the way across
  * does not count.
  */
-function edgeBar(doc: Document, view: Window, edge: "top" | "bottom"): string | null {
+function edgeBar(doc: Document, view: Window, edge: "top" | "bottom", base: Rgb): string | null {
   const width = view.innerWidth;
   // A whole px up from the bottom: a zoomed frame finds nothing in its last half px.
   const y = edge === "top" ? 0.5 : view.innerHeight - 1;
-  const colors = [width / 2, 1, width - 1].map((x) => barAt(doc, view, x, y, edge));
+  const colors = [width / 2, 1, width - 1].map((x) => barAt(doc, view, x, y, edge, base));
   const [middle = null] = colors;
   return colors.every((color) => color !== null) ? middle : null;
 }
 
-/** The first solid background at `x`, `y` of the viewport, from the top down. */
-function colorAt(doc: Document, view: Window, x: number, y: number): string | null {
+/**
+ * The first solid background at `x`, `y` of the viewport, from the top down,
+ * over what shows through it: the layers under it down to an opaque one, or
+ * the page's `base`. Null where only the page's own background is there.
+ */
+function colorAt(doc: Document, view: Window, x: number, y: number, base: Rgb): string | null {
+  const layers: Color[] = [];
   for (const node of doc.elementsFromPoint(x, y)) {
-    const color = solidOf(view, node);
-    if (color) return color;
+    if (node === doc.body || node === doc.documentElement) break;
+    const color = layers.length === 0 ? solidOf(view, node) : paintOf(view, node);
+    if (!color) continue;
+    layers.push(color);
+    if (color.alpha >= 1) break;
   }
-  return null;
+  if (layers.length === 0) return null;
+  return rgbText(layers.reduceRight<Rgb>((under, color) => blend(color, under), base));
 }
 
 /** Points of the screen to read the page's color under, with the page's box in it. */
@@ -178,19 +205,20 @@ export function readLook(frame: HTMLIFrameElement, probe: Probe | null = null): 
     const doc = frame.contentDocument;
     if (!view || !doc?.documentElement) return fallback;
     const scheme = view.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const [r, g, b] = backgroundOf(doc, view, scheme === "dark");
-    const background = `rgb(${r}, ${g}, ${b})`;
-    const top = edgeBar(doc, view, "top") ?? background;
+    const base = backgroundOf(doc, view, scheme === "dark");
+    const [r, g, b] = base;
+    const background = rgbText(base);
+    const top = edgeBar(doc, view, "top", base) ?? background;
     // Under the bars the phone shows the page's content, so the content at its bottom edge stands for it.
-    const last = () => colorAt(doc, view, view.innerWidth / 2, view.innerHeight - 1);
-    const bottom = edgeBar(doc, view, "bottom") ?? last() ?? background;
+    const last = () => colorAt(doc, view, view.innerWidth / 2, view.innerHeight - 1, base);
+    const bottom = edgeBar(doc, view, "bottom", base) ?? last() ?? background;
     const under = (probe?.points ?? []).map(({ x, y }) => {
       const { page } = probe ?? { page: { x: 0, y: 0, width: 0, height: 0 } };
       const inside = { x: x - page.x, y: y - page.y };
       if (inside.y < 0) return { x, y, color: top };
       if (inside.y >= page.height) return { x, y, color: bottom };
       const across = Math.min(Math.max(inside.x, 0), page.width - 1);
-      return { x, y, color: colorAt(doc, view, across, inside.y) ?? background };
+      return { x, y, color: colorAt(doc, view, across, inside.y, base) ?? background };
     });
     const navigation = navigationOf(view);
     const can = (key: string): boolean | null => {

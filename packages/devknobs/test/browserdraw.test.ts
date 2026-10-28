@@ -99,6 +99,17 @@ describe("readLook", () => {
     expect(look.bottom).toBe(DARK);
   });
 
+  test("a translucent bar or section shows what is under it", () => {
+    const built = page(714, (y) => (y < 100 ? [veil] : y > 600 ? [glaze, wrapper] : []));
+    const veil = node("rgba(224, 24, 45, 0.6)", built.body, "fixed", { top: 0, bottom: 100 });
+    const wrapper = node(DARK, built.body);
+    const glaze = node("rgba(255, 255, 255, 0.5)", wrapper);
+    const look = readLook(built.frame);
+    // 0.6 of red over the blue page, and half white over the dark wrapper.
+    expect(look.top).toBe("rgb(146, 51, 113)");
+    expect(look.bottom).toBe("rgb(136, 136, 136)");
+  });
+
   test("a bar that does not touch the edge does not count", () => {
     const built = page(714, (y) => (y < 100 ? [floating] : []));
     const floating = node(RED, built.body, "fixed", { top: 20, bottom: 100 });
@@ -217,14 +228,15 @@ interface Timer {
 }
 
 let timers: Timer[];
-let frames: (() => void)[];
+/** The animation frames asked for and not yet run or cancelled, by id. */
+let frames: Map<number, () => void>;
 let cleared: number[];
 let clearSpy: { mockRestore(): void } | null = null;
 const saved = { window: globalThis.window, document: globalThis.document };
 
 beforeEach(() => {
   timers = [];
-  frames = [];
+  frames = new Map();
   cleared = [];
   let next = 1;
   Object.defineProperty(globalThis, "window", {
@@ -236,10 +248,11 @@ beforeEach(() => {
         return id;
       },
       requestAnimationFrame: (run: () => void) => {
-        frames.push(run);
-        return frames.length;
+        const id = next++;
+        frames.set(id, run);
+        return id;
       },
-      cancelAnimationFrame: () => {},
+      cancelAnimationFrame: (id: number) => frames.delete(id),
       matchMedia: () => ({ matches: false }),
     },
   });
@@ -290,7 +303,8 @@ function browserOver(color: () => string) {
   };
   const scroll = () => {
     for (const listener of built.scroll) listener();
-    const pending = frames.splice(0);
+    const pending = [...frames.values()];
+    frames.clear();
     for (const run of pending) run();
   };
   return { browser, show, scroll, sized, glass };
@@ -334,6 +348,8 @@ describe("createBrowser", () => {
     scroll();
     expect(browser.look()).toBe(first);
     browser.stopLoading();
+    // Done loading, nothing waits for the page to paint any more.
+    expect(frames.size).toBe(0);
     const loaded = browser.look();
     color = GREEN;
     scroll();

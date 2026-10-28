@@ -187,6 +187,7 @@ describe("bezelMock", () => {
       expect(at.x + island.width).toBeGreaterThanOrEqual(shown.x + shown.w - 0.1);
       expect(at.y + island.height).toBeGreaterThanOrEqual(shown.y + shown.h - 0.1);
       expect(island.width - shown.w).toBeLessThan(1);
+      expect(island.height - shown.h).toBeLessThan(1);
       // Held across, it is on the left, where the image's top is.
       const [across] = turned?.parts ?? [];
       expect(across).toMatchObject({ width: island.height, height: island.width });

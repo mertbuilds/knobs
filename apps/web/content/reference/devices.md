@@ -106,8 +106,8 @@ iPhone 17 Pro: 402 × 714 in compact, 402 × 654 with the bar at the bottom
 and 402 × 660 at the top (the page starts under the address bar, at 122),
 754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
 `position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
-and `screen.height` are the device's, 402 × 874, upright on an iPhone and
-turned with an Android phone. the screen under the bars, where the frame
+and `screen.height` are the device's own size, 402 × 874 on a 17 Pro: an
+iPhone keeps it upright however it is held, an Android phone turns it. the screen under the bars, where the frame
 ends, takes the color of a fixed bar at the bottom of the viewport, else of
 the content at the page's bottom edge, as one solid fill where the phone
 shows the page itself. the strip over the page takes the color of a fixed or
