@@ -1,7 +1,7 @@
 import type { DevknobsState, PostureValue, SideValue } from "../types";
 import { formOf } from "./devices";
 import type { Sides } from "./mock";
-import type { Point } from "./zoom";
+import { type Point, ZOOM_MAX } from "./zoom";
 
 /** The room over the readout's row, so it stands clear of the window's top edge, in px. */
 export const STRIP_TOP = 8;
@@ -24,7 +24,7 @@ export interface Fit {
   zoom: number;
   /** What the frame is drawn at: the zoom picked, or the fit. */
   scale: number;
-  /** What the frame is drawn at to fit, 1 or less. */
+  /** What the frame is drawn at to fit. Above 1 only for a frame of a set width and height. */
   fit: number;
   /** `transform: scale()` on the frame's wrapper: the scale, and the zoom undone. */
   transform: number;
@@ -50,7 +50,8 @@ function margin(size: number): number {
  * Place a frame in a letterbox of `size`, under its readout strip. A width or
  * height of the frame's own keeps a margin around it, and the window's own
  * size has none, as it is the window. To fit, a frame wider or taller than the
- * room is drawn smaller, and one without a height of its own is made taller by
+ * room is drawn smaller, one of a set width and height is drawn bigger to
+ * fill the room, and one without a height of its own is made taller by
  * as much, so it still fills the height. An open panel covers `aside` px of
  * the window's edge on its `side`, the right by default, and a frame of a set
  * width that would reach under it is fitted to the room beside it, while that
@@ -79,7 +80,9 @@ export function fit(
   const across = width > 0 && room.width > 0 ? (room.width - 2 * x) / (width + sides.width) : 1;
   const tall = typeof knobs.height === "number" && knobs.height > 0 && room.height > 0;
   const upright = (room.height - 2 * y) / (Number(knobs.height) + sides.height);
-  const whole = Math.min(1, across, tall ? upright : 1);
+  // Only a frame of a set width and height grows past 1: one without a height
+  // of its own is made as tall as the room instead.
+  const whole = Math.min(sized && tall ? ZOOM_MAX : 1, across, tall ? upright : 1);
   const height = typeof knobs.height === "number" ? knobs.height : room.height / whole;
   const outer = { width: width + sides.width, height: height + sides.height };
   const covered =
