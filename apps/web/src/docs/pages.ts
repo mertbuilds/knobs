@@ -1,7 +1,7 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import { Marked, type Token, type TokensList } from 'marked';
-import { frontmatter, slugify } from './frontmatter.ts';
+import { docFrontmatter, slugify } from './frontmatter.ts';
 import { highlight } from './highlight.ts';
 
 /**
@@ -18,14 +18,20 @@ export type Segment = { id: number } & (
 
 export type Heading = { id: string; text: string };
 
+/** A question and its answer from a page's `## faq` section, as plain text, for its FAQPage schema. */
+export type Faq = { answer: string; question: string };
+
 export type Page = {
   description: string;
+  faq: Array<Faq>;
   /** The page's h2s, for "on this page". */
   headings: Array<Heading>;
   order: number;
   segments: Array<Segment>;
   slug: string;
   title: string;
+  /** The day the page's content last changed, `YYYY-MM-DD`. */
+  updated: string;
 };
 
 export const prose = create({
@@ -162,11 +168,29 @@ function escapeHtml(text: string): string {
     .replaceAll('"', '&quot;');
 }
 
-/** Splits the page at its code blocks, rendering the markdown between them to html. */
-function render(body: string): { headings: Array<Heading>; segments: Array<Segment> } {
+/** Markdown inline text as plain text: link text without its address, no backticks or emphasis marks. */
+const plain = (text: string) =>
+  text
+    .replaceAll(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replaceAll(/[`*]/g, '')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Splits the page at its code blocks, rendering the markdown between them to
+ * html. The paragraphs under a `## faq` heading are its questions: each runs to
+ * its first `?`, and the rest of the paragraph is the answer.
+ */
+function render(body: string): {
+  faq: Array<Faq>;
+  headings: Array<Heading>;
+  segments: Array<Segment>;
+} {
   const tokens = markdown.lexer(body);
   const segments: Array<Segment> = [];
   const headings: Array<Heading> = [];
+  const faq: Array<Faq> = [];
+  let inFaq = false;
   let run: Array<Token> = [];
   const flush = () => {
     if (run.length > 0) {
@@ -188,16 +212,25 @@ function render(body: string): { headings: Array<Heading>; segments: Array<Segme
     }
     if (token.type === 'heading' && token.depth === 2) {
       headings.push({ id: slugify(token.text), text: token.text.replaceAll('`', '') });
+      inFaq = slugify(token.text) === 'faq';
+    }
+    if (inFaq && token.type === 'paragraph') {
+      const text = plain(token.text);
+      const end = text.indexOf('?');
+      const answer = text.slice(end + 1).trim();
+      if (end > 0 && answer !== '') {
+        faq.push({ answer, question: text.slice(0, end + 1) });
+      }
     }
     run.push(token);
   }
   flush();
-  return { headings, segments };
+  return { faq, headings, segments };
 }
 
 function parse(slug: string, source: string): Page {
-  const { body, description, order, title } = frontmatter(slug, source);
-  return { description, order, slug, title, ...render(body) };
+  const { body, description, order, title, updated } = docFrontmatter(slug, source);
+  return { description, order, slug, title, updated, ...render(body) };
 }
 
 const files = import.meta.glob<string>('../../content/docs/*.md', {

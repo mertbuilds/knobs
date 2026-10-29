@@ -1,7 +1,8 @@
 ---
 title: devices
-description: Phone, tablet and laptop presets, with mocks, bezels and the phone's browser drawn around the page.
+description: iPhone, Pixel, iPad and laptop presets for devknobs, drawn with each maker's own bezel and the phone's browser around your page, in portrait or landscape.
 order: 4
+updated: 2026-10-25
 ---
 
 ## pick a device

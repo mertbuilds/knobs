@@ -1,7 +1,8 @@
 ---
 title: start
-description: Install @vinena/knobs and mount it in development only.
+description: Install @vinena/knobs from npm, mount the devknobs panel in development only, and load the early script for pages that read media queries or the time on load.
 order: 1
+updated: 2026-10-25
 ---
 
 devknobs is a dev-only panel for flipping browser preferences from inside the page. one script tag and the knobs are there. no css to add, no code to change.

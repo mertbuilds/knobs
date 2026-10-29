@@ -1,7 +1,8 @@
 ---
 title: chrome extension
-description: The devknobs panel on any site, with some knobs set for real by Chrome.
+description: The devknobs Chrome extension puts the same panel on any site you open in Chrome or Edge, with no change to its code, and has Chrome set some knobs for real.
 order: 8
+updated: 2026-10-29
 ---
 
 ## what it does

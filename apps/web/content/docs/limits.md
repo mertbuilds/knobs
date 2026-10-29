@@ -1,7 +1,8 @@
 ---
 title: limits and faq
-description: What devknobs cannot fake from inside a page, and common questions.
+description: What devknobs cannot fake from inside a page, such as cross-origin stylesheets, worker time zones and real touch, and answers to common questions about it.
 order: 9
+updated: 2026-10-29
 ---
 
 devknobs works from inside the page, so some things stay out of its reach.

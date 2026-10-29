@@ -1,7 +1,8 @@
 ---
 title: agents
-description: Let a coding agent drive the knobs from a browser tool, wait for the page, grab what broke and fix it.
+description: Let a coding agent drive devknobs from a browser tool like Playwright or the Chrome DevTools MCP: set knobs, wait for the page, grab what broke and fix it.
 order: 7
+updated: 2026-10-25
 ---
 
 ## drive the knobs
