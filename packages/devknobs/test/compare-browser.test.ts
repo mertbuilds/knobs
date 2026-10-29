@@ -190,6 +190,29 @@ describe("compare in Chromium", () => {
     expect(stores).toEqual({ cookie: false, local: null, record: [null, null], lang: "de-DE" });
   }, 30_000);
 
+  test("compare shows over a device frame already up, and gives it back on exit", async () => {
+    await page.evaluate(async () => {
+      window.devknobs?.exitCompare();
+      window.devknobs?.setState({ device: "iphone-17-pro" });
+      await window.devknobs?.ready();
+    });
+    await page.evaluate(() => window.devknobs?.compare([{}, { textSize: "xxl" }]));
+    await loaded();
+    const over = await page.evaluate(() => {
+      const hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+      const frame = document.querySelector('[data-devknobs="viewport"]');
+      return { compare: hit?.closest("[data-devknobs-compare]") !== null, frame: frame ? getComputedStyle(frame).visibility : null };
+    });
+    expect(over).toEqual({ compare: true, frame: "hidden" });
+    await page.evaluate(() => window.devknobs?.exitCompare());
+    const after = await page.evaluate(() => {
+      const frame = document.querySelector('[data-devknobs="viewport"]');
+      return frame ? getComputedStyle(frame).visibility : null;
+    });
+    expect(after).toBe("visible");
+    await page.evaluate(() => window.devknobs?.setState({ device: "none", width: "full", height: "full", dpr: "system" }));
+  }, 30_000);
+
   test("dark and light frames each see their own scheme, and exit takes the frames away", async () => {
     await page.evaluate(() =>
       window.devknobs?.compare([{ scheme: "light" }, { scheme: "dark" }, { scheme: "dark", textSize: 24 }]),

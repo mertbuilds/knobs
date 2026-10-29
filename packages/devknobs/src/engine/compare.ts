@@ -9,9 +9,14 @@ import { fresh, FRESH_ATTRIBUTE } from "./fresh";
 import * as engine from "./index";
 import type { Mock } from "./mock";
 import { corners, drawMock, MOCK_CSS } from "./mockdraw";
+import { Z_INDEX } from "./placeholder";
 import { CONNECTIONS, CONTRASTS, FRAME_STATE_ATTRIBUTE, merge, MOTIONS, SCHEMES, STATE_VERSION } from "./store";
 import { stamped } from "./stored";
+import { ensureStyle, removeStyle } from "./style";
 import { TEXT_MAX, TEXT_MIN } from "./text";
+
+/** The sheet that hides the device frame while compare is up. */
+const HIDE_FRAME = "compare-hides-frame";
 
 /**
  * Two or more devices side by side, each running the page in its own frame
@@ -390,8 +395,12 @@ function makeCell(patch: DevknobsStatePatch): Cell {
 
 function build(): void {
   host = document.createElement("div");
+  host.setAttribute("data-devknobs", "compare");
   host.setAttribute("data-devknobs-compare", "");
-  host.style.cssText = "position:fixed;inset:0;z-index:2147483643";
+  // As high as the device frame, and after it in the document, so over it, under the panel.
+  host.style.cssText = `position:fixed;inset:0;z-index:${Z_INDEX}`;
+  // The device frame stays up under the compare, its page kept, but out of sight and out of reach.
+  ensureStyle(HIDE_FRAME).textContent = '[data-devknobs="viewport"]{visibility:hidden!important}';
   shadow = host.attachShadow({ mode: "open" });
   const style = el("style", "", CSS);
   const wrap = el("div", "compare");
@@ -479,6 +488,7 @@ export function exitCompare(): void {
   window.removeEventListener("resize", layoutAll);
   host?.remove();
   host = null;
+  removeStyle(HIDE_FRAME);
   shadow = null;
   row = null;
   syncSelect = null;
