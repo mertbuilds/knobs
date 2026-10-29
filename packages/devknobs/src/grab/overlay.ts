@@ -13,9 +13,22 @@ import { DWELL } from "./dwell";
 import { createColorReader } from "./paint";
 import { createThemeReader, type GrabTone, invertTheme, type Theme } from "./theme";
 import { addStyle } from "../engine/style";
+import { HOST_RESET, holdInTopLayer, LAYER } from "../engine/toplayer";
 
-/** Over everything, the panel too. It never takes a pointer. */
-const Z_INDEX = 2147483647;
+/**
+ * Over the page and under the panel, where the browser has no top layer for
+ * them. It never takes a pointer.
+ */
+const Z_INDEX = 2147483646;
+
+/** The host covers the window, whatever a page's popover rules give it. */
+const HOST_CSS = `
+:host([popover]) {
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  pointer-events: none !important;
+}`;
 
 /** Space between a box and its label or toast, in px. */
 const GAP = 6;
@@ -490,9 +503,9 @@ function place(node: HTMLElement, shape: readonly number[], ratio: number): void
 export function createOverlay(quiet = false, model = false): BoxOverlay {
   const host = document.createElement("div");
   host.setAttribute("data-devknobs", "grab");
-  host.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z_INDEX}`;
+  host.style.cssText = `position:fixed;inset:0;width:auto;height:auto;pointer-events:none;z-index:${Z_INDEX}`;
   const root = host.attachShadow({ mode: "open" });
-  addStyle(root, CSS);
+  addStyle(root, HOST_RESET + HOST_CSS + CSS);
   const layer = document.createElement("div");
   layer.className = "layer";
   const glow = document.createElement("div");
@@ -557,6 +570,8 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
   layer.append(glow, glide, tip);
   root.append(layer);
   (document.body ?? document.documentElement).append(host);
+  // In the top layer, so it boxes what is in the page's dialogs and popovers too, and under the panel.
+  const hold = holdInTopLayer(host, LAYER.overlay);
 
   /** The real setting, under the motion knob: the layer is devknobs' own. */
   const reduce = baseMatchMedia("(prefers-reduced-motion: reduce)");
@@ -869,6 +884,7 @@ export function createOverlay(quiet = false, model = false): BoxOverlay {
     reduce.removeEventListener("change", still);
     stopSystem();
     stopColor();
+    hold.release();
     host.remove();
   }
 

@@ -109,8 +109,8 @@ export function createDrag(context: DragContext): Drag {
     if (wrap.dataset.side !== side) {
       jump(() => {
         wrap.dataset.side = side;
-        host.style.left = side === "left" ? "0" : "";
-        host.style.right = side === "right" ? "0" : "";
+        host.style.left = side === "left" ? "0" : "auto";
+        host.style.right = side === "right" ? "0" : "auto";
       });
     }
     if (engine.getState().panel.docked) {

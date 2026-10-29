@@ -306,8 +306,8 @@ describe("the pinned panel's styles", () => {
         '.wrap[data-dock="true"] .keys { flex: 1 1 auto; }',
       ].join("\n"),
     );
-    // A view asks for the floating panel's tallest, which the column is not held to.
-    expect(rule("\n.view")).toContain("height: 672px");
+    // A view asks for the window's height, which the column is not held to.
+    expect(rule("\n.view")).toContain("height: 100dvh");
     expect(CSS).toContain('.wrap[data-dock="true"] .view { height: auto; }');
     // The settings scroll in the column, and the footer stays under them.
     const keys = fill.slice(fill.indexOf('.wrap[data-dock="true"] .keys {\n'), fill.indexOf("overscroll"));
@@ -821,7 +821,9 @@ describe("pointer events", () => {
   });
 
   test("the host is anchored by its side, not by its style", () => {
-    expect(HOST_STYLE).not.toMatch(/left|right/);
+    expect(HOST_STYLE).not.toMatch(/(left|right):\s*0/);
+    // A popover's inset never anchors it either.
+    expect(HOST_STYLE).toContain("right:auto;bottom:auto;left:auto");
   });
 
   test("the wrapper takes none, past its own all: initial", () => {
@@ -1109,9 +1111,15 @@ describe("a feature's view", () => {
     expect(starting.indexOf(back)).toBeGreaterThan(starting.indexOf(from));
   });
 
-  test("makes the panel as tall as it gets, and shrinks to what the panel leaves it", () => {
+  test("makes the panel as tall as the window, and shrinks to what the panel leaves it", () => {
     const view = body(".view");
-    expect(view).toMatch(/height:\s*672px/);
+    expect(view).toMatch(/height:\s*100dvh/);
+    expect(body('.wrap[data-mode="view"] .panel')).toMatch(/max-height:\s*calc\(100dvh - 16px\)/);
+    // Inspect's tree takes what the styles leave, until its edge is dragged.
+    expect(body(".elements")).toMatch(/flex-direction:\s*column/);
+    expect(body(".elements")).toMatch(/min-height:\s*100%/);
+    expect(body(".dom")).toMatch(/flex:\s*1 0 auto/);
+    expect(body('.dom[style*="height"]')).toMatch(/flex-grow:\s*0/);
     expect(view).toMatch(/flex:\s*0 1 auto/);
     expect(view).toMatch(/min-height:\s*0/);
     expect(body(".panel")).toMatch(/max-height:\s*min\(672px, calc\(100dvh - 16px\)\)/);

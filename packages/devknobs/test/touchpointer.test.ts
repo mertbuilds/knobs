@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
-  dialogOpened,
   flings,
   inertiaStep,
   panOf,
   passedSlop,
   pickScroller,
-  raises,
   type ScrollNode,
   SLOP,
-  topLayerOf,
   velocityOf,
 } from "../src/engine/touchpointer";
+import { dialogOpened, raises, topLayerOf } from "../src/engine/toplayer";
 
 /** An element with room to scroll its content the ways named. */
 function node(room: string, touchAction = "auto"): ScrollNode {
