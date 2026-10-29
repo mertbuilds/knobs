@@ -405,8 +405,8 @@ export const FRAME_STATE_ATTRIBUTE = "data-devknobs-state";
 
 function frameOwn(): string | null {
   try {
-    const owner: unknown = Reflect.get(globalThis.window ?? {}, "frameElement");
-    return owner instanceof Element ? owner.getAttribute(FRAME_STATE_ATTRIBUTE) : null;
+    // The frame element is the page above's, from another realm, so no instanceof.
+    return globalThis.window?.frameElement?.getAttribute(FRAME_STATE_ATTRIBUTE) ?? null;
   } catch {
     return null;
   }

@@ -8,7 +8,8 @@ import { type Browser, chromium, type Page } from "playwright-core";
 
 const PAGE = `<!doctype html><html><head><meta name="viewport" content="width=device-width">
 <style>html{font-size:100%} body{margin:0;font-family:sans-serif} p{font-size:1rem;margin:0;padding:8px}</style>
-<script src="/knobs.js"></script></head><body>${Array.from({ length: 200 }, (_, i) => `<p>line ${i}</p>`).join("")}</body></html>`;
+<script src="/knobs.js"></script>
+<script>window.atLoad = { lang: navigator.language, font: getComputedStyle(document.documentElement).fontSize };</script></head><body>${Array.from({ length: 200 }, (_, i) => `<p>line ${i}</p>`).join("")}</body></html>`;
 
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
@@ -73,6 +74,10 @@ describe("compare in Chromium", () => {
   }, 30_000);
 
   test("a scroll in one frame moves the other to the same fraction", async () => {
+    await page.evaluate(() =>
+      window.devknobs?.compare([{ device: "iphone-17-pro" }, { device: "iphone-17-pro", textSize: "xxl" }]),
+    );
+    await loaded();
     const result = await page.evaluate(async () => {
       const [a, b] = Array.from(document.querySelector("[data-devknobs-compare]")?.shadowRoot?.querySelectorAll("iframe") ?? []).map(
         (frame) => frame.contentWindow as Window,
@@ -88,6 +93,42 @@ describe("compare in Chromium", () => {
     expect(result.bMax).toBeGreaterThan(result.aMax);
     expect(Math.abs(result.a - 0.25)).toBeLessThan(0.01);
     expect(Math.abs(result.b - result.a)).toBeLessThan(0.01);
+  }, 30_000);
+
+  test("pixel sync: a frame the sync moved does not echo its clamped offset back", async () => {
+    await page.evaluate(() =>
+      window.devknobs?.compare([{ device: "iphone-17-pro" }, { device: "iphone-17-pro", textSize: "xxl" }], { sync: "pixel" }),
+    );
+    await loaded();
+    const result = await page.evaluate(async () => {
+      const [a, b] = Array.from(document.querySelector("[data-devknobs-compare]")?.shadowRoot?.querySelectorAll("iframe") ?? []).map(
+        (frame) => frame.contentWindow as Window,
+      );
+      if (!a || !b) return null;
+      const max = (view: Window) => view.document.documentElement.scrollHeight - view.innerHeight;
+      b.scrollTo({ top: max(b), behavior: "instant" });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return { a: a.scrollY, aMax: max(a), b: b.scrollY, bMax: max(b) };
+    });
+    expect(result).not.toBeNull();
+    if (!result) return;
+    expect(result.bMax).toBeGreaterThan(result.aMax);
+    expect(result.a).toBe(result.aMax);
+    expect(result.b).toBe(result.bMax);
+  }, 30_000);
+
+  test("a frame's page starts with its own knobs, before any message", async () => {
+    await page.evaluate(() =>
+      window.devknobs?.compare([{ locale: { lang: "de-DE" } }, { textSize: "xxl" }]),
+    );
+    await loaded();
+    const atLoad = await page.evaluate(() =>
+      Array.from(document.querySelector("[data-devknobs-compare]")?.shadowRoot?.querySelectorAll("iframe") ?? []).map(
+        (frame) => Reflect.get(frame.contentWindow ?? {}, "atLoad"),
+      ),
+    );
+    expect(atLoad[0]?.lang).toBe("de-DE");
+    expect(atLoad[1]?.font).toBe("20px");
   }, 30_000);
 
   test("dark and light frames each see their own scheme, and exit takes the frames away", async () => {
