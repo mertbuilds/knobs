@@ -38,7 +38,7 @@ beforeAll(async () => {
     port: 0,
     fetch: (request) => {
       const url = new URL(request.url);
-      if (url.pathname === "/frame.png") return new Response(FRAME_PNG, { headers: { "content-type": "image/png" } });
+      if (url.pathname === "/frame.png") return new Response(new Blob([Buffer.from(FRAME_PNG)]), { headers: { "content-type": "image/png" } });
       const script = scripts[url.pathname];
       return script
         ? new Response(script, { headers: { "content-type": "text/javascript; charset=utf-8" } })
@@ -222,16 +222,18 @@ describe("the custom device editor in Chromium", () => {
         Reflect.set(window, "counting", true);
         const add = window.addEventListener.bind(window);
         const remove = window.removeEventListener.bind(window);
-        window.addEventListener = ((type: string, ...rest: never[]) => {
+        const count = (type: string, by: number) => {
           const now: Record<string, number> = Reflect.get(window, "pointerListeners");
-          now[type] = (now[type] ?? 0) + 1;
-          return add(type, ...rest);
-        }) as typeof window.addEventListener;
-        window.removeEventListener = ((type: string, ...rest: never[]) => {
-          const now: Record<string, number> = Reflect.get(window, "pointerListeners");
-          now[type] = (now[type] ?? 0) - 1;
-          return remove(type, ...rest);
-        }) as typeof window.removeEventListener;
+          now[type] = (now[type] ?? 0) + by;
+        };
+        window.addEventListener = (...args: Parameters<typeof add>) => {
+          count(args[0], 1);
+          add(...args);
+        };
+        window.removeEventListener = (...args: Parameters<typeof remove>) => {
+          count(args[0], -1);
+          remove(...args);
+        };
       }
       const editor = Reflect.get(window, "openDeviceEditor")();
       Reflect.set(window, "editor", editor);
