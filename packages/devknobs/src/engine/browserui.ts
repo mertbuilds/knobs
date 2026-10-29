@@ -820,7 +820,8 @@ export interface BarsMotion {
 export type BarsEvent =
   /**
    * The page scrolled to `y` at `time`. `room` is how far up minimizing
-   * moves the page's top, as Safari's top bars do.
+   * moves the page's top, as Safari's top bars do, and how far the page
+   * scrolls to keep its content in place.
    */
   | { type: "scroll"; y: number; time: number; room?: number }
   | { type: "tap" }
@@ -843,6 +844,14 @@ export function barsStep(state: BarsMotion, event: BarsEvent): BarsMotion {
   if (event.type === "tap") return { ...state, minimized: false, anchor: state.y };
   if (event.type === "resize") return { ...state, lockUntil: event.time + BARS_LOCK };
   const { y, time } = event;
+  const room = event.room ?? 0;
+  // Top bars take their room back by scrolling the page down as far, so
+  // they come back while it is still that far from its top: it never sits
+  // at its top under minimized bars, where taking it back would push it.
+  // Their own scroll as they minimize leaves it further down than that, so
+  // this holds while a resize settles too.
+  const near = state.minimized && room > 0 && y - room <= BARS_TOP;
+  if (near) return { ...state, minimized: false, y, anchor: y };
   // The page moving under a resize is not the user scrolling: count from here.
   if (time < state.lockUntil) return { ...state, y, anchor: y };
   if (y <= BARS_TOP) return { ...state, minimized: false, y, anchor: y };
@@ -853,8 +862,9 @@ export function barsStep(state: BarsMotion, event: BarsEvent): BarsMotion {
   }
   const anchor = Math.min(state.anchor, y);
   // Top bars give their room back by scrolling the page as far up, so the
-  // content stays put: only from far enough down that it stays clear of the top.
-  const clear = y - (event.room ?? 0) >= BARS_DOWN;
+  // content stays put: only from far enough down that it stays clear of
+  // where they come back, so the two never undo each other.
+  const clear = y - 2 * room >= BARS_DOWN;
   if (y - anchor >= BARS_DOWN && clear) return { ...state, minimized: true, y, anchor: y };
   return { ...state, y, anchor };
 }

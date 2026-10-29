@@ -573,11 +573,28 @@ describe("barsStep", () => {
   });
 
   test("top bars minimize only once the page is far enough down to scroll back by their room", () => {
-    const room = 60;
+    const room = 29;
     const near = (y: number): BarsEvent => ({ type: "scroll", y, time: 1000, room });
     expect(run([near(BARS_DOWN), near(room)]).minimized).toBe(false);
-    expect(run([near(room + BARS_DOWN - 1)]).minimized).toBe(false);
-    expect(run([near(room + BARS_DOWN)]).minimized).toBe(true);
+    expect(run([near(2 * room + BARS_DOWN - 1)]).minimized).toBe(false);
+    expect(run([near(2 * room + BARS_DOWN)]).minimized).toBe(true);
+  });
+
+  test("top bars come back while the page is still their room from its top, never at it", () => {
+    const room = 29;
+    const near = (y: number, time = 1000): BarsEvent => ({ type: "scroll", y, time, room });
+    // Minimized from 74 down, and the frame's resize scrolls the page back up by the room, to 45.
+    const resize: BarsEvent = { type: "resize", time: 1000 };
+    const down = run([near(2 * room + BARS_DOWN), resize, near(room + BARS_DOWN, 1100)]);
+    expect(down.minimized).toBe(true);
+    expect(run([near(room + 2, 1500)], down).minimized).toBe(true);
+    expect(run([near(room + 1, 1500)], down).minimized).toBe(false);
+    // Even while the resize settles: the user can get there before it does.
+    expect(run([near(room + 1, 1200)], down).minimized).toBe(false);
+    expect(run([near(room + 2, 1200)], down).minimized).toBe(true);
+    // Back out, the page scrolled down by the room again, and on toward the top they stay out.
+    const out = run([near(room + 1, 1500), { type: "resize", time: 1500 }, near(2 * room + 1, 1600), near(0, 2000)], down);
+    expect(out.minimized).toBe(false);
   });
 
   test("a tap counts the next way down from where the page is", () => {
