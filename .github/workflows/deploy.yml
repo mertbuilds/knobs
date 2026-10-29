@@ -49,7 +49,7 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/webmasters
       - name: Tell search engines what changed
         continue-on-error: true
-        uses: vinenastudio/deploy-indexing@a44ae9977bcc070f98d8c6ceecd1dab047ded5c8 # v1.0.1
+        uses: vinenastudio/deploy-indexing@bc5e796dd631dabf848c82bc02b8b243057a9532 # v1.0.2
         with:
           site-url: https://knobs.dev
           indexnow-key: 78542e187dcb354c241595d0ddb65792
