@@ -1,5 +1,6 @@
 import { layoutOf, layoutOptions, platformOf, runsUnderBars } from "../engine/browserui";
 import { isCustomColor, parseColor, toHex } from "../engine/color";
+import { customDevices } from "../engine/custom";
 import { DEVICES, deviceOf, formId, formOf, hasTouch, POSTURES } from "../engine/devices";
 import { DPR_MAX, DPR_MIN, frameForced, knobFrame, SIZE_MAX, SIZE_MIN } from "../engine/frame";
 import { isMatName, MAT_COLOR_NAMES, MAT_COLORS, matGradient } from "../engine/matcolors";
@@ -58,21 +59,31 @@ function sizeValue(state: DevknobsState): string {
   return typeof state.height === "number" ? `${state.width}x${state.height}` : "none";
 }
 
+const BUILT_IN_OPTIONS: readonly Option[] = [
+  { value: "none", label: "none" },
+  ...DEVICES.map((device) => ({
+    value: device.id,
+    label: device.label,
+    aliases: [device.kind, ...device.ua.split("-")],
+    group: device.kind,
+  })),
+];
+
 export const DEVICE: Knob = {
   id: "device",
   label: "device",
   category: "device",
   control: "list",
-  options: [
-    { value: "none", label: "none" },
-    ...DEVICES.map((device) => ({
+  // Read each time, so a device the user adds lists at once, under custom.
+  get options() {
+    return [...BUILT_IN_OPTIONS, ...customDevices().map((device) => ({
       value: device.id,
       label: device.label,
-      aliases: [device.kind, ...device.ua.split("-")],
-      group: device.kind,
-    })),
-  ],
-  aliases: ["devices", "height", "orientation", "rotate"],
+      aliases: ["custom", device.kind],
+      group: "custom",
+    }))];
+  },
+  aliases: ["devices", "height", "orientation", "rotate", "custom"],
   read: (state) => (state.device === "none" ? sizeValue(state) : state.device),
   write: (value, state) => {
     if (value === "portrait" || value === "landscape") return { orientation: value };

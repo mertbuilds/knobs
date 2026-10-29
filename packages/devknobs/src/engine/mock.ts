@@ -1,4 +1,5 @@
 import type { OrientationValue } from "../types";
+import { customDevice, customMock } from "./custom";
 import { screenOf, turn } from "./devices";
 import { BODIES, type Button, type Front } from "./mockdata";
 
@@ -136,6 +137,8 @@ export function placeIn(mock: Mock, room: Mock): Mock {
  * or on the right for one that turns clockwise.
  */
 export function mockOf(id: string, orientation: OrientationValue): Mock | null {
+  const custom = customDevice(id);
+  if (custom) return customMock(custom, orientation === "landscape");
   const device = screenOf(id);
   const shape = BODIES[id];
   if (!device || !shape) return null;

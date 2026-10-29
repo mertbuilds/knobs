@@ -1,4 +1,5 @@
 import type { BrowserValue, OrientationValue } from "../types";
+import { chromeSpecOf } from "./custom";
 import { turn } from "./devices";
 import type { Rect } from "./mock";
 import { BODIES } from "./mockdata";
@@ -93,7 +94,7 @@ const DUO_PILL = { height: 20, size: 12, pad: 15 } as const;
 
 /** May the page run under Safari's bars held sideways? Not on the Duo, whose page is never under them. */
 export function runsUnderBars(id: string): boolean {
-  return !SAFARI[id]?.duo;
+  return !safariOf(id)?.duo;
 }
 
 /** The Duo's Safari has one layout of its own. */
@@ -170,6 +171,22 @@ const CHROME: Record<string, ChromeSpec> = {
   "pixel-9-pro-xl": { top: 66, tall: 997 },
 };
 
+/** A device's Safari, a custom device's generic one where it picked iOS Safari. */
+function safariOf(id: string): SafariSpec | undefined {
+  const own = SAFARI[id];
+  if (own) return own;
+  const custom = chromeSpecOf(id);
+  return custom?.platform === "safari" ? { top: custom.top, side: custom.top, faceId: true } : undefined;
+}
+
+/** A device's Chrome, a custom device's generic one where it picked Android. */
+function chromeOf(id: string): ChromeSpec | undefined {
+  const own = CHROME[id];
+  if (own) return own;
+  const custom = chromeSpecOf(id);
+  return custom?.platform === "chrome" ? { top: custom.top } : undefined;
+}
+
 /** Safari's bars, measured from the bottom of the screen or the top inset. */
 export const SAFARI_BARS = {
   /** Compact's capsules and the bottom gap under them. */
@@ -191,14 +208,14 @@ export const SAFARI_BARS = {
 export const CHROME_BARS = { toolbar: 56, chin: 24, landscapeTop: 24 } as const;
 
 export function platformOf(id: string): Platform | null {
-  if (SAFARI[id]) return "safari";
-  if (CHROME[id]) return "chrome";
+  if (safariOf(id)) return "safari";
+  if (chromeOf(id)) return "chrome";
   return null;
 }
 
 /** The layouts the device's browser offers, its default first. Empty for one with none. */
 export function layoutOptions(id: string): readonly BrowserLayout[] {
-  if (SAFARI[id]?.duo) return DUO_LAYOUTS;
+  if (safariOf(id)?.duo) return DUO_LAYOUTS;
   const platform = platformOf(id);
   return platform ? LAYOUTS[platform] : [];
 }
@@ -243,7 +260,7 @@ export function viewportOf(
   const { width: W, height: H } = turn(device, orientation);
   const whole = rect(0, 0, W, H);
   if (!layout || layout === "off") return whole;
-  const safari = SAFARI[device.id];
+  const safari = safariOf(device.id);
   if (safari?.duo === "cover" && orientation === "landscape") {
     const { across } = DUO_COVER;
     const top = minimized ? across.minimized : across.top;
@@ -278,7 +295,7 @@ export function viewportOf(
     const bar = minimized ? SAFARI_BARS.pill : layout === "bottom" ? card : SAFARI_BARS.compact;
     return rect(0, T, W, H - bar - T);
   }
-  const chrome = CHROME[device.id];
+  const chrome = chromeOf(device.id);
   if (!chrome) return whole;
   const toolbar = minimized ? 0 : CHROME_BARS.toolbar;
   if (orientation === "landscape") {
@@ -788,7 +805,7 @@ export function barsOf(
   edge = false,
 ): Bars | null {
   if (!layout || layout === "off") return null;
-  const safari = SAFARI[device.id];
+  const safari = safariOf(device.id);
   if (safari) {
     const bars = safariBars(device, safari, orientation, layout, minimized);
     // Upright, Safari's look under its bars is always drawn, and the switch
@@ -797,7 +814,7 @@ export function barsOf(
     const upright = orientation === "portrait" || safari.duo !== undefined;
     return { ...bars, edge: edge || upright };
   }
-  const chrome = CHROME[device.id];
+  const chrome = chromeOf(device.id);
   if (chrome) return chromeBars(device, chrome, orientation, layout, minimized);
   return null;
 }

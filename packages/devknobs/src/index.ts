@@ -1,5 +1,6 @@
 import * as engine from "./engine";
 import { checkPatch } from "./engine/check";
+import { type CustomDevice, type CustomDeviceInput, customDevice, customDevices, exportDevice, removeDevice } from "./engine/custom";
 import { describe as describeKnobs, type KnobDescription } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
@@ -62,6 +63,7 @@ export type {
   KnobValue,
 } from "./engine/describe";
 export type { DeviceKind, DevicePreset } from "./engine/devices";
+export type { ChromeStyle, CustomDevice, CustomDeviceInput, ScreenHole } from "./engine/custom";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
@@ -327,7 +329,47 @@ export async function grab(
   return loaded.grab(elements, options);
 }
 
-const api = { mount, unmount, getState, setState, reset, replay, grab, describe, ready };
+/**
+ * The devices the user added from a picture of the body, kept in this
+ * origin's localStorage. Pictures are data urls; a url is fetched, so one
+ * on another origin needs CORS. A page cannot read a file path, the
+ * extension's copy included: read the file in Node and pass a data url.
+ */
+export const devices = {
+  list(): CustomDevice[] {
+    return [...customDevices()];
+  },
+  /** Add a device from its json or object, its picture from `image` where given. Replaces one with the same id. */
+  async add(device: string | object, image?: string): Promise<CustomDevice> {
+    const { addFrom } = await import("./engine/customload");
+    return addFrom(device, image);
+  },
+  /** Add a device from a picture alone: its screen hole found, the rest from `options` or defaults. */
+  async fromImage(image: string, options?: Partial<CustomDeviceInput>): Promise<CustomDevice> {
+    const { deviceFromImage } = await import("./engine/customload");
+    return deviceFromImage(image, options);
+  },
+  /** Take a device away. One in use goes back to none first. */
+  remove(id: string): boolean {
+    if (getState().device === id) setState({ device: "none", width: "full", height: "full", dpr: "system" });
+    return removeDevice(id);
+  },
+  select(id: string): DevknobsState {
+    if (!customDevice(id)) throw new TypeError(`devknobs: no custom device ${id}`);
+    return setState({ device: id });
+  },
+  /** One json with the picture in it. */
+  export(id: string): string {
+    const device = customDevice(id);
+    if (!device) throw new TypeError(`devknobs: no custom device ${id}`);
+    return exportDevice(device);
+  },
+  import(json: string, image?: string): Promise<CustomDevice> {
+    return devices.add(json, image);
+  },
+};
+
+const api = { mount, unmount, getState, setState, reset, replay, grab, describe, ready, devices };
 
 /** What `mount` puts at `window.devknobs`, for agents that run code in the page. */
 export type DevknobsApi = typeof api;

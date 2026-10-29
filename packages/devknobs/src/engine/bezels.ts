@@ -290,6 +290,8 @@ export function bezelsBeside(src: string): void {
  * the same file through the link.
  */
 function urlsOf(file: string): string[] {
+  // A custom device's picture is its own address.
+  if (file.startsWith("data:")) return [file];
   const urls: string[] = [];
   const add = (make: () => string | undefined) => {
     try {
@@ -711,6 +713,11 @@ export function bodyOf(knobs: BodyKnobs, settled: () => void): Mock | null {
   }
   const id = formId(knobs.device, knobs.posture);
   const drawn = mockOf(id, knobs.orientation);
+  if (drawn?.image) {
+    // A custom device: its picture is the only body it has.
+    releaseFoldShots();
+    return loadBezel(drawn.image.file, settled) === "failed" ? null : drawn;
+  }
   const bezel = bezelMock(id, knobs.orientation);
   loadOther(knobs);
   if (!bezel?.image) return drawn;
