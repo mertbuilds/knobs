@@ -8,7 +8,6 @@ import {
   splitQueryList,
   SYSTEM_MEDIA,
 } from "../src/engine/media";
-import { ownInline } from "../src/engine/owninline";
 
 const SCHEME = "prefers-color-scheme";
 const MOTION = "prefers-reduced-motion";
@@ -273,11 +272,36 @@ function listenedLists(): EventListenerOrEventListenerObject[] {
   return listened;
 }
 
+/** The `<style>`s devknobs puts in the fake head, where constructed sheets are not to be had. */
+let own: { attrs: Record<string, string>; textContent: string; remove(): void }[] = [];
+
+/** The `color-scheme` devknobs' sheet sets on the root, or null while it sets none. */
+function ownScheme(): string | null {
+  const node = own.find((style) => style.attrs["data-devknobs"] === "color-scheme");
+  return node ? (/color-scheme:(.*?)!important/.exec(node.textContent)?.[1] ?? null) : null;
+}
+
 describe("the prefers knobs across an unmount", () => {
   beforeEach(() => {
     define("window", { matchMedia: (query: string) => new FakeMediaQueryList(query) });
     const style = new Map<string, string>();
+    own = [];
     define("document", {
+      head: { appendChild: (node: (typeof own)[number]) => own.push(node) },
+      createElement: () => {
+        const node = {
+          attrs: {} as Record<string, string>,
+          textContent: "",
+          setAttribute(name: string, value: string) {
+            node.attrs[name] = value;
+          },
+          remove() {
+            own = own.filter((other) => other !== node);
+          },
+        };
+        return node;
+      },
+      querySelector: (selector: string) => own.find((node) => selector === `style[data-devknobs="${node.attrs["data-devknobs"]}"]`) ?? null,
       documentElement: {
         style: {
           getPropertyValue: (name: string) => style.get(name) ?? "",
@@ -310,29 +334,27 @@ describe("the prefers knobs across an unmount", () => {
     expect(heard).toEqual([true]);
   });
 
-  test("note the color-scheme they wrote on the root as their own, for the styles view to leave out", () => {
+  test("set color-scheme on the root from a sheet of their own, never the page's inline style", () => {
     const root = document.documentElement;
     apply(SYSTEM_MEDIA);
-    expect(ownInline(root, "color-scheme")).toBeNull();
+    expect(ownScheme()).toBeNull();
     apply({ ...SYSTEM_MEDIA, scheme: "dark" });
-    expect(root.style.getPropertyValue("color-scheme")).toBe("dark");
-    expect(ownInline(root, "color-scheme")).toBe("dark");
+    expect(ownScheme()).toBe("dark");
+    expect(root.style.getPropertyValue("color-scheme")).toBe("");
     apply({ ...SYSTEM_MEDIA, scheme: "light" });
-    expect(ownInline(root, "color-scheme")).toBe("light");
+    expect(ownScheme()).toBe("light");
     apply(SYSTEM_MEDIA);
-    expect(ownInline(root, "color-scheme")).toBeNull();
+    expect(ownScheme()).toBeNull();
   });
 
-  test("a color-scheme the page set itself stays the page's, the same as the knob's or put back", () => {
+  test("a color-scheme the page set itself stays as it is", () => {
     const root = document.documentElement;
     root.style.setProperty("color-scheme", "dark");
-    apply({ ...SYSTEM_MEDIA, scheme: "dark" });
-    expect(ownInline(root, "color-scheme")).toBeNull();
     apply({ ...SYSTEM_MEDIA, scheme: "light" });
-    expect(ownInline(root, "color-scheme")).toBe("light");
+    expect(ownScheme()).toBe("light");
     apply(SYSTEM_MEDIA);
+    expect(ownScheme()).toBeNull();
     expect(root.style.getPropertyValue("color-scheme")).toBe("dark");
-    expect(ownInline(root, "color-scheme")).toBeNull();
   });
 
   test("a list reads the touch screen and hears it come and go", () => {

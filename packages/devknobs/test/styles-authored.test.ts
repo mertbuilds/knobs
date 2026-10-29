@@ -39,6 +39,10 @@ describe("a media query a knob rewrote", () => {
       },
       styleSheets: sheets,
       adoptedStyleSheets: [],
+      // Where the scheme's own sheet goes; none is read back here.
+      head: { appendChild: () => {} },
+      createElement: () => ({ setAttribute: () => {}, textContent: "", remove: () => {} }),
+      querySelector: () => null,
     });
     define("MediaQueryList", FakeMediaQueryList);
     define("MediaQueryListEvent", Event);

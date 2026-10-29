@@ -1,6 +1,6 @@
 import type { ContrastValue, MotionValue, SchemeValue, TransparencyValue } from "../types";
 import { addLayer, baseMatchMedia, removeLayer } from "./matchmedia";
-import { markInline } from "./owninline";
+import { ensureStyle, removeStyle } from "./style";
 import { authoredMedia } from "./text";
 
 export type MediaFeature =
@@ -210,7 +210,6 @@ let refreshQueued = false;
 let forward: ((event: Event) => void) | null = null;
 let observer: MutationObserver | null = null;
 let frame = 0;
-let colorScheme: string | null = null;
 
 /**
  * A rule's media text as the page wrote it, whatever the prefers knobs or text
@@ -497,15 +496,16 @@ function ensureMatchMedia(): void {
   });
 }
 
+/**
+ * The scheme's `color-scheme` on the root, from a sheet of devknobs' own, so
+ * `<html>` keeps the attributes the server rendered and a React root hydrates
+ * over it with no mismatch. System leaves the page's own as it is.
+ */
+const SCHEME_SHEET = "color-scheme";
+
 function applyColorScheme(): void {
-  const root = document.documentElement;
-  if (colorScheme === null) colorScheme = root.style.getPropertyValue("color-scheme");
-  const value = current.scheme === "system" ? colorScheme : current.scheme;
-  if (value) root.style.setProperty("color-scheme", value);
-  else root.style.removeProperty("color-scheme");
-  // The page's own, put back or the same as the knob's, stays the page's.
-  const own = current.scheme !== "system" && value !== colorScheme;
-  markInline(root, "color-scheme", own ? root.style.getPropertyValue("color-scheme") : null);
+  if (current.scheme === "system") removeStyle(SCHEME_SHEET);
+  else ensureStyle(SCHEME_SHEET).textContent = `:root:root:root{color-scheme:${current.scheme}!important}`;
 }
 
 /**
@@ -550,7 +550,6 @@ function teardown(): void {
     readMatches = null;
     patched = false;
   }
-  colorScheme = null;
 }
 
 /**
