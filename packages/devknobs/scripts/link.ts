@@ -141,13 +141,15 @@ function copyAll(from: string, to: string): void {
   cpSync(from, to, { recursive: true });
 }
 
-function runBuild(): void {
-  const { status } = spawnSync(process.execPath, ["run", "build"], { cwd: ROOT, stdio: "inherit" });
+/** Builds with `version` in the code, so the panel says which copy it is. */
+function runBuild(version: string): void {
+  const env = { ...process.env, DEVKNOBS_VERSION: version };
+  const { status } = spawnSync(process.execPath, ["run", "build"], { cwd: ROOT, stdio: "inherit", env });
   if (status !== 0) throw new Error("the build failed");
 }
 
 /**
- * Builds, then puts a copy of the published package in the app's node_modules.
+ * Builds, with the local version in the code, then puts a copy of the published package in the app's node_modules.
  * The installed copy moves aside the first time, a link like a real folder.
  * Where the app installed the package again since, that newer install takes
  * the kept copy's place. The copy is made whole in the staging folder first,
@@ -157,15 +159,15 @@ function runBuild(): void {
  */
 export function link(
   app: string,
-  build: () => void = runBuild,
+  build: (version: string) => void = runBuild,
   root: string = ROOT,
   now: number = Date.now(),
   copy: (from: string, to: string) => void = copyAll,
 ): string[] {
   const { target, kept, staging } = pathsOf(app);
-  build();
+  const version = localVersion(String(manifestOf(root).version), now);
+  build(version);
   const manifest = manifestOf(root);
-  const version = localVersion(String(manifest.version), now);
   const made = join(staging, "new");
   const local = isLocal(target);
   remove(staging);

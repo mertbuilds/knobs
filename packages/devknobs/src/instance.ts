@@ -13,15 +13,34 @@ const OWNER = Symbol.for("devknobs.owner");
  */
 const HOST = Symbol.for("devknobs.host");
 
+/**
+ * A page copy's way to have the page from a host that steps aside, with what
+ * the host hands it. `pending` says whether that copy still waits, false once
+ * it unmounted, so a host never steps aside for a copy that is gone.
+ */
+export type Take = ((handed: object) => boolean) & { pending?: () => boolean };
+
 /** A host, as `HOST` holds it. */
 export interface Host {
   /** The host's way out, the one `OWNER` holds while the host has the page. */
   release: () => void;
-  /** Take what a copy the page mounts asks for, from its mount options. */
-  adopt: (options: object) => void;
+  /**
+   * Take what a copy the page mounts asks for, from its mount options. With
+   * `take`, that copy's way to have the page instead, should the host step
+   * aside for it, now or later: the host lets go first and hands it what it
+   * keeps for it, and it says whether it took the page. Older copies leave none.
+   */
+  adopt: (options: object, take?: Take) => void;
   /** The host's api, where a copy that defers to it sends its own calls. Older hosts leave none. */
   api?: object;
+  /** Which build the host is, read with `rankOf`. Older hosts leave none. */
+  rank?: object;
+  /** Hear that another host stood down for this one, with that host's rank. Older hosts leave none. */
+  outranked?: (other: object) => void;
 }
+
+/** What a host leaves on the slot beside its way out, `adopt` and api. */
+export type HostExtras = Pick<Host, "rank" | "outranked">;
 
 function isHost(value: unknown): value is Host {
   return (
@@ -35,18 +54,19 @@ function isHost(value: unknown): value is Host {
 /**
  * Take the page for `release`. Another copy that holds it lets go first. With
  * `adopt`, the copy holds it as the host: copies the page mounts later hand
- * their options to `adopt`, and their calls to `api`.
+ * their options to `adopt`, and their calls to `api`. `extras`: its rank, and how it hears of a host that stood down for it.
  */
 export function claim(
   scope: object,
   release: () => void,
-  adopt?: (options: object) => void,
+  adopt?: (options: object, take?: Take) => void,
   api?: object,
+  extras: HostExtras = {},
 ): void {
   const previous: unknown = Reflect.get(scope, OWNER);
   if (typeof previous === "function" && previous !== release) previous();
   Reflect.set(scope, OWNER, release);
-  if (adopt) Reflect.set(scope, HOST, { release, adopt, api } satisfies Host);
+  if (adopt) Reflect.set(scope, HOST, { release, adopt, api, ...extras } satisfies Host);
   else Reflect.deleteProperty(scope, HOST);
 }
 

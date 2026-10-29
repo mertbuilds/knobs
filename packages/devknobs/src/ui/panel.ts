@@ -12,6 +12,7 @@ import { devIconFor, devIconShown } from "../engine/tabicon";
 import { type SystemMedia, watchSystemMedia } from "../engine/system";
 import type { GrabControl } from "../grab/control";
 import type { InspectControl } from "../grab/inspect";
+import type { PreferValue } from "../host";
 import type { DevknobsState } from "../types";
 import { runAction, stopAction } from "./actions";
 import { type Action, availableActions, type Live } from "./catalog";
@@ -66,9 +67,21 @@ export interface PanelOptions {
    * user sets in the panel wins over it.
    */
   handle?: boolean;
+  /** Who runs the panel, the host or the page, where a host gives the choice. */
+  prefer?: PanelPrefer;
+}
+
+/** A host's choice of who runs the panel, as the settings and the footer show it. */
+export interface PanelPrefer {
+  value(): PreferValue;
+  change(value: PreferValue): void;
+  /** The footer's name for the copy that runs, such as `extension 0.5.1`. */
+  runtime: string;
 }
 
 export interface Panel {
+  /** Show the host's choice of who runs the panel again, which changed. */
+  drawPrefer(): void;
   /** Take the panel off the page and drop every listener. */
   destroy(): void;
 }
@@ -206,7 +219,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   lay(home, "rows");
   home.append(rows, empty, add, head, results);
 
-  const footer = createFooter(keys, grab, mac, inspect);
+  const footer = createFooter(keys, grab, mac, inspect, options.prefer?.runtime ?? null);
   const { foot, badge, hints, keysToggle, pin, collapse } = footer;
   // The tooltip the icon-only controls share. Their aria-label already says
   // the same, so assistive tech is not told twice.
@@ -248,6 +261,8 @@ export function createPanel(options: PanelOptions = {}): Panel {
       engine.nativeSwitch()?.setting.change(on);
       engine.setNative(on, null);
     },
+    prefer: options.prefer ?? null,
+    setPrefer: (value) => options.prefer?.change(value),
     searching: () => palette.searching(),
     leaveSearch: () => palette.leaveSearch(),
   });
@@ -365,6 +380,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     settings.drawDevIcon(devIconShown(state.panel.devIcon, window.location.hostname));
     const nativeNow = engine.nativeSwitch();
     if (nativeNow) settings.drawNative(nativeNow.on, nativeNow.note);
+    settings.drawPrefer();
     dockSlide.aim({
       docked: state.panel.docked,
       side: state.panel.side,
@@ -679,6 +695,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   layout("edge");
 
   return {
+    drawPrefer: () => settings.drawPrefer(),
     destroy(): void {
       settings.stopRecording();
       unsubscribe();

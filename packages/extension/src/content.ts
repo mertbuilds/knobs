@@ -6,7 +6,9 @@ import {
   getState,
   mount,
   type NativeDriver,
+  type PreferSetting,
   setNative,
+  setPrefer,
   setState,
   setSystemMedia,
 } from '@vinena/knobs';
@@ -14,6 +16,7 @@ import { DEFAULT_STATE, type KnobState, patchOf, sameState } from './knobs.ts';
 import {
   type Answer,
   type Ask,
+  LEGACY_TO_PAGE,
   type NativeReason,
   type PageMessage,
   type Question,
@@ -31,7 +34,44 @@ const NOTES: Record<NativeReason, string> = {
 // devknobs names the frame it loads the page in so (`FRAME_NAME` in its engine/frame.ts).
 const FRAME_NAME = 'devknobs-frame';
 
+// On the top window once the extension's copy let the page's own have the page, so
+// devknobs' frame, which loads the page again, leaves it to the page's copy there too.
+const YIELDED = Symbol.for('devknobs-extension.yielded');
+
 const top = window === window.top;
+// The extension's copy stepped aside for the page's own, which runs the panel now.
+let yielded = false;
+// Another copy of the extension that outranks this one, a local build say, holds the page:
+// this one holds nothing on this load, and its toolbar button opens that copy's panel.
+let idle = false;
+
+// In the tab's sessionStorage once the extension's copy stepped aside on this page, read as the
+// next load starts and cleared once it parsed: that load's copy keeps no knobs of its own, so it neither
+// reads nor writes the stored ones the page's copy shares, and hands none to Chrome before
+// it steps aside again. A load the page's copy does not take goes back to keeping them.
+const YIELDED_KEY = 'devknobs-extension.yielded';
+
+// Read, not cleared, as every copy of the extension on the page reads it, whichever comes first.
+function lastYielded(): boolean {
+  try {
+    return sessionStorage.getItem(YIELDED_KEY) === '1';
+  } catch {
+    // Storage the page cannot use: the knobs are kept as on any page.
+    return false;
+  }
+}
+
+function markYielded(on: boolean) {
+  try {
+    if (on) {
+      sessionStorage.setItem(YIELDED_KEY, '1');
+    } else {
+      sessionStorage.removeItem(YIELDED_KEY);
+    }
+  } catch {
+    // As above.
+  }
+}
 let knobs: KnobState = { ...DEFAULT_STATE };
 // Until the tab says what it has, its knobs win over the page's stored ones.
 let synced = false;
@@ -186,6 +226,112 @@ const driver: NativeDriver = {
   },
 };
 
+/**
+ * Who runs the panel on a page with its own devknobs, shown in the panel's settings.
+ * The choice is kept for every site; going back to the extension's copy from the
+ * page's panel loads the page again, so the extension's holds it from the start.
+ */
+const prefer: PreferSetting = {
+  change: (value) => {
+    void ask({ prefer: value, type: 'prefer' }).then(({ error }) => {
+      if (yielded && value === 'extension' && error === undefined) {
+        markYielded(false);
+        location.reload();
+      }
+    });
+  },
+  now: () => prefer.value,
+  value: 'extension',
+  yielded: () => {
+    yielded = true;
+    Reflect.set(window, YIELDED, true);
+    markYielded(true);
+  },
+};
+
+/** Where an older copy of the extension stood down for this one, its bridge's messages stop here. */
+function hush(event: Event) {
+  event.stopImmediatePropagation();
+}
+
+/**
+ * Another copy of the extension holds the page: hear nothing more from the bridge, leave older
+ * copies be, and have the tab keep no user agent of this copy's, nor knobs (`onIdle`).
+ */
+function standDown() {
+  idle = true;
+  if (top) {
+    document.removeEventListener(TO_PAGE, onMessage);
+    window.removeEventListener(LEGACY_TO_PAGE, hush, true);
+    document.addEventListener(TO_PAGE, onIdle);
+    toBridge({ id: 0, type: 'ua', ua: null });
+  }
+}
+
+/**
+ * Stood down, the toolbar button opens and closes the panel of the copy that holds the page,
+ * and knobs the tab kept from an earlier load go back to their defaults, the debugger with them.
+ */
+function onIdle(event: Event) {
+  const detail = (event as CustomEvent<unknown>).detail;
+  if (typeof detail !== 'string') {
+    return;
+  }
+  const message = JSON.parse(detail) as PageMessage;
+  if (message.type === 'toggle') {
+    const api = window.devknobs;
+    api?.setState({ panel: { open: !api.getState().panel.open } });
+  } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
+    toBridge({ state: DEFAULT_STATE, type: 'set' });
+  }
+}
+
+/** Mount the extension's copy as the page's host, its options as for the first mount. */
+function mountHost(persist: boolean) {
+  // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
+  // The user's own choice in the panel's settings still wins. As the host, a copy of
+  // devknobs the page mounts itself hands its keys and grab here and takes no panel,
+  // unless the user prefers the page's copy, which then takes the page from this one.
+  // Where another copy of the extension meets this one, the one that ranks higher holds the page.
+  mount({
+    build: typeof KNOBS_BUILD === 'string' ? KNOBS_BUILD : 'store',
+    handle: false,
+    host: true,
+    native: driver,
+    persist,
+    stoodDown: standDown,
+    ...(top ? { prefer } : {}),
+  });
+}
+
+/**
+ * Once the page's copy runs the panel: the toolbar button opens it, and the tab keeps no
+ * knobs of the extension's. A page that unmounted its copy since gets the extension's
+ * panel back on the button, open.
+ */
+function afterYield(message: PageMessage) {
+  if (message.type === 'toggle') {
+    const api = window.devknobs;
+    if (api) {
+      api.setState({ panel: { open: !api.getState().panel.open } });
+      return;
+    }
+    yielded = false;
+    Reflect.deleteProperty(window, YIELDED);
+    markYielded(false);
+    mountHost(true);
+    setState({ panel: { open: true } });
+  } else if (message.type === 'prefer') {
+    // Picked in another tab: the next load keeps knobs again only with the extension's.
+    prefer.value = message.prefer;
+    markYielded(message.prefer === 'page');
+    // The page's panel reads it through `now`; an empty patch draws it again.
+    window.devknobs?.setState({});
+  } else if (message.type === 'state' && !sameState(message.state, DEFAULT_STATE)) {
+    toBridge({ state: DEFAULT_STATE, type: 'set' });
+  }
+}
+
 function onMessage(event: Event) {
   const detail = (event as CustomEvent<unknown>).detail;
   if (typeof detail !== 'string') {
@@ -195,6 +341,12 @@ function onMessage(event: Event) {
   if (message.type === 'answer') {
     answers.get(message.id)?.(message);
     answers.delete(message.id);
+  } else if (yielded) {
+    afterYield(message);
+  } else if (message.type === 'prefer') {
+    // Kept here too, for a mount again once the page's copy has gone.
+    prefer.value = message.prefer;
+    setPrefer(message.prefer);
   } else if (message.type === 'toggle') {
     setState({ panel: { open: !getState().panel.open } });
   } else if (message.type === 'detached') {
@@ -231,12 +383,33 @@ function onMessage(event: Event) {
   }
 }
 
-if (top || window.name === FRAME_NAME) {
+/** Did the extension's copy on the page above let the page's own have it? */
+function yieldedAbove(): boolean {
+  try {
+    return Reflect.get(window.parent, YIELDED) === true;
+  } catch {
+    return false;
+  }
+}
+
+if (top || (window.name === FRAME_NAME && !yieldedAbove())) {
   if (top) {
     document.addEventListener(TO_PAGE, onMessage);
+    // An older copy of the extension, the store's 0.5 say, hears one channel for every copy.
+    // Once it stood down for this one, its bridge's knobs and toolbar button must not reach it.
+    if (TO_PAGE !== LEGACY_TO_PAGE) {
+      window.addEventListener(LEGACY_TO_PAGE, hush, true);
+    }
+    // Once every copy of the extension has read the flag; a handover since sets it again.
+    document.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        if (!yielded && !idle) {
+          markYielded(false);
+        }
+      },
+      { once: true },
+    );
   }
-  // The toolbar button opens and closes the panel, so no handle waits on the page's edge.
-  // The user's own choice in the panel's settings still wins. As the host, a copy of
-  // devknobs the page mounts itself hands its keys and grab here and takes no panel.
-  mount({ handle: false, host: true, native: driver });
+  mountHost(!(top && lastYielded()));
 }

@@ -10,13 +10,27 @@ import { UA_PRESETS } from "./engine/ua";
 import { createGrab, type GrabControl } from "./grab/control";
 import { createInspect, type InspectControl, oneAtATime } from "./grab/inspect";
 import type { GrabOptions, GrabResult } from "./grab/types";
-import { pageChoices } from "./host";
-import { claim, expose, free, type Host, hostOf, owned, superseded, withdraw } from "./instance";
+import {
+  type HostBuild,
+  type HostRank,
+  outranks,
+  pageChoices,
+  type PreferSetting,
+  type PreferValue,
+  preferOf,
+  rankOf,
+  stepsAside,
+  stoodDownNote,
+  takesBack,
+} from "./host";
+import { claim, expose, free, type Host, hostOf, owned, superseded, type Take, withdraw } from "./instance";
 import { applyOnLoad } from "./storage/onload";
 import type { DevknobsState, DevknobsStatePatch, GrabColorValue } from "./types";
 import { createKeys, type LiveKeys } from "./ui/bindings";
+import { runtimeLabel } from "./ui/footer";
 import { forwardKeys } from "./ui/keys";
-import { createPanel, type Panel } from "./ui/panel";
+import { createPanel, type Panel, type PanelPrefer } from "./ui/panel";
+import { VERSION } from "./version";
 
 export type {
   BarsValue,
@@ -67,6 +81,7 @@ export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
 export type { FrameRefusal, NativeDriver, NativeMedia, NativeSetting, NativeUa, NativeViewport } from "./engine/native";
 export type { SystemMedia } from "./engine/system";
+export type { HostBuild, PreferSetting, PreferValue } from "./host";
 export type {
   GrabEntry,
   GrabFrame,
@@ -109,6 +124,23 @@ export interface MountOptions extends engine.EngineOptions {
    * Defaults to false.
    */
   host?: boolean;
+  /**
+   * For a host: who runs the panel where the page mounts its own copy, its
+   * choice in the panel's settings and the footer naming the copy that runs.
+   * With `page`, a copy the page mounts takes the page from this one, now or
+   * once `setPrefer` says so, and this one does not take it back.
+   */
+  prefer?: PreferSetting;
+  /**
+   * For a host: which build it is. Where two hosts meet on a page, such as a
+   * store and a local build of the extension, the one that ranks higher holds
+   * it whichever mounted first, and the other stands down for that page load:
+   * a local build over a store one, then the newer version. A host with none
+   * takes the page as before, from any copy.
+   */
+  build?: HostBuild;
+  /** For a host with a `build`: it stood down for another host, which holds the page for this load. */
+  stoodDown?: () => void;
 }
 
 export const PRESETS = {
@@ -133,6 +165,20 @@ let hostedBy: Host | null = null;
 const RETAKES = 3;
 let retaken = 0;
 
+/** A host's preference now: its mount's, then what `setPrefer` brings. Null for a copy that is no host. */
+let preferNow: PreferValue | null = null;
+/** The way a page copy that deferred to this host left to take the page, should it step aside. */
+let waiting: Take | null = null;
+/** This copy's mount that deferred to a host, until it takes the page from it or unmounts. */
+let deferred: MountOptions | null = null;
+/**
+ * The preference a host handed this copy as it stepped aside, kept for the
+ * page's next mount of it, such as a remount on a hot update, until it defers to a host again.
+ */
+let handedPrefer: PreferSetting | null = null;
+/** The host that stood down for this one on this page load, for the footer: its rank, null for an older host. */
+let beaten: { other: HostRank | null } | null = null;
+
 /**
  * Start the knobs and put the panel on the page. Patches go in right away, even
  * mid-parse, so that a theme script running before `DOMContentLoaded` sees the
@@ -146,13 +192,29 @@ export function mount(options: MountOptions = {}): void {
   if (panel || stopKeys) return;
   const host = options.host ? null : hostOf(window);
   if (host) {
+    handedPrefer = null;
     hostedBy = host;
-    host.adopt(options);
+    deferred = options;
+    const take: Take = Object.assign((handed: object) => takeFrom(options, handed), {
+      pending: () => deferred === options && !panel && !stopKeys,
+    });
+    host.adopt(options, take);
     return;
   }
+  if (options.host && options.build) {
+    const holder = hostOf(window);
+    if (holder && !beats(options.build, holder)) {
+      standDown(options, holder);
+      return;
+    }
+    if (holder) beaten = { other: rankOf(holder) };
+  }
+  // A copy that is no host shows the preference it was handed, as it was handed.
+  preferNow = options.host ? (options.prefer?.value ?? null) : null;
+  if (!options.host && !options.prefer && handedPrefer) options = { ...options, prefer: handedPrefer };
   // Before anything else: the presets marked to apply on load, unless the early script did.
   applyOnLoad();
-  if (options.host) claim(window, unmount, adopt, api);
+  if (options.host) claim(window, unmount, adopt, api, options.build ? { rank: rankFor(options.build), outranked } : {});
   else claim(window, unmount);
   expose(window, api);
   engine.start(options);
@@ -183,7 +245,68 @@ function attach(options: MountOptions): void {
     return;
   }
   choose(options);
-  panel = createPanel({ keys: live, grab: grabControl, inspect, handle: options.handle });
+  panel = createPanel({
+    keys: live,
+    grab: grabControl,
+    inspect,
+    handle: options.handle,
+    prefer: panelPrefer(options),
+  });
+}
+
+/** The preference's row in the settings and the footer's name for this copy, where there is a preference. */
+function panelPrefer(options: MountOptions): PanelPrefer | undefined {
+  const setting = options.prefer;
+  if (!setting) return undefined;
+  return {
+    value: () => preferNow ?? setting.now?.() ?? setting.value,
+    change: (value) => {
+      // The host hears it first, as with the native switch.
+      setting.change(value);
+      setPrefer(value);
+    },
+    runtime: [runtimeLabel(options.host === true, VERSION), ...(options.host && beaten ? [stoodDownNote(beaten.other)] : [])].join(" · "),
+  };
+}
+
+/** This copy's rank as a host of `build`. */
+function rankFor(build: HostBuild): HostRank {
+  return { build, version: VERSION };
+}
+
+/**
+ * Does this copy, a host of `build`, outrank `holder`? A rank this version cannot read, a
+ * newer build's say, outranks it, so two hosts never take the page from each other in turn.
+ */
+function beats(build: HostBuild, holder: Host): boolean {
+  const theirs = rankOf(holder);
+  if (!theirs && holder.rank !== undefined) return false;
+  return outranks(rankFor(build), theirs);
+}
+
+/** A host that outranks this one holds the page: hold nothing on this load, and let both say so. */
+function standDown(options: MountOptions, holder: Host): void {
+  options.stoodDown?.();
+  if (options.build) holder.outranked?.(rankFor(options.build));
+}
+
+/** A host stood down for this one: the footer names it. */
+function outranked(other: object): void {
+  beaten = { other: rankOf({ rank: other }) };
+  if (!mounted || !panel) return;
+  detach();
+  attach(mounted);
+}
+
+/** A host stepped aside for this copy: mount as on a page with no host, its preference in the settings. */
+function takeFrom(options: MountOptions, handed: object): boolean {
+  if (deferred !== options || panel || stopKeys || hostOf(window)) return false;
+  deferred = null;
+  hostedBy = null;
+  const prefer = preferOf(handed);
+  handedPrefer = prefer;
+  mount(prefer ? { ...options, prefer } : options);
+  return true;
 }
 
 /** Open or close the panel and set grab's color, where the options say. */
@@ -205,9 +328,17 @@ function detach(): void {
   keys = null;
 }
 
-/** A host's side of a page's mount: take its choices, with a new panel where the keys or grab change. */
-function adopt(options: object): void {
+/**
+ * A host's side of a page's mount: step aside for it where the user prefers
+ * the page's, or take its choices, with a new panel where the keys or grab change.
+ */
+function adopt(options: object, take?: Take): void {
   if (!mounted) return;
+  if (typeof take === "function") waiting = take;
+  if (stepsAside(preferNow, waiting)) {
+    handOver();
+    return;
+  }
   const chosen = pageChoices(options);
   const rebuild = (["hotkey", "grabKey", "grab"] as const).some(
     (key) => chosen[key] !== undefined && chosen[key] !== mounted?.[key],
@@ -221,9 +352,54 @@ function adopt(options: object): void {
   attach(mounted);
 }
 
+/**
+ * Let the page go to the page copy that waits, and hand it the preference.
+ * Where it does not take the page, the host mounts again, its switch as it was.
+ */
+function handOver(): void {
+  const take = waiting;
+  const options = mounted;
+  if (!take || !options?.host) return;
+  // A page copy that unmounted since it deferred takes nothing: the host stays.
+  const pending: unknown = Reflect.get(take, "pending");
+  if (typeof pending === "function" && Reflect.apply(pending, take, []) !== true) {
+    waiting = null;
+    return;
+  }
+  const native = engine.nativeSwitch();
+  unmount();
+  const prefer = options.prefer;
+  let took = false;
+  try {
+    took = take(prefer ? { prefer: { value: "page", change: prefer.change, now: prefer.now } } : {}) === true;
+  } catch {
+    // A copy that broke as it mounted leaves the page to the host.
+  }
+  if (took) return;
+  if (native && !native.on) engine.setNative(false, native.note);
+  mount(current(options));
+}
+
+/** A host's options with its preference as it is now, to mount with again. */
+function current(options: MountOptions): MountOptions {
+  return options.prefer && preferNow ? { ...options, prefer: { ...options.prefer, value: preferNow } } : options;
+}
+
+/**
+ * The host's preference changed, or came in after its mount: with `page`, it
+ * steps aside at once for a page copy that waits. The settings show it.
+ */
+export function setPrefer(value: PreferValue): void {
+  preferNow = value;
+  panel?.drawPrefer();
+  if (mounted?.host && stepsAside(value, waiting)) handOver();
+}
+
 /** Remove the panel and undo every knob. A copy that was taken over has done so already. */
 export function unmount(): void {
   hostedBy = null;
+  deferred = null;
+  waiting = null;
   if (superseded(window, unmount)) return;
   detach();
   // A host keeps its switch's choice through a take-back: off stays off.
@@ -239,7 +415,25 @@ export function unmount(): void {
 }
 
 function retake(options: MountOptions, native: { on: boolean; note: string | null } | null): void {
-  if (mounted || !owned(window) || hostOf(window)) return;
+  if (mounted || !owned(window)) return;
+  const holder = hostOf(window);
+  // Another host took the page: where this one outranks it, such as an older
+  // build that takes the page from any copy, it takes the page back; else it stands down.
+  if (holder) {
+    if (!options.build) return;
+    if (!beats(options.build, holder)) {
+      standDown(options, holder);
+      return;
+    }
+    if (native && !native.on) engine.setNative(false, native.note);
+    mount(current(options));
+    return;
+  }
+  // The user prefers the page's copy: it keeps the page.
+  if (!takesBack(preferNow)) {
+    options.prefer?.yielded?.();
+    return;
+  }
   if (retaken++ >= RETAKES) {
     if (retaken === RETAKES + 1) {
       console.warn("devknobs: this page runs its own copy of devknobs, which does not know hosts; it keeps the page");
@@ -248,7 +442,7 @@ function retake(options: MountOptions, native: { on: boolean; note: string | nul
   }
   // Before the mount, so the driver is never handed the knobs the page emulates.
   if (native && !native.on) engine.setNative(false, native.note);
-  mount(options);
+  mount(current(options));
 }
 
 /**

@@ -20,7 +20,8 @@ if (packageVersion !== manifestVersion) {
 }
 
 await $`pnpm --filter @vinena/knobs build`.cwd(root);
-await $`bun ${join(root, 'scripts/build.ts')}`;
+// A release build: no local label in the manifest or the footer.
+await $`bun ${join(root, 'scripts/build.ts')}`.env({ ...process.env, KNOBS_RELEASE: '1' });
 
 const { version } = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8')) as {
   version: string;

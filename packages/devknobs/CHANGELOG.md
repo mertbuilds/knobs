@@ -2,6 +2,10 @@
 
 ## unreleased
 
+- a host can let a page's own copy run the panel: `mount({ host: true, prefer })` shows prefer (extension or page) in the settings, and with page, a copy the page mounts takes the page from the host, which takes its panel, frame and patches away and does not take it back. `setPrefer()` brings a choice that comes in after the mount. page copies from 0.4.0 to 0.5.1 cannot take over, so the extension's panel stays on those pages. the footer names the copy that runs the panel and its version, such as `extension 0.5.1` or `page 0.5.1-local.1767225600`; `bun run link` builds the local version into the code
+
+- two hosts on one page, such as the store's extension and a local build of it: `mount({ host: true, build: 'store' | 'local', stoodDown })` puts the host's rank on the page, and the one that ranks higher holds the page whichever mounted first (a local build over a store one, then the newer version). the other stands down for that page load, calls `stoodDown` and does not take the page back, and the holder's footer adds `store extension stood down`. a host with a build takes the page back from an older host that has none
+
 - on a local host (localhost, `*.localhost`, `*.local`, a loopback or private network address) the tab's icon and the apple-touch-icon get a yellow `DEV` ribbon across their top right corner, drawn in the page from the site's own icons, so a dev tab tells itself apart from production. `DEV` shows on icons of 32 px and up. each link keeps its own address in `data-devknobs-href` and gets it back when the ribbon goes off or devknobs unmounts. icons a framework puts in on a navigation get the ribbon too. a page with no icon link gets its `/favicon.ico`, where it has one. an icon from another origin that does not allow reading it keeps its own picture. the dev tab icon switch in the settings turns it off, or on for any host, for the tab, and `panel.devIcon` (`auto`, `on`, `off`) does the same from `setState()`
 
 ## 0.5.1

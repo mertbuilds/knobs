@@ -929,6 +929,8 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
 .badge.hot { color: var(--hot); }
 /* Says fresh mode is on, as quiet as the key hints under it. */
 .fresh-note { font-size: 10px; line-height: 1.4; color: var(--faint); }
+/* Which copy runs the panel, as quiet. */
+.runtime { font-size: 10px; line-height: 1.4; color: var(--faint); font-variant-numeric: tabular-nums; }
 /* The key hints, each a button for what its key does. Where they leave no
    room, the line wraps. */
 .meta {
@@ -1014,6 +1016,8 @@ button:focus-visible { outline: 1px solid var(--faint); outline-offset: -1px; }
    takes no height of its own, so the row is as tall as any. */
 .main > .row-button { align-self: center; margin: -2px 0 -2px auto; }
 .main > .row-button:not([hidden]) + .row-control { margin-left: 0; }
+/* Segments at a row's end, as the settings' choice of who runs the panel, take no more height than its title. */
+.main > .seg.row-control { margin-top: -3px; margin-bottom: -3px; }
 /* The panel's icons face the side the panel is on. */
 .wrap[data-side="left"] .glyph.sided { transform: scaleX(-1); }
 .key-set {

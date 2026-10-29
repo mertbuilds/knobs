@@ -3,6 +3,7 @@ import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from '.
 import {
   type Answer,
   detachMessage,
+  PREFER_KEY,
   type Question,
   readSystemChange,
   readTabRequest,
@@ -631,6 +632,10 @@ async function answer(tabId: number, question: Question, url: string | undefined
       await queued(tabId, () => setUa(tabId, question.ua, url));
       return {};
     }
+    case 'prefer': {
+      await chrome.storage.local.set({ [PREFER_KEY]: question.prefer });
+      return {};
+    }
     case 'frame': {
       const host = url ? URL.parse(url)?.hostname : undefined;
       if (question.open && host) {
@@ -671,7 +676,8 @@ chrome.runtime.onMessage.addListener(
       request.type === 'watch' ||
       request.type === 'frame' ||
       request.type === 'bypass' ||
-      request.type === 'ua'
+      request.type === 'ua' ||
+      request.type === 'prefer'
     ) {
       answer(tabId, request, sender.url).then(reply, (error) =>
         reply({ error: error instanceof Error ? error.message : String(error) }),
@@ -715,3 +721,34 @@ Object.assign(globalThis, {
     loads: (tabId: number) => loads.get(tabId)?.loads ?? [],
   },
 });
+
+// A local build reloads itself once its folder is rebuilt: Chrome serves an unpacked
+// extension's files from disk but runs the old code until reloaded. A timer checks while the
+// worker is awake, and an alarm wakes it at least every 30 seconds.
+if (typeof KNOBS_STAMP === 'string') {
+  const stamp = KNOBS_STAMP;
+  const RELOADED_KEY = 'reloadedFor';
+  const check = async () => {
+    try {
+      const response = await fetch(chrome.runtime.getURL('build.json'), { cache: 'no-store' });
+      const disk = JSON.stringify(await response.json());
+      // Once per stamp on disk, so a `build.json` its code does not match never loops reloads.
+      if (disk !== stamp && (await chrome.storage.local.get(RELOADED_KEY))[RELOADED_KEY] !== disk) {
+        await chrome.storage.local.set({ [RELOADED_KEY]: disk });
+        // oxlint-disable-next-line no-console -- the one line a local build's worker logs
+        console.warn('knobs: rebuilt, reloading the extension');
+        chrome.runtime.reload();
+      }
+    } catch {
+      // Mid rebuild the file can be missing or half written; the next check sees it.
+    }
+  };
+  setInterval(() => void check(), 2000);
+  void check();
+  void chrome.alarms.create('build', { periodInMinutes: 0.5 });
+  chrome.alarms.onAlarm.addListener(({ name }) => {
+    if (name === 'build') {
+      void check();
+    }
+  });
+}

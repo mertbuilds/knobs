@@ -3,8 +3,10 @@
 import {
   type Answer,
   type PageMessage,
+  PREFER_KEY,
   type Question,
   readPageMessage,
+  readPrefer,
   type Request,
   type Response,
   type TabMessage,
@@ -59,3 +61,16 @@ chrome.runtime.onMessage.addListener((message: TabMessage) => {
 chrome.runtime.sendMessage<Request, Response>({ type: 'get' }, ({ native = true, state, system }) =>
   toPage({ base, native, state, system, type: 'state' }),
 );
+
+// Who runs the panel, straight from storage, which answers sooner than the service
+// worker can wake: the extension's copy holds the page until it comes, and steps
+// aside for the page's own whenever it says so. Then each change, made in any tab.
+chrome.storage.local.get(PREFER_KEY, (stored) =>
+  toPage({ prefer: readPrefer(stored[PREFER_KEY]), type: 'prefer' }),
+);
+chrome.storage.onChanged.addListener((changes, area) => {
+  const change = changes[PREFER_KEY];
+  if (area === 'local' && change) {
+    toPage({ prefer: readPrefer(change.newValue), type: 'prefer' });
+  }
+});
