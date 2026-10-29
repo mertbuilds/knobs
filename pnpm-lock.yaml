@@ -146,6 +146,9 @@ importers:
       bippy:
         specifier: ^0.7.3
         version: 0.7.3(@types/react@19.2.18)(react@19.2.8)
+      playwright-core:
+        specifier: 1.62.1
+        version: 1.62.1
       react:
         specifier: ^19.2.4
         version: 19.2.8

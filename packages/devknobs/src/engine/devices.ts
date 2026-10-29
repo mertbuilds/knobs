@@ -4,6 +4,7 @@ import type {
   OrientationValue,
   PostureValue,
 } from "../types";
+import { customDevice, presetOf } from "./custom";
 
 export type DeviceKind = "phone" | "tablet" | "laptop" | "desktop";
 
@@ -328,8 +329,10 @@ export const DEVICES: readonly DevicePreset[] = [
   },
 ];
 
+/** A built-in device, or one the user added (see `custom.ts`), by its id. */
 export function deviceOf(id: string): DevicePreset | undefined {
-  return DEVICES.find((device) => device.id === id);
+  const custom = customDevice(id);
+  return custom ? presetOf(custom) : DEVICES.find((device) => device.id === id);
 }
 
 /**
@@ -368,7 +371,8 @@ export const SCREENS: readonly DevicePreset[] = DEVICES.flatMap((device) => {
 
 /** A device, or a foldable's screen, by its id. */
 export function screenOf(id: string): DevicePreset | undefined {
-  return SCREENS.find((screen) => screen.id === id);
+  const custom = customDevice(id);
+  return custom ? presetOf(custom) : SCREENS.find((screen) => screen.id === id);
 }
 
 /** Does the device's screen take touch? */

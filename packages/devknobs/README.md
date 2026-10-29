@@ -67,7 +67,8 @@ or on for any host.
 - [knobs](https://knobs.dev/docs/knobs): every knob devknobs has and what it
   does to the page
 - [devices](https://knobs.dev/docs/devices): phone, tablet and laptop presets,
-  with mocks, bezels and the phone's browser drawn around the page
+  with mocks, bezels and the phone's browser drawn around the page, your own
+  device from a picture of it, and devices side by side, each with its own knobs
 - [grab and inspect](https://knobs.dev/docs/grab): grab an element for a coding
   agent, or inspect its box and css in the panel
 - [requests and storage](https://knobs.dev/docs/requests-and-storage): see

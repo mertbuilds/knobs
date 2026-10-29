@@ -37,6 +37,43 @@ after `unmount()`, so it can mount again: `ready()` tells whether it is mounted.
 the [chrome extension](/docs/extension) puts the same api on `window.devknobs`
 on any page it runs on.
 
+## custom devices and compare
+
+`devknobs.devices` manages the devices the user added (see
+[devices](/docs/devices#custom-devices)):
+
+- `list()` the kept devices, as their json.
+- `add(device, image?)` takes the json, as a string or an object, with its
+  picture from `image` where given. a url is fetched, so one on another origin
+  needs CORS. it replaces a device with the same id.
+- `fromImage(image, options?)` takes a picture alone, a url or a data url,
+  finds its screen and fills the rest from `options` or the defaults. it
+  throws where it finds no hole and `options` gives no `screen`.
+- `remove(id)`, `select(id)`, `export(id)` (one json with the picture) and
+  `import(json, image?)`.
+
+a page cannot read a file path, the extension's copy included, since it runs in
+the page. an agent in node reads the file and passes a data url:
+
+```js
+const image = `data:image/png;base64,${fs.readFileSync('frame.png').toString('base64')}`;
+await page.evaluate((image) => devknobs.devices.fromImage(image, { label: 'My phone' }), image);
+```
+
+compare takes two frames or more, each a `setState` patch plus `textSize` (px
+or a Dynamic Type name), checked as `setState` checks them:
+
+- `compare(frames, { sync })` lays them out and resolves with the compare
+  state. `sync` is proportional (the default), pixel or off.
+- `setCompareFrame(index, frame)` changes one frame's patch.
+- `compareState()` each frame's patch, chip text, full state, whether its page
+  has loaded and the root font size it computes, or null with no compare up.
+- `exitCompare()` takes the frames away.
+
+`describe()` lists the custom ids among the device knob's values, and ends
+with a `compare` entry that is not a `setState` knob: its description says how
+to call compare and whether it is on, with each frame's difference.
+
 ## the agent skill
 
 the package ships an agent skill that walks an agent through the loop: learn

@@ -173,6 +173,84 @@ and forward step through the frame's history and reload reloads it, and the
 rest is drawn only. the glyphs are drawn for devknobs, none come from Apple
 or Google. tablets, laptops and desktops have no browser drawn.
 
+## custom devices
+
+`custom…` in the device row opens the editor. drop or pick a PNG or SVG of the
+device's body. knobs flood fills from the picture's center over pixels that
+are see-through or the center's flat color, takes the bounding box as the
+screen, and the corner radius from where the hole starts along the top left
+diagonal. a hole that runs off the picture's edge is the background, so the
+editor puts a box in the middle to drag instead.
+
+- drag the blue box to move it and its corners to resize it. the radius
+  slider sets the screen's corner.
+- "mark the island or notch" adds a red box for the cutout.
+- safe areas are css px of the screen, drawn green in the editor. knobs does
+  not emulate `env(safe-area-inset-*)` for any device yet, so they are kept
+  with the device for later.
+- the viewport follows the box over the dpr, 3 for a phone, 2 for the rest,
+  until you type one.
+- the browser: none draws a plain frame. iOS Safari and Android draw generic
+  bars, with the status bar from the top safe area (62 and 24 without one),
+  and set the matching user agent.
+
+saved devices are kept in this origin's `localStorage` under `devknobs:devices`,
+picture included as a data url, so the page above and the copy in the frame
+both know them before the first paint. the quota is about 5 MB per origin: a
+picture past 1.5 MB is drawn down to 1600 px on its longest side first, and a
+save that still does not fit says so. the device's id is `custom:` and its name
+in lowercase with hyphens.
+
+export json writes one file:
+
+```json
+{
+  "v": 1,
+  "id": "custom:my-phone",
+  "label": "My phone",
+  "kind": "phone",
+  "image": "data:image/png;base64,...",
+  "imageSize": [900, 1800],
+  "screen": { "x": 54, "y": 54, "width": 792, "height": 1692, "radius": 96 },
+  "cutout": { "x": 370, "y": 84, "width": 160, "height": 44 },
+  "safe": { "top": 44, "right": 0, "bottom": 24, "left": 0 },
+  "viewport": { "width": 396, "height": 846 },
+  "dpr": 2,
+  "chrome": "none"
+}
+```
+
+`screen`, `cutout` and `imageSize` are in the picture's px; `viewport` and
+`safe` in css px. `kind` is phone, tablet, laptop or desktop, `chrome` none,
+ios-safari or android. import takes this file back, or a file without
+`image` after you pick the picture.
+
+## compare
+
+`compare` in the device row lays the device in use beside a copy at the xxl
+text size; `exit` closes it. each frame loads the page in its own iframe, and
+the copy of devknobs in it takes the panel's knobs with the frame's patch on
+top, and emulates them in that window alone. a change in the panel reaches
+every frame; a frame's chip, which names how it differs from the panel, opens
+its own device, text size, scheme, motion, contrast, locale and network.
+
+- per frame: device (custom ones too), orientation, mock, dpr, text size and
+  spacing, scheme (handed down as the frame's real `prefers-color-scheme`),
+  motion, contrast, transparency, locale and direction, pseudo, time zone and
+  clock, location, network, user agent, touch and vision.
+- shared: `localStorage`, cookies, IndexedDB and caches are one per origin,
+  so a write in one frame shows in the others. the extension's real settings
+  (the DevTools protocol) are the tab's, so in compare every frame emulates
+  in the page. the panel, grab, inspect and the requests view stay with the
+  page above. browser bars are not drawn in compare frames.
+- scroll sync is on by default and proportional: each frame scrolls to the
+  same fraction of its page, so a frame at xxl text stays on the same
+  content. pixel keeps the same offset; off lets each frame go its own way.
+- text sizes take px or a Dynamic Type name: xs 13, s 14, m 15, l 16, xl 18,
+  xxl 20, xxxl 22, ax1 26, ax2 31, ax3 38, ax4 44, ax5 50. each is iOS's body
+  size at that setting over Large, times 16.
+- under 300 px a frame, the row scrolls sideways.
+
 ## user agent and reloads
 
 a device sets the user agent knob to its own browser too: iPhone or iPad

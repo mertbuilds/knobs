@@ -320,7 +320,7 @@ const report = (tab: Page) =>
       dark: matchMedia('(prefers-color-scheme: dark)').matches,
       fetched,
       fontSize: getComputedStyle(root).fontSize,
-      // What devknobs writes on <html> when it emulates in the page.
+      // What devknobs writes on <html>, which text size no longer does: it sizes the root from a sheet.
       inline: root.getAttribute('style') ?? '',
       monoSize: getComputedStyle(document.querySelector('code')!).fontSize,
       online: navigator.onLine,
@@ -613,7 +613,13 @@ async function inPageMode() {
               .querySelector('[data-devknobs="viewport"]')
               ?.shadowRoot?.querySelector('iframe[data-devknobs-frame]') != null,
           hint: panel.querySelector('.row-hint')?.textContent,
-          inline: document.documentElement.style.fontSize,
+          inline:
+            /font-size: ([^;!]+?) !important/.exec(
+              [...document.adoptedStyleSheets]
+                .flatMap((sheet) => [...sheet.cssRules])
+                .map((rule) => rule.cssText)
+                .join(''),
+            )?.[1] ?? '',
           innerWidth,
           kept: (window as unknown as { kept?: number }).kept,
         };
@@ -667,7 +673,15 @@ async function inPageMode() {
     // (b) Off from the switch: the debugger leaves and the page emulates, the knobs kept.
     await flip();
     assert.equal(await until(false), false, 'the debugger left the tab');
-    await tab.waitForFunction(() => document.documentElement.style.fontSize !== '');
+    await tab.waitForFunction(
+      () =>
+        (/font-size: ([^;!]+?) !important/.exec(
+          [...document.adoptedStyleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .map((rule) => rule.cssText)
+            .join(''),
+        )?.[1] ?? '') !== '',
+    );
     const off = await look();
     log('mode: off', off);
     assert.equal(off.checked, 'false');
@@ -694,7 +708,13 @@ async function inPageMode() {
         )!.contentWindow!;
       return {
         innerFontSize: inner.getComputedStyle(inner.document.documentElement).fontSize,
-        innerInline: inner.document.documentElement.style.fontSize,
+        innerInline:
+          /font-size: ([^;!]+?) !important/.exec(
+            [...inner.document.adoptedStyleSheets]
+              .flatMap((sheet) => [...sheet.cssRules])
+              .map((rule) => rule.cssText)
+              .join(''),
+          )?.[1] ?? '',
         innerWidth,
         pageWidth: inner.innerWidth,
       };
@@ -710,7 +730,15 @@ async function inPageMode() {
     await flip();
     // A page with no viewport tag lays out at 980px in a phone's 402.
     await tab.waitForFunction(() => outerWidth === 402);
-    await tab.waitForFunction(() => document.documentElement.style.fontSize === '');
+    await tab.waitForFunction(
+      () =>
+        (/font-size: ([^;!]+?) !important/.exec(
+          [...document.adoptedStyleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .map((rule) => rule.cssText)
+            .join(''),
+        )?.[1] ?? '') === '',
+    );
     await tab.evaluate(() => window.devknobs!.ready());
     const back = await look();
     log('mode: on again', back);
@@ -740,7 +768,15 @@ async function inPageMode() {
         }
       ).knobs.detached(tabId, 'canceled_by_user');
     }, tabId);
-    await tab.waitForFunction(() => document.documentElement.style.fontSize === '48px');
+    await tab.waitForFunction(
+      () =>
+        (/font-size: ([^;!]+?) !important/.exec(
+          [...document.adoptedStyleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .map((rule) => rule.cssText)
+            .join(''),
+        )?.[1] ?? '') === '48px',
+    );
     const closed = await look();
     log('mode: bar closed', closed);
     assert.equal(closed.checked, 'false');
@@ -758,7 +794,15 @@ async function inPageMode() {
     await other.goto(url);
     await ready(other);
     await set(other, { text: 24 });
-    await other.waitForFunction(() => document.documentElement.style.fontSize === '24px');
+    await other.waitForFunction(
+      () =>
+        (/font-size: ([^;!]+?) !important/.exec(
+          [...document.adoptedStyleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .map((rule) => rule.cssText)
+            .join(''),
+        )?.[1] ?? '') === '24px',
+    );
     const otherId = await worker.evaluate(
       async (tabId) => (await chrome.tabs.query({})).find((tab) => tab.id !== tabId)!.id!,
       tabId,
@@ -1419,6 +1463,69 @@ const panels = (tab: Page) =>
  * that knows no hosts takes the page, and the host takes it back, three times at most, its
  * settings' switch as it was.
  */
+/**
+ * Compare on a page the extension hosts, from the device row's chip, as a user
+ * starts it: over the device frame already up, each frame with its own text size.
+ */
+async function compareHosted() {
+  const tab = await context.newPage();
+  const errors: Array<string> = [];
+  tab.on('pageerror', (error) => errors.push(String(error)));
+  await tab.goto(url);
+  await ready(tab);
+  await set(tab, { device: 'iphone-17-pro', panel: { open: true } });
+  await tab.evaluate(() => window.devknobs!.ready());
+  const clicked = await tab.evaluate(() => {
+    for (const host of document.querySelectorAll('[data-devknobs]')) {
+      const chip = Array.from(host.shadowRoot?.querySelectorAll('button') ?? []).find(
+        (button) => button.textContent?.trim() === 'compare',
+      );
+      if (chip) {
+        chip.click();
+        return true;
+      }
+    }
+    return false;
+  });
+  if (!clicked) {
+    // The chip is in the device row's editor: open the row first, then the chip.
+    await tab.evaluate(() => {
+      for (const host of document.querySelectorAll('[data-devknobs]')) {
+        const row = Array.from(host.shadowRoot?.querySelectorAll('button') ?? []).find((button) =>
+          button.textContent?.trim().startsWith('device'),
+        );
+        row?.click();
+      }
+    });
+    await tab.waitForTimeout(300);
+    await tab.evaluate(() => {
+      for (const host of document.querySelectorAll('[data-devknobs]')) {
+        Array.from(host.shadowRoot?.querySelectorAll('button') ?? [])
+          .find((button) => button.textContent?.trim() === 'compare')
+          ?.click();
+      }
+    });
+  }
+  // The chip's compare puts the device beside a copy at xxl.
+  await tab.waitForFunction(
+    () => window.devknobs?.compareState()?.frames.every((frame) => frame.loaded) === true,
+    null,
+    { timeout: 20_000 },
+  );
+  const seen = await tab.evaluate(() => ({
+    fonts: window.devknobs!.compareState()!.frames.map((frame) => frame.fontSize),
+    over:
+      document
+        .elementFromPoint(innerWidth / 4, innerHeight / 2)
+        ?.closest('[data-devknobs-compare]') !== null,
+  }));
+  log('compare, hosted', { ...seen, errors });
+  assert.deepEqual(seen, { fonts: [16, 20], over: true });
+  assert.deepEqual(errors, []);
+  await tab.evaluate(() => window.devknobs!.exitCompare());
+  await tab.close();
+}
+
 async function pageOwnCopy() {
   const tab = await context.newPage();
   const errors: Array<string> = [];
@@ -1526,7 +1633,15 @@ async function pageOwnCopy() {
         ?.getAttribute('aria-checked') === 'false',
   );
   await set(tab, { text: 48 });
-  await tab.waitForFunction(() => document.documentElement.style.fontSize === '48px');
+  await tab.waitForFunction(
+    () =>
+      (/font-size: ([^;!]+?) !important/.exec(
+        [...document.adoptedStyleSheets]
+          .flatMap((sheet) => [...sheet.cssRules])
+          .map((rule) => rule.cssText)
+          .join(''),
+      )?.[1] ?? '') === '48px',
+  );
   await tab.goto(`${url}own-old`);
   await ready(tab);
   await tab.waitForFunction(() => window.oldReleased === 1);
@@ -1537,7 +1652,15 @@ async function pageOwnCopy() {
   await tab.waitForTimeout(300);
   const inPage = {
     fontSize: await tab.evaluate(() => getComputedStyle(document.documentElement).fontSize),
-    inline: await tab.evaluate(() => document.documentElement.style.fontSize),
+    inline: await tab.evaluate(
+      () =>
+        /font-size: ([^;!]+?) !important/.exec(
+          [...document.adoptedStyleSheets]
+            .flatMap((sheet) => [...sheet.cssRules])
+            .map((rule) => rule.cssText)
+            .join(''),
+        )?.[1] ?? '',
+    ),
     switch: await switchOf(),
   };
   log('in-page, after a take-back', inPage);
@@ -2219,6 +2342,7 @@ try {
   await uaRequests();
   await strictPolicy();
   await pageOwnCopy();
+  await compareHosted();
 
   process.stdout.write('smoke passed\n');
 } finally {

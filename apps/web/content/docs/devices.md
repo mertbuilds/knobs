@@ -32,6 +32,23 @@ a phone also shows the page in its browser: Safari's bars on an iPhone,
 Chrome's toolbar on a Pixel. the browser knob picks the layout, or off for
 the whole screen, and the bars minimize as the page scrolls.
 
+## custom devices
+
+`custom…` in the device row adds a device from a PNG or SVG of its body.
+knobs finds the screen hole, see-through or one flat color, and its corner.
+drag the box and its corners to correct it, mark the island if you like, and
+set the viewport, the dpr and the browser to draw (none, iOS Safari or
+Android). saved, it lists under custom, next to the presets, in this browser
+only. export json saves it as one file with the picture in it.
+
+## compare devices
+
+`compare` in the device row puts the device beside a copy at the xxl text
+size. each frame runs the page with the panel's knobs and its own on top:
+click a frame's chip to set its device, text size, scheme, motion, contrast,
+locale or network. `+ frame` adds one, scroll sync keeps them on the same part
+of the page. storage, cookies and the extension's real settings stay shared.
+
 ## touch and the user agent
 
 a touch device gets a touch screen inside its frame: `(pointer: coarse)`

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as media from "../src/engine/media";
-import { ownInline } from "../src/engine/owninline";
 import {
   apply,
   cascade,
@@ -191,6 +190,14 @@ function sheet(rules: unknown[], media = "", disabled = false): Sheet {
 let inline: Map<string, { value: string; priority: string }>;
 let writes: number;
 let sheets: Sheet[];
+/** The `<style>`s devknobs puts in the fake head, where constructed sheets are not to be had. */
+let own: { attrs: Record<string, string>; textContent: string; remove(): void }[];
+
+/** The root size devknobs' sheet sets, or null while it sets none. */
+function ownSize(): string | null {
+  const node = own.find((style) => style.attrs["data-devknobs"] === "text-root");
+  return node ? (/font-size:(.*?)!important/.exec(node.textContent)?.[1] ?? null) : null;
+}
 
 function rootSize(): string {
   return inline.get("font-size")?.value ?? "";
@@ -210,6 +217,7 @@ describe("text size on a page", () => {
     inline = new Map();
     writes = 0;
     sheets = [];
+    own = [];
     define("window", {
       matchMedia: (query: string) => new FakeMediaQueryList(query),
       addEventListener: () => {},
@@ -236,6 +244,23 @@ describe("text size on a page", () => {
         return sheets;
       },
       adoptedStyleSheets: [],
+      head: {
+        appendChild: (node: (typeof own)[number]) => own.push(node),
+      },
+      createElement: () => {
+        const node = {
+          attrs: {} as Record<string, string>,
+          textContent: "",
+          setAttribute(name: string, value: string) {
+            node.attrs[name] = value;
+          },
+          remove() {
+            own = own.filter((other) => other !== node);
+          },
+        };
+        return node;
+      },
+      querySelector: (selector: string) => own.find((node) => selector === `style[data-devknobs="${node.attrs["data-devknobs"]}"]`) ?? null,
     });
     define("getComputedStyle", () => ({ fontSize: "16px", getPropertyValue: () => "" }));
   });
@@ -250,32 +275,26 @@ describe("text size on a page", () => {
   test("follows a root size the page sets inline while on, and leaves it after", () => {
     setRootSize("62.5%");
     apply(20);
-    expect(rootSize()).toBe("12.5px");
+    expect(ownSize()).toBe("12.5px");
     setRootSize("50%");
     apply(20);
-    expect(rootSize()).toBe("10px");
+    expect(ownSize()).toBe("10px");
     reset();
+    expect(ownSize()).toBeNull();
     expect(rootSize()).toBe("50%");
   });
 
-  test("notes the root size it wrote as its own, for the styles view to leave out", () => {
-    const root = document.documentElement;
+  test("sizes the root from a sheet of its own and never writes the page's inline style", () => {
     setRootSize("62.5%");
-    expect(ownInline(root, "font-size")).toBeNull();
+    writes = 0;
     apply(20);
-    expect(ownInline(root, "font-size")).toBe("12.5px");
-    expect(ownInline(root, "font-size")).toBe(rootSize());
-    // What the page writes over it is the page's, and no longer what is noted.
-    setRootSize("50%");
-    expect(ownInline(root, "font-size")).not.toBe(rootSize());
-    apply(20);
-    expect(ownInline(root, "font-size")).toBe("10px");
-    expect(rootSize()).toBe("10px");
+    expect(ownSize()).toBe("12.5px");
+    expect(rootSize()).toBe("62.5%");
     reset();
-    expect(ownInline(root, "font-size")).toBeNull();
+    expect(writes).toBe(0);
   });
 
-  test("leaves a root size the page wrote over devknobs' own", () => {
+  test("leaves a root size the page wrote while on", () => {
     setRootSize("62.5%");
     apply(20);
     setRootSize("18px");
@@ -286,8 +305,9 @@ describe("text size on a page", () => {
   test("sizes an unset root against the browser's default, as a host that set it for real leaves it", () => {
     define("getComputedStyle", () => ({ fontSize: "48px", getPropertyValue: () => "" }));
     apply(48);
-    expect(rootSize()).toBe("48px");
+    expect(ownSize()).toBe("48px");
     reset();
+    expect(ownSize()).toBeNull();
     expect(rootSize()).toBe("");
   });
 
@@ -305,10 +325,10 @@ describe("text size on a page", () => {
       sheet([new CSSStyleRule("html", "10px")], "", true),
     ];
     apply(20);
-    expect(rootSize()).toBe("12.5px");
+    expect(ownSize()).toBe("12.5px");
     sheets.push(sheet([new CSSStyleRule("html", "125%")], "screen"));
     apply(20);
-    expect(rootSize()).toBe("25px");
+    expect(ownSize()).toBe("25px");
   });
 
   describe("with the prefers knobs", () => {

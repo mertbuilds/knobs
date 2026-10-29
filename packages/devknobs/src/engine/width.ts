@@ -17,6 +17,7 @@ import {
   plainFrame,
   post,
   readMessage,
+  SANDBOX,
   UNFRAMED,
   type ZoomAction,
 } from "./frame";
@@ -122,25 +123,6 @@ const ZOOM_SETTLE = 200;
 /** The pixels a wheel line stands for, where a wheel counts in lines. */
 const WHEEL_LINE = 20;
 
-/**
- * Everything an app on this origin does unframed, pointer lock, presentation
- * and orientation lock included, short of navigating the window above on its
- * own: a frame-busting script would reload the page into its frame forever. A
- * click still can, so `target="_top"` links work.
- */
-const SANDBOX = [
-  "allow-scripts",
-  "allow-same-origin",
-  "allow-forms",
-  "allow-popups",
-  "allow-popups-to-escape-sandbox",
-  "allow-modals",
-  "allow-downloads",
-  "allow-pointer-lock",
-  "allow-presentation",
-  "allow-orientation-lock",
-  "allow-top-navigation-by-user-activation",
-].join(" ");
 
 let host: HTMLElement | null = null;
 /** Stops putting `host` back in the page, and the style that hides the page. */

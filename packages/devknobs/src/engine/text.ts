@@ -1,6 +1,6 @@
 import type { TextValue } from "../types";
 import { addLayer, removeLayer } from "./matchmedia";
-import { markInline } from "./owninline";
+import { ensureStyle, isOwnSheet, removeStyle } from "./style";
 
 /**
  * The browser's default font size setting, emulated. That setting is the size
@@ -176,7 +176,7 @@ let size: number | null = null;
 let active = false;
 /** The page's own inline root size. */
 let original = { value: "", priority: "" };
-/** The inline root size devknobs last wrote, while it is still the one there. */
+/** The root size devknobs' sheet sets, null while it sets none. */
 let wrote: string | null = null;
 /** Whether the root size depends on media queries, so a resize can change it. */
 let conditional = false;
@@ -185,7 +185,8 @@ let frame = 0;
 const rewrites = new WeakMap<CSSRule, { original: string; written: string }>();
 
 function sheets(): CSSStyleSheet[] {
-  return [...Array.from(document.styleSheets), ...(document.adoptedStyleSheets ?? [])];
+  // The page's own: devknobs' sheets, the one that sizes the root among them, are not.
+  return [...Array.from(document.styleSheets), ...(document.adoptedStyleSheets ?? [])].filter((sheet) => !isOwnSheet(sheet));
 }
 
 function rulesOf(sheet: CSSStyleSheet): CSSRuleList | null {
@@ -348,28 +349,26 @@ function authorFontSize(): string | null {
   return cascade(declarations)?.value ?? null;
 }
 
-/**
- * Take the inline root size as the page's own, unless it is the one devknobs
- * wrote. A page that sets its own while the knob is on is followed, not undone.
- */
+/** The page's own inline root size, read each time the knob sizes the root. */
 function capture(): void {
   const style = document.documentElement.style;
-  const value = style.getPropertyValue("font-size");
-  if (wrote !== null && value === wrote) return;
-  original = { value, priority: style.getPropertyPriority("font-size") };
-  wrote = null;
-  markInline(document.documentElement, "font-size", null);
+  original = { value: style.getPropertyValue("font-size"), priority: style.getPropertyPriority("font-size") };
 }
 
-/** Put the page's own inline root size back, if devknobs' is still the one there. */
+/**
+ * The sheet devknobs sizes the root with: a constructed sheet where the
+ * browser has them, so `<html>` keeps the attributes the server rendered and
+ * a React root hydrates over it with no mismatch, as an inline style would
+ * give it when devknobs runs first.
+ */
+const ROOT_SHEET = "text-root";
+const ROOT_RULE = (size: string) => `:root:root:root{font-size:${size}!important}`;
+
+/** Take devknobs' root size away. */
 function restoreRoot(): void {
-  if (wrote === null) return;
-  const style = document.documentElement.style;
-  if (style.getPropertyValue("font-size") === wrote) {
-    style.setProperty("font-size", original.value, original.priority);
-  }
+  if (!wrote) return;
+  removeStyle(ROOT_SHEET);
   wrote = null;
-  markInline(document.documentElement, "font-size", null);
 }
 
 /**
@@ -382,11 +381,10 @@ function computedSize(): number {
   const root = document.documentElement;
   const value = parseFloat(getComputedStyle(root).fontSize);
   if (!(value > 0)) return INITIAL;
-  const style = root.style;
-  const own = { value: style.getPropertyValue("font-size"), priority: style.getPropertyPriority("font-size") };
-  style.setProperty("font-size", "medium", "important");
+  const probe = ensureStyle(ROOT_SHEET);
+  probe.textContent = ROOT_RULE("medium");
   const medium = parseFloat(getComputedStyle(root).fontSize);
-  style.setProperty("font-size", own.value, own.priority);
+  removeStyle(ROOT_SHEET);
   return medium > 0 ? (value * INITIAL) / medium : value;
 }
 
@@ -411,9 +409,8 @@ function applyRoot(): void {
     return;
   }
   // Important, so it wins over an important author rule the way the setting would.
-  root.style.setProperty("font-size", next, "important");
-  wrote = root.style.getPropertyValue("font-size");
-  markInline(root, "font-size", wrote);
+  ensureStyle(ROOT_SHEET).textContent = ROOT_RULE(next);
+  wrote = next;
 }
 
 function refresh(): void {

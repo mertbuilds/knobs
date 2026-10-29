@@ -4,6 +4,7 @@ import { isDevknobsFrame, nativeScheme } from "./engine/frame";
 import { early } from "./engine/media";
 import { showEarly } from "./engine/placeholder";
 import { resume } from "./engine/scrollkeep";
+import { apply as earlyScreen, screenSizeOf } from "./engine/screen";
 import { load } from "./engine/store";
 import { apply as earlyUa } from "./engine/ua";
 import { installHook } from "./grab/hook";
@@ -14,7 +15,7 @@ import { applyOnLoad } from "./storage/onload";
 /**
  * The optional early script. As the first script in `<head>` it applies the
  * stored scheme, motion, contrast and transparency, a device's pointer and
- * hover in its frame, the clock and the user agent, before any page script
+ * hover in its frame, the device's `screen` there, the clock and the user agent, before any page script
  * runs, with no panel. The full script takes these patches over when it mounts.
  * It also puts a React devtools hook in place, for grab, when there is none,
  * and starts the requests log, so the page's first requests are in it.
@@ -38,6 +39,8 @@ else {
   early({ scheme, motion, contrast, transparency, touch: inFrame && hasTouch(stored.device) });
   earlyClock(stored.clock);
   earlyUa(stored.ua);
+  // A device's screen in its frame, for a page that reads it before devknobs mounts.
+  if (inFrame) earlyScreen(screenSizeOf(stored));
   recordRequests();
   installHook();
   // The page in the frame is the frame's own, and never hides.

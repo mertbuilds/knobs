@@ -1,6 +1,9 @@
 import * as engine from "./engine";
 import { checkPatch } from "./engine/check";
-import { describe as describeKnobs, type KnobDescription } from "./engine/describe";
+import { type CustomDevice, type CustomDeviceInput, customDevice, customDevices, exportDevice, removeDevice } from "./engine/custom";
+import type { CompareFrameInput, CompareState, SyncMode } from "./engine/compare";
+import { compareLoaded, loadCompare } from "./engine/compares";
+import { describe as describeKnobs, type KnobDescription, type KnobShape, type KnobValue } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
 import { GEO_PRESETS } from "./engine/geo";
@@ -62,6 +65,8 @@ export type {
   KnobValue,
 } from "./engine/describe";
 export type { DeviceKind, DevicePreset } from "./engine/devices";
+export type { CompareFrameInput, CompareFrameState, CompareState, SyncMode } from "./engine/compare";
+export type { ChromeStyle, CustomDevice, CustomDeviceInput, ScreenHole } from "./engine/custom";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
 export type { EngineOptions } from "./engine";
@@ -224,6 +229,7 @@ function adopt(options: object): void {
 /** Remove the panel and undo every knob. A copy that was taken over has done so already. */
 export function unmount(): void {
   hostedBy = null;
+  compareLoaded()?.exitCompare();
   if (superseded(window, unmount)) return;
   detach();
   // A host keeps its switch's choice through a take-back: off stays off.
@@ -305,8 +311,80 @@ export function ready(): Promise<DevknobsState> {
   return (hosted("ready") ?? engine.ready)();
 }
 
-export function describe(): KnobDescription[] {
-  return (hosted("describe") ?? describeKnobs)();
+/**
+ * Not a knob: the compare layout, which `compare()` sets up and `setState`
+ * does not take. `describe()` lists it after the knobs, with its state.
+ */
+export interface CompareDescription {
+  key: "compare";
+  description: string;
+  value: KnobShape;
+  default: KnobValue;
+  reload: "frame";
+}
+
+export function describe(): (KnobDescription | CompareDescription)[] {
+  // A host's describe says its own compare, where it has one.
+  const host = hosted("describe");
+  if (host) return host();
+  const knobs = describeKnobs();
+  const now = compareLoaded()?.compareState() ?? null;
+  const on = now
+    ? `On: ${now.frames.length} frames (${now.frames.map((frame) => frame.diff).join("; ")}), scroll sync ${now.sync}.`
+    : "Off.";
+  return [
+    ...knobs,
+    {
+      key: "compare",
+      description: `Devices side by side, each frame with its own knobs over these. Not a setState knob: call devknobs.compare([{ device: "iphone-17-pro" }, { device: "iphone-17-pro", textSize: "xxl" }], { sync: "proportional" }), devknobs.compareState() and devknobs.exitCompare(). textSize takes px or xs, s, m, l, xl, xxl, xxxl, ax1 to ax5. ${on}`,
+      value: {
+        type: "object",
+        fields: {
+          frames: {
+            description: "How many frames are up, 0 with compare off. compare() takes an array of two or more setState patches, one per frame, each with textSize too.",
+            value: { type: "number", min: 0 },
+          },
+          sync: { description: "How a scroll in one frame moves the others.", value: { type: "enum", values: ["proportional", "pixel", "off"] } },
+        },
+      },
+      default: { frames: now?.frames.length ?? 0, sync: now?.sync ?? "proportional" },
+      reload: "frame",
+    },
+  ];
+}
+
+/**
+ * Lay two or more frames side by side, each running the page with the
+ * panel's knobs and its own patch on top: a `setState` patch, with
+ * `textSize` as px or a Dynamic Type name such as `xxl`. Loads on first use.
+ */
+export async function compare(
+  frames: CompareFrameInput[],
+  options?: { sync?: SyncMode },
+): Promise<CompareState> {
+  const host = hosted("compare");
+  if (host) return host(frames, options);
+  return (await loadCompare()).compare(frames, options);
+}
+
+/** Change one compare frame's patch. */
+export async function setCompareFrame(index: number, frame: CompareFrameInput): Promise<CompareState | null> {
+  const host = hosted("setCompareFrame");
+  if (host) return host(index, frame);
+  return (await loadCompare()).setFrame(index, frame);
+}
+
+export function exitCompare(): void {
+  const host = hosted("exitCompare");
+  if (host) return host();
+  compareLoaded()?.exitCompare();
+}
+
+/** Each frame's patch, knobs and computed root font size, or null with no compare up. */
+export function compareState(): CompareState | null {
+  const host = hosted("compareState");
+  if (host) return host();
+  return compareLoaded()?.compareState() ?? null;
 }
 
 /**
@@ -327,7 +405,84 @@ export async function grab(
   return loaded.grab(elements, options);
 }
 
-const api = { mount, unmount, getState, setState, reset, replay, grab, describe, ready };
+/** The host's own `devices.<name>`, as `hosted` hands its other calls. Null otherwise. */
+function hostedDevice<K extends keyof typeof devices>(name: K): (typeof devices)[K] | null {
+  if (!hostedBy) return null;
+  const host = hostOf(window);
+  if (!host?.api || host.release !== hostedBy.release) return null;
+  const own: unknown = Reflect.get(host.api, "devices");
+  const found: unknown = typeof own === "object" && own !== null ? Reflect.get(own, name) : undefined;
+  return typeof found === "function" ? (found.bind(own) as (typeof devices)[K]) : null;
+}
+
+/**
+ * The devices the user added from a picture of the body, kept in this
+ * origin's localStorage. Pictures are data urls; a url is fetched, so one
+ * on another origin needs CORS. A page cannot read a file path, the
+ * extension's copy included: read the file in Node and pass a data url.
+ */
+export const devices = {
+  list(): CustomDevice[] {
+    const host = hostedDevice("list");
+    if (host) return host();
+    return [...customDevices()];
+  },
+  /** Add a device from its json or object, its picture from `image` where given. Replaces one with the same id. */
+  async add(device: string | object, image?: string): Promise<CustomDevice> {
+    const host = hostedDevice("add");
+    if (host) return host(device, image);
+    const { addFrom } = await import("./engine/customload");
+    return addFrom(device, image);
+  },
+  /** Add a device from a picture alone: its screen hole found, the rest from `options` or defaults. */
+  async fromImage(image: string, options?: Partial<CustomDeviceInput>): Promise<CustomDevice> {
+    const host = hostedDevice("fromImage");
+    if (host) return host(image, options);
+    const { deviceFromImage } = await import("./engine/customload");
+    return deviceFromImage(image, options);
+  },
+  /** Take a device away. One in use goes back to none first. */
+  remove(id: string): boolean {
+    const host = hostedDevice("remove");
+    if (host) return host(id);
+    if (getState().device === id) setState({ device: "none", width: "full", height: "full", dpr: "system" });
+    return removeDevice(id);
+  },
+  select(id: string): DevknobsState {
+    const host = hostedDevice("select");
+    if (host) return host(id);
+    if (!customDevice(id)) throw new TypeError(`devknobs: no custom device ${id}`);
+    return setState({ device: id });
+  },
+  /** One json with the picture in it. */
+  export(id: string): string {
+    const host = hostedDevice("export");
+    if (host) return host(id);
+    const device = customDevice(id);
+    if (!device) throw new TypeError(`devknobs: no custom device ${id}`);
+    return exportDevice(device);
+  },
+  import(json: string, image?: string): Promise<CustomDevice> {
+    return devices.add(json, image);
+  },
+};
+
+const api = {
+  mount,
+  unmount,
+  getState,
+  setState,
+  reset,
+  replay,
+  grab,
+  describe,
+  ready,
+  devices,
+  compare,
+  setCompareFrame,
+  exitCompare,
+  compareState,
+};
 
 /** What `mount` puts at `window.devknobs`, for agents that run code in the page. */
 export type DevknobsApi = typeof api;

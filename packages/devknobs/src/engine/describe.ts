@@ -1,5 +1,6 @@
 import type { DevknobsState } from "../types";
 import { CLOCK_SPEED_MAX, CLOCK_SPEED_MIN } from "./clock";
+import { customDevices } from "./custom";
 import { DEVICES, POSTURES } from "./devices";
 import { DPR_MAX, DPR_MIN, SIZE_MAX, SIZE_MIN } from "./frame";
 import { GEO_PRESETS } from "./geo";
@@ -175,8 +176,8 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
       "frame",
     ),
     device: spec(
-      "A device preset. Sets width, height, dpr and ua.",
-      oneOf([...DEVICES.map((device) => device.id), "none"]),
+      "A device preset. Sets width, height, dpr and ua. Ids starting custom: are devices the user added; devknobs.devices lists and adds them.",
+      oneOf([...DEVICES.map((device) => device.id), ...customDevices().map((device) => device.id), "none"]),
       "frame",
     ),
     orientation: spec(

@@ -334,6 +334,17 @@ function restoreStores(owned: Owned): boolean {
   return restored;
 }
 
+/** Marks a compare frame's element, as `compare.ts` sets it. */
+const COMPARE_ATTRIBUTE = "data-devknobs-compare";
+
+function inCompareFrame(): boolean {
+  try {
+    return globalThis.window?.frameElement?.hasAttribute(COMPARE_ATTRIBUTE) === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Point every store the page uses at `lang`, or put back what each held before
  * when `lang` is null, and reload so the page reads its locale again. Ownership
@@ -347,6 +358,9 @@ function restoreStores(owned: Owned): boolean {
  */
 export function syncStores(lang: string | null): boolean {
   if (typeof document === "undefined") return false;
+  // A compare frame keeps its locale in memory: the stores are the origin's,
+  // so a write would move the page above and every other frame.
+  if (inCompareFrame()) return false;
   if (reloadBlocked()) return false;
   const owned = readOwned();
   if (lang === null) return owned !== null && restoreStores(owned) && reloadOnce();
