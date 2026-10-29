@@ -33,8 +33,8 @@ function node(backgroundColor: string, parent: PageNode | null, position = "stat
  * The frame's page: an html and a body, and what lies at each height of the
  * viewport, top first. `at` reads what is at `y`.
  */
-function page(height: number, at: (y: number) => PageNode[], body = BLUE) {
-  const html = node(body, null);
+function page(height: number, at: (y: number) => PageNode[], body = BLUE, scrollHeight?: number) {
+  const html = Object.assign(node(body, null), scrollHeight === undefined ? {} : { scrollHeight });
   const bodyNode = node(body, html);
   const scroll: (() => void)[] = [];
   const doc = {
@@ -318,8 +318,8 @@ afterEach(() => {
 });
 
 /** The bars over a page that changes color as it scrolls, the frame's box each time it is given one. */
-function browserOver(color: () => string) {
-  const built = page(754, () => [], BLUE);
+function browserOver(color: () => string, scrollHeight?: number) {
+  const built = page(754, () => [], BLUE, scrollHeight);
   const section = node(BLUE, built.body);
   Object.assign(built.doc, {
     elementsFromPoint: () => [Object.assign(section, { style: { ...section.style, backgroundColor: color() } })],
@@ -352,7 +352,7 @@ function browserOver(color: () => string) {
     frames.clear();
     for (const run of pending) run();
   };
-  return { browser, show, scroll, sized, glass, view: built.view };
+  return { browser, show, scroll, sized, glass, view: built.view, frame: built.frame };
 }
 
 const shrinks = () => timers.filter((timer) => timer.delay === MORPH.expand);
@@ -442,19 +442,63 @@ describe("createBrowser", () => {
   });
 
   test("a new page that comes in under minimized top bars starts at its own place", () => {
-    const { browser, show, view } = browserOver(() => BLUE);
+    const { browser, show, view, frame } = browserOver(() => BLUE);
     view.scrollY = 300;
     const scrolled = scrollable(view);
     show(false, "iphone-17-pro", "top");
+    // The page is read once it is in.
+    browser.refresh();
     show(true, "iphone-17-pro", "top");
     const before = scrolled.length;
-    // A link: the new page is at its top, and the bars come back for it.
+    // A link: a new document at its top, and the bars come back for it.
+    Object.assign(frame, { contentDocument: { ...frame.contentDocument } });
     view.location.href = "http://127.0.0.1:8765/next";
     view.scrollY = 0;
     browser.refresh();
     show(false, "iphone-17-pro", "top");
     expect(scrolled.length).toBe(before);
     expect(view.scrollY).toBe(0);
+  });
+
+  test("a new address the page gives itself under minimized top bars still keeps its content in place", () => {
+    const { browser, show, view } = browserOver(() => BLUE);
+    view.scrollY = 300;
+    const scrolled = scrollable(view);
+    show(false, "iphone-17-pro", "top");
+    // The page is read once it is in.
+    browser.refresh();
+    show(true, "iphone-17-pro", "top");
+    // A hash the page writes as it scrolls: the same document, so the bars coming back scroll it with them.
+    view.location.href = "http://127.0.0.1:8765/#part";
+    browser.refresh();
+    show(false, "iphone-17-pro", "top");
+    const top = (minimized: boolean) => viewportOf(PRO, "portrait", "top", minimized, true).y;
+    expect(scrolled.at(-1)).toBe(top(false) - top(true));
+  });
+
+  test("a page too short to scroll back by the room once the frame grows keeps its top bars", () => {
+    const top = (minimized: boolean) => viewportOf(PRO, "portrait", "top", minimized, true);
+    const room = top(false).y - top(true).y;
+    const grow = top(true).height - top(false).height;
+    const end = 2 * room + BARS_DOWN;
+    const run = (rest: number) => {
+      const full = top(false).height;
+      const { browser, show, scroll, view } = browserOver(() => BLUE, full + grow + rest);
+      let now = 0;
+      const clock = spyOn(performance, "now").mockImplementation(() => now);
+      show(false, "iphone-17-pro", "top");
+      view.innerHeight = full;
+      browser.refresh();
+      // Down to the page's end, well after the first resize's lock.
+      now += 1000;
+      view.scrollY = Math.min(end, rest + grow);
+      scroll();
+      const minimized = browser.minimized();
+      clock.mockRestore();
+      return minimized;
+    };
+    expect(run(end - 1)).toBe(false);
+    expect(run(end)).toBe(true);
   });
 
   test("Chrome's top toolbar comes back and goes by the same points as Safari's top bars", () => {

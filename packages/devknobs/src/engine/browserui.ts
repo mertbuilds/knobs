@@ -864,9 +864,10 @@ export function barsStep(state: BarsMotion, event: BarsEvent): BarsMotion {
   const anchor = Math.min(state.anchor, y);
   // Top bars give their room back by scrolling the page as far up, so the
   // content stays put: only from far enough down that it stays clear of
-  // where they come back, so the two never undo each other. A short page
-  // has only as much to scroll back as is left once the frame grows.
-  const clear = Math.min(y, event.rest ?? Infinity) - 2 * room >= BARS_DOWN;
+  // where they come back, so the two never undo each other. Under them a
+  // short page has only as much to scroll back as is left once the frame grows.
+  const left = room > 0 ? Math.min(y, event.rest ?? Infinity) : y;
+  const clear = left - 2 * room >= BARS_DOWN;
   if (y - anchor >= BARS_DOWN && clear) return { ...state, minimized: true, y, anchor: y };
   return { ...state, y, anchor };
 }
