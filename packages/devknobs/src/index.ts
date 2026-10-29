@@ -405,12 +405,6 @@ export async function grab(
   return loaded.grab(elements, options);
 }
 
-/**
- * The devices the user added from a picture of the body, kept in this
- * origin's localStorage. Pictures are data urls; a url is fetched, so one
- * on another origin needs CORS. A page cannot read a file path, the
- * extension's copy included: read the file in Node and pass a data url.
- */
 /** The host's own `devices.<name>`, as `hosted` hands its other calls. Null otherwise. */
 function hostedDevice<K extends keyof typeof devices>(name: K): (typeof devices)[K] | null {
   if (!hostedBy) return null;
@@ -421,6 +415,12 @@ function hostedDevice<K extends keyof typeof devices>(name: K): (typeof devices)
   return typeof found === "function" ? (found.bind(own) as (typeof devices)[K]) : null;
 }
 
+/**
+ * The devices the user added from a picture of the body, kept in this
+ * origin's localStorage. Pictures are data urls; a url is fetched, so one
+ * on another origin needs CORS. A page cannot read a file path, the
+ * extension's copy included: read the file in Node and pass a data url.
+ */
 export const devices = {
   list(): CustomDevice[] {
     const host = hostedDevice("list");
