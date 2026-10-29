@@ -168,11 +168,11 @@ function escapeHtml(text: string): string {
     .replaceAll('"', '&quot;');
 }
 
-/** Markdown inline text as plain text: link text without its address, code without its backticks. */
+/** Markdown inline text as plain text: link text without its address, no backticks or emphasis marks. */
 const plain = (text: string) =>
   text
     .replaceAll(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replaceAll('`', '')
+    .replaceAll(/[`*]/g, '')
     .replaceAll(/\s+/g, ' ')
     .trim();
 
@@ -216,9 +216,10 @@ function render(body: string): {
     }
     if (inFaq && token.type === 'paragraph') {
       const text = plain(token.text);
-      const end = text.indexOf('? ');
-      if (end > 0) {
-        faq.push({ answer: text.slice(end + 2), question: text.slice(0, end + 1) });
+      const end = text.indexOf('?');
+      const answer = text.slice(end + 1).trim();
+      if (end > 0 && answer !== '') {
+        faq.push({ answer, question: text.slice(0, end + 1) });
       }
     }
     run.push(token);
@@ -229,7 +230,12 @@ function render(body: string): {
 
 function parse(slug: string, source: string): Page {
   const { body, description, order, title, updated } = frontmatter(slug, source);
-  if (updated === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(updated)) {
+  if (
+    updated === undefined ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(updated) ||
+    Number.isNaN(Date.parse(updated)) ||
+    new Date(updated).toISOString().slice(0, 10) !== updated
+  ) {
     throw new Error(`docs: ${slug}.md needs updated: YYYY-MM-DD`);
   }
   return { description, order, slug, title, updated, ...render(body) };

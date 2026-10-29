@@ -1,6 +1,6 @@
 ---
 title: privacy
-description: What the devknobs npm package, the Chrome extension and the knobs.dev site keep and send: no telemetry in the panel, and only visit counts on the site itself.
+description: What the devknobs npm package, the Chrome extension and the knobs.dev site keep and send: no telemetry in the panel, and page views and clicks on the site only.
 order: 10
 updated: 2026-10-25
 ---
