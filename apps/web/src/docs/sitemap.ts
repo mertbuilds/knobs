@@ -5,8 +5,8 @@ import { pages } from './pages.ts';
 /**
  * `/sitemap.xml`: the landing and every docs page, each at its canonical
  * address. `/docs` is left out, since it shows `/docs/start` and points there.
- * A docs page's `<lastmod>` is its frontmatter's `updated`; the landing's is
- * the day of the build. `/blog` changes with its newest post, and a post's
+ * A docs page's `<lastmod>` is its frontmatter's `updated`; the landing has no
+ * content date, so it has none. `/blog` changes with its newest post, and a post's
  * `<lastmod>` is its `updated`.
  */
 const newest = posts
@@ -14,8 +14,8 @@ const newest = posts
   .toSorted()
   .at(-1);
 
-const entries = [
-  { lastmod: __BUILD_DATE__, path: '/' },
+const entries: ReadonlyArray<{ lastmod?: string; path: string }> = [
+  { path: '/' },
   ...pages.map((page) => ({ lastmod: page.updated, path: `/docs/${page.slug}` })),
   ...(newest === undefined ? [] : [{ lastmod: newest, path: '/blog' }]),
   ...posts.map((post) => ({ lastmod: post.updated, path: `/blog/${post.slug}` })),
@@ -26,7 +26,7 @@ export const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
 ${entries
   .map(
     ({ lastmod, path }) =>
-      `  <url>\n    <loc>${CANONICAL_ORIGIN}${path}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`,
+      `  <url>\n    <loc>${CANONICAL_ORIGIN}${path}</loc>\n${lastmod ? `    <lastmod>${lastmod}</lastmod>\n` : ''}  </url>`,
   )
   .join('\n')}
 </urlset>
