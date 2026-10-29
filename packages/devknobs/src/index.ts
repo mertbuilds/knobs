@@ -359,20 +359,28 @@ export async function compare(
   frames: CompareFrameInput[],
   options?: { sync?: SyncMode },
 ): Promise<CompareState> {
+  const host = hosted("compare");
+  if (host) return host(frames, options);
   return (await loadCompare()).compare(frames, options);
 }
 
 /** Change one compare frame's patch. */
 export async function setCompareFrame(index: number, frame: CompareFrameInput): Promise<CompareState | null> {
+  const host = hosted("setCompareFrame");
+  if (host) return host(index, frame);
   return (await loadCompare()).setFrame(index, frame);
 }
 
 export function exitCompare(): void {
+  const host = hosted("exitCompare");
+  if (host) return host();
   compareLoaded()?.exitCompare();
 }
 
 /** Each frame's patch, knobs and computed root font size, or null with no compare up. */
 export function compareState(): CompareState | null {
+  const host = hosted("compareState");
+  if (host) return host();
   return compareLoaded()?.compareState() ?? null;
 }
 
@@ -400,31 +408,53 @@ export async function grab(
  * on another origin needs CORS. A page cannot read a file path, the
  * extension's copy included: read the file in Node and pass a data url.
  */
+/** The host's own `devices.<name>`, as `hosted` hands its other calls. Null otherwise. */
+function hostedDevice<K extends keyof typeof devices>(name: K): (typeof devices)[K] | null {
+  if (!hostedBy) return null;
+  const host = hostOf(window);
+  if (!host?.api || host.release !== hostedBy.release) return null;
+  const own: unknown = Reflect.get(host.api, "devices");
+  const found: unknown = typeof own === "object" && own !== null ? Reflect.get(own, name) : undefined;
+  return typeof found === "function" ? (found.bind(own) as (typeof devices)[K]) : null;
+}
+
 export const devices = {
   list(): CustomDevice[] {
+    const host = hostedDevice("list");
+    if (host) return host();
     return [...customDevices()];
   },
   /** Add a device from its json or object, its picture from `image` where given. Replaces one with the same id. */
   async add(device: string | object, image?: string): Promise<CustomDevice> {
+    const host = hostedDevice("add");
+    if (host) return host(device, image);
     const { addFrom } = await import("./engine/customload");
     return addFrom(device, image);
   },
   /** Add a device from a picture alone: its screen hole found, the rest from `options` or defaults. */
   async fromImage(image: string, options?: Partial<CustomDeviceInput>): Promise<CustomDevice> {
+    const host = hostedDevice("fromImage");
+    if (host) return host(image, options);
     const { deviceFromImage } = await import("./engine/customload");
     return deviceFromImage(image, options);
   },
   /** Take a device away. One in use goes back to none first. */
   remove(id: string): boolean {
+    const host = hostedDevice("remove");
+    if (host) return host(id);
     if (getState().device === id) setState({ device: "none", width: "full", height: "full", dpr: "system" });
     return removeDevice(id);
   },
   select(id: string): DevknobsState {
+    const host = hostedDevice("select");
+    if (host) return host(id);
     if (!customDevice(id)) throw new TypeError(`devknobs: no custom device ${id}`);
     return setState({ device: id });
   },
   /** One json with the picture in it. */
   export(id: string): string {
+    const host = hostedDevice("export");
+    if (host) return host(id);
     const device = customDevice(id);
     if (!device) throw new TypeError(`devknobs: no custom device ${id}`);
     return exportDevice(device);

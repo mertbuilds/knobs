@@ -110,6 +110,33 @@ describe("a page copy under a host", () => {
     expect(createKeys).not.toHaveBeenCalled();
   });
 
+  test("sends compare and the custom devices to the host's", async () => {
+    const calls: unknown[][] = [];
+    const note =
+      (name: string, back: unknown = null) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        return back;
+      };
+    host({
+      compare: note("compare", Promise.resolve({ sync: "off", frames: [] })),
+      setCompareFrame: note("setCompareFrame", Promise.resolve(null)),
+      exitCompare: note("exitCompare"),
+      compareState: note("compareState"),
+      devices: { list: note("list", []), remove: note("remove", true), select: note("select", DEFAULT_STATE), export: note("export", "{}") },
+    });
+    devknobs.mount();
+    expect(await devknobs.compare([{}, { text: 20 }])).toEqual({ sync: "off", frames: [] });
+    await devknobs.setCompareFrame(1, { text: 24 });
+    devknobs.exitCompare();
+    expect(devknobs.compareState()).toBeNull();
+    expect(devknobs.devices.list()).toEqual([]);
+    expect(devknobs.devices.remove("custom:a")).toBe(true);
+    expect(devknobs.devices.select("custom:a")).toBe(DEFAULT_STATE);
+    expect(devknobs.devices.export("custom:a")).toBe("{}");
+    expect(calls.map((call) => call[0])).toEqual(["compare", "setCompareFrame", "exitCompare", "compareState", "list", "remove", "select", "export"]);
+  });
+
   test("sends its module api's calls to the host's", async () => {
     const state = { ...DEFAULT_STATE, scheme: "dark" as const };
     const patches: object[] = [];
