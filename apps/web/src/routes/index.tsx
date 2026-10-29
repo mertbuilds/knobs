@@ -6,19 +6,53 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Stage } from '../demo/stage.tsx';
 import { track } from '../lib/analytics.ts';
 import { ChromeMark, GitHubMark, KnobsMark, NpmMark } from '../lib/brand-marks.tsx';
-import { CANONICAL_ORIGIN } from '../lib/canonical.ts';
+import { CANONICAL_ORIGIN, canonicalLink } from '../lib/canonical.ts';
 import { CodeBox } from '../lib/code-box.tsx';
 import { CraftedAtVinena } from '../lib/crafted-at-vinena.tsx';
 import { GitHubButton, onGitHub, REPO } from '../lib/github.tsx';
 import { ICON } from '../lib/icon.ts';
 import { type PanelTour, usePanel } from '../lib/panel.ts';
+import { jsonLd, ORGANIZATION } from '../lib/schema.ts';
+import { IMAGE } from '../lib/share.ts';
 import { m } from '../paraglide/messages.js';
 import { openTour, watchKnobs } from '../tour/progress.ts';
 import { Tour } from '../tour/tour.tsx';
 
+const HOME = `${CANONICAL_ORIGIN}/`;
+
+const NPM = 'https://www.npmjs.com/package/@vinena/knobs';
+
+const EXTENSION_STORE =
+  'https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj';
+
 export const Route = createFileRoute('/')({
   component: import.meta.env.DEV ? DevPage : Landing,
-  head: () => ({ meta: [{ content: `${CANONICAL_ORIGIN}/`, property: 'og:url' }] }),
+  head: () => ({
+    links: [canonicalLink('/')],
+    meta: [{ content: HOME, property: 'og:url' }],
+    scripts: [
+      jsonLd(ORGANIZATION),
+      jsonLd({
+        '@type': 'WebSite',
+        name: m.app_name(),
+        publisher: { '@id': ORGANIZATION['@id'] },
+        url: HOME,
+      }),
+      jsonLd({
+        '@type': 'SoftwareApplication',
+        alternateName: m.app_name(),
+        applicationCategory: 'DeveloperApplication',
+        description: m.home_description(),
+        image: IMAGE,
+        name: 'devknobs',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        operatingSystem: 'Web, Chrome',
+        publisher: { '@id': ORGANIZATION['@id'] },
+        sameAs: [NPM, REPO, EXTENSION_STORE],
+        url: HOME,
+      }),
+    ],
+  }),
 });
 
 // Dev-only: a reference image in place of the page (`src/dev/reference.tsx`),
@@ -55,9 +89,6 @@ const WIDE = '@media (min-width: 640px)';
 const DOCS = '/docs';
 
 const EXTENSION_DOCS = '/docs/extension';
-
-const EXTENSION_STORE =
-  'https://chromewebstore.google.com/detail/knobs/cpdmafeojnbdnnhldafobkaajiemcidj';
 
 // Where the hero's "Add to Chrome" goes: the extension's Chrome Web Store listing.
 const EXTENSION_URL = EXTENSION_STORE;
@@ -331,12 +362,7 @@ function Landing() {
           </span>
           {m.link_star()}
         </a>
-        <a
-          href="https://www.npmjs.com/package/@vinena/knobs"
-          rel="noreferrer"
-          target="_blank"
-          {...props(styles.link, styles.withIcon)}
-        >
+        <a href={NPM} rel="noreferrer" target="_blank" {...props(styles.link, styles.withIcon)}>
           <NpmMark />
           {m.link_npm()}
         </a>

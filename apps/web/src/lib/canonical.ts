@@ -13,3 +13,9 @@ export function canonicalRedirect(url: URL): Response | null {
   }
   return Response.redirect(`${CANONICAL_ORIGIN}${url.pathname}${url.search}`, 301);
 }
+
+/** The page's one address for search engines: on the apex, with no query. */
+export const canonicalLink = (path: string) => ({
+  href: `${CANONICAL_ORIGIN}${path}`,
+  rel: 'canonical',
+});

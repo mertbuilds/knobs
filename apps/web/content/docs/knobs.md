@@ -1,7 +1,8 @@
 ---
 title: knobs
-description: Every knob devknobs has and what it does to the page.
+description: Every knob devknobs has and what it does to the page: color scheme, reduced motion, text size, locale, time zone, clock, geolocation, user agent and viewport.
 order: 3
+updated: 2026-10-29
 ---
 
 every knob and what it does. search finds them by name or value, see [the panel](/docs/panel).

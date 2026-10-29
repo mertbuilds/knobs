@@ -67,6 +67,8 @@ function devknobsSource(): Plugin {
 }
 
 export default defineConfig({
+  // The day of the build, the landing's `<lastmod>` in the sitemap: a deploy is when it changes.
+  define: { __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)) },
   plugins: [
     tuneEndpoint(resolve(import.meta.dirname, '.tune')),
     devknobsSource(),

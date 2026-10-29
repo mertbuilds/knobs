@@ -1,7 +1,8 @@
 ---
 title: grab and inspect
-description: Grab an element for a coding agent, or inspect its box and css in the panel.
+description: Grab any element on the page and copy its html, the components that rendered it and their source files for a coding agent, or inspect its box and css.
 order: 5
+updated: 2026-10-25
 ---
 
 ## grab

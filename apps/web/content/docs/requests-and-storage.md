@@ -1,7 +1,8 @@
 ---
 title: requests and storage
-description: See every request the page makes, and read, edit and save what it keeps in the browser.
+description: See every request the page makes, laid out like the Chrome DevTools network panel, and read, edit and save local storage, session storage and cookies.
 order: 6
+updated: 2026-10-25
 ---
 
 ## requests

@@ -1,7 +1,8 @@
 ---
 title: the panel
-description: Open it, move it, search it, pin it and set its keys.
+description: Open the devknobs panel with Shift K, move it along the window edge, search every knob by name or value, pin the ones you use, and change its shortcuts.
 order: 2
+updated: 2026-10-28
 ---
 
 ## open and move it

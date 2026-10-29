@@ -12,9 +12,9 @@ nothing gets added until the site needs it.
 apps/
   web/    TanStack Start (React 19, React Compiler) → Cloudflare Workers.
           Client-first: SSR, routes, Paraglide i18n. No auth, no database.
-          Four server routes, all stateless: `/api/op/$`, the OpenPanel analytics
-          proxy, `/api/demo/$`, what the demo request buttons ask for, and
-          `/llms.txt` and `/llms-full.txt`, the docs for agents.
+          Five server routes, all stateless: `/api/op/$`, the OpenPanel analytics
+          proxy, `/api/demo/$`, what the demo request buttons ask for,
+          `/llms.txt` and `/llms-full.txt`, the docs for agents, and `/sitemap.xml`.
 packages/
   devknobs/ The `@vinena/knobs` npm package: the panel itself. Vanilla TS, zero runtime
           dependencies, built and tested with bun. Its own README and CHANGELOG.
@@ -70,7 +70,7 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 - i18n: Paraglide v2, `messages/en.json` only. Generated `src/paraglide/` and `src/routeTree.gen.ts` are gitignored build output: never edit them, they regenerate on `vite dev`/`build`. All user-facing strings go through `m.*()`.
 - Env: `apps/web/.env` (copy `apps/web/.env.example`). Vite reads it, and the Cloudflare vite plugin also hands it to the Worker as local dev vars. `VITE_*` vars are validated in `packages/env`, all of them optional, so the site runs with no env at all.
 - StyleX in routes: import `../app.css` (build injection target); there is no importable `virtual:stylex.css` module; in dev the plugin middleware serves the CSS itself.
-- No tests live here: `packages/ui` stories cover the components, the routes are the landing and the docs pages, and the four server routes hold no state. Add a vitest project back if that changes.
+- No tests live here: `packages/ui` stories cover the components, the routes are the landing and the docs pages, and the five server routes hold no state. Add a vitest project back if that changes.
 
 ### devknobs in dev
 
@@ -98,15 +98,16 @@ Web app (`apps/web`): `pnpm --filter @knobs/web dev` (:3000 standalone, or portl
 
 ### The landing
 
-- `src/routes/index.tsx` is one screen: the header (wordmark, GitHub button, the hero line `hero_line`, also the meta description; then one row of two controls of equal height: the "Add to Chrome" button, the hero's one filled button, whose target is `EXTENSION_URL` in `index.tsx`, `/docs/extension` until the Chrome Web Store listing is approved, and the setup prompt's copy box; the npm command is in `/docs/start`, and the tour's first stop and the panel's handle teach `⇧K`), the guided tour, the "try it here" stage (`id="try"`), and the footer (with `/docs` and `/docs/extension` among its links).
+- `src/routes/index.tsx` is one screen: the header (wordmark, GitHub button, the hero line `hero_line`; the meta title and description are `home_title` and `home_description`; then one row of two controls of equal height: the "Add to Chrome" button, the hero's one filled button, whose target is `EXTENSION_URL` in `index.tsx`, `/docs/extension` until the Chrome Web Store listing is approved, and the setup prompt's copy box; the npm command is in `/docs/start`, and the tour's first stop and the panel's handle teach `⇧K`), the guided tour, the "try it here" stage (`id="try"`), and the footer (with `/docs` and `/docs/extension` among its links).
 - The panel mounts through `usePanel()` (`src/lib/panel.ts`), which every page that shows the panel calls: idle on a first visit, at once when knobs are stored, with the click analytics listener. The landing passes the tour to it (`openTour` and `watchKnobs` from `src/tour/progress.ts`): the tour opens before the panel mounts, so the copy of the page in a device's frame finds it on the page above, and watches the knobs once the panel is on the page.
 
 ### Docs
 
-- `/docs` and `/docs/<slug>` are the user docs for devknobs and the extension, built from `apps/web/content/docs/*.md`. A page is one markdown file with `title`, `description` and `order` in its frontmatter, no H1 (the title is the H1), sections from `##`. Add a page by dropping in a file: `order` sets its place in the sidebar and in previous / next. Links between pages are `/docs/<slug>#<id>`; a heading's id is its text lowercased, spaces to hyphens, everything but `[a-z0-9-]` dropped.
+- `/docs` and `/docs/<slug>` are the user docs for devknobs and the extension, built from `apps/web/content/docs/*.md`. A page is one markdown file with `title`, `description` (120 to 160 characters, the meta description), `order` and `updated` (`YYYY-MM-DD`, the day its content last changed: the sitemap's `<lastmod>` and the schema's `dateModified`) in its frontmatter, no H1 (the title is the H1), sections from `##`. Add a page by dropping in a file: `order` sets its place in the sidebar and in previous / next. Links between pages are `/docs/<slug>#<id>`; a heading's id is its text lowercased, spaces to hyphens, everything but `[a-z0-9-]` dropped.
 - `apps/web/content/docs` holds the short human pages; `apps/web/content/reference` holds the full text, one file per page with the same slug, served as `/llms-full.txt` (`src/docs/llms.ts`, which also builds `/llms.txt` from the human pages). Keep the two in step: a change to a page goes into both. A reference link `/docs/<slug>#<id>` keeps its fragment only while the human page has that heading; `llms.ts` drops it when the heading goes.
 - `src/docs/pages.ts` loads the files (`import.meta.glob`, `?raw`), reads the frontmatter with `src/docs/frontmatter.ts` (by hand, shared with `llms.ts`) and renders each page once, as the module loads, with `marked` (GFM). Its renderer puts the StyleX prose classes on the html; code blocks are split out and drawn with `CodeBox` (`src/lib/code-box.tsx`, the landing's copy box, `copy_click`). The html is the repo's own markdown, so it goes in through `dangerouslySetInnerHTML`. `src/docs/head.ts` holds the routes' loader and head and imports the pages behind `import()`, so the entry bundle (which carries every loader and head) does not carry the docs. An unknown slug throws `notFound()` (404).
 - Code blocks are highlighted once, as `pages.ts` renders, by `src/docs/highlight.ts`: highlight.js core with only the fence languages the content uses (bash, javascript/jsx, typescript/tsx, xml/html), its `hljs-*` scopes mapped to StyleX classes for 4 roles (`colors.codeKeyword`, `codeName`, `codeNumber`, `codeString`) plus `muted` comments. A fence with no language or an unregistered one stays plain; a new language in the content means registering its grammar there. `CodeBox` takes the html through `html` and still copies the plain `code`.
+- SEO head: every page has a self-referencing absolute canonical (`canonicalLink` in `src/lib/canonical.ts`; `/docs` points at `/docs/start`, which it shows) and JSON-LD in `head().scripts` (`jsonLd` in `src/lib/schema.ts`): the landing has Organization, WebSite and SoftwareApplication, each docs page a TechArticle, and a page with a `## faq` section a FAQPage built from its paragraphs (question to the first `?`). `/sitemap.xml` (`src/docs/sitemap.ts`) lists the landing (lastmod = build day) and every docs page. `public/robots.txt` names the sitemap; Cloudflare's managed robots.txt adds its content signals on top.
 - `src/docs/layout.tsx` is the frame (`routes/docs.tsx`, with `usePanel()`): the top bar, the sidebar (a `<details>` menu on a phone), the page, "on this page" on wide screens, previous / next. `/docs/knobs` ends with a link to the stage on the landing (`/#try`).
 
 ### The stage

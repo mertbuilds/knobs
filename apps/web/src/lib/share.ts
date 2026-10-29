@@ -8,7 +8,7 @@ type Share = {
 };
 
 /** The site's one share image, drawn by `scripts/og.ts`. */
-const IMAGE = `${CANONICAL_ORIGIN}/og.png`;
+export const IMAGE = `${CANONICAL_ORIGIN}/og.png`;
 
 /**
  * The Open Graph and X card tags for a page, all with the one image. The root
