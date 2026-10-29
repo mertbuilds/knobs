@@ -288,6 +288,7 @@
   "tour_end": "Add it to your project",
   "tour_explore": "Explore other knobs",
   "link_docs": "docs",
+  "link_blog": "blog",
   "link_extension": "chrome extension",
   "link_github": "github",
   "link_star": "give us a star",
@@ -302,5 +303,11 @@
   "docs_next": "next",
   "docs_not_found": "There is no docs page here.",
   "docs_not_found_link": "Go to the start",
-  "docs_full_reference": "full reference for agents"
+  "docs_full_reference": "full reference for agents",
+  "blog_meta_title": "knobs blog: testing sites on devices, locales and time",
+  "blog_description": "Guides from the makers of knobs on testing a website on phones, in dark mode, in other time zones and right to left, from your own desktop.",
+  "blog_heading": "Blog",
+  "blog_updated": "Updated {date}",
+  "blog_not_found": "There is no post here.",
+  "blog_not_found_link": "Go to the blog"
 }
