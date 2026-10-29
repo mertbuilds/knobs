@@ -76,11 +76,39 @@ describe("fit", () => {
     expect(fit({ ...PHONE, height: 600 }, BOX)).toMatchObject({
       width: 402,
       height: 600,
-      scale: 1,
-      box: { width: 450, height: 648 },
+      scale: 752 / 600,
+      box: { width: 402 * (752 / 600) + 48, height: 800 },
       left: 24,
       top: 24,
     });
+  });
+
+  test("grows a device past 100% to fill the window, mock and readout strip included", () => {
+    const mock = { top: 20, right: 24, bottom: 20, left: 24 };
+    // 1000 by 1300, the strip over it: the height is the tighter axis.
+    const big = fit(PHONE, { width: 1000, height: 1300 }, { mock });
+    expect(big.scale).toBeCloseTo((1300 - STRIP - 48) / (874 + 40));
+    expect(big.scale).toBeGreaterThan(1.3);
+    expect(big.box.height).toBeCloseTo(1300 - STRIP);
+    // 1440 by 900 and a phone window of 390 by 844 stay under 100%.
+    expect(fit(PHONE, { width: 1440, height: 900 }, { mock }).scale).toBeCloseTo(
+      (900 - STRIP - 48) / 914,
+    );
+    const phone = fit(PHONE, { width: 390, height: 844 }, { mock });
+    expect(phone.scale).toBeCloseTo((390 - 48) / 450);
+    expect(phone.box.width).toBeCloseTo(390);
+    // A tablet grows by its tighter axis, a desktop bigger than the window shrinks.
+    const tablet = fit({ width: 820, height: 1180, zoom: "fit" }, { width: 2000, height: 1600 + STRIP });
+    expect(tablet.scale).toBeCloseTo(1552 / 1180);
+    expect(fit(DESKTOP, { width: 1000, height: 1300 }).scale).toBeCloseTo(952 / 1920);
+    // Without a strip of its own the height counts in whole; a set zoom stays as picked.
+    expect(fit({ ...PHONE, zoom: 1 }, { width: 1000, height: 1300 }).fit).toBeGreaterThan(1);
+    expect(fit({ ...PHONE, zoom: 1.25 }, { width: 1000, height: 1300 }).scale).toBe(1.25);
+  });
+
+  test("never grows a frame of the window's height or a width alone past 100%", () => {
+    expect(fit({ ...FULL, width: 390 }, BOX).scale).toBe(1);
+    expect(fit(FULL, BOX).scale).toBe(1);
   });
 
   test("scales by the tighter axis, inside the margins", () => {
@@ -1537,9 +1565,36 @@ describe("a foldable folding", () => {
     expect(byClass("fold")).toBeUndefined();
     play();
     expect(Reflect.get(frameElement().style, "width")).toBe("669px");
+    // Shut onto the cover held across, its top to the right: the fold is laid out turned over and turned back.
     apply({ ...SHUT, orientation: "landscape", width: 678, height: 466 });
+    expect(Reflect.get(byClass("fold")?.style ?? {}, "transform")).toBe("rotate(180deg)");
     play();
+    expect(byClass("fold")).toBeUndefined();
     expect(Reflect.get(frameElement().style, "width")).toBe("678px");
+    // With less motion it lands at once.
+    reset();
+    reduce = true;
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    const buttons = () =>
+      (everything().find((element) => element.getAttribute("class") === "mock")?.children ?? [])
+        .filter((node) => node.getAttribute("class") === "button")
+        .map((node) => [node.getAttribute("x"), node.getAttribute("y"), node.getAttribute("width")].join(" "));
+    const upright = buttons();
+    apply({ ...SHUT, orientation: "landscape", width: 678, height: 466 });
+    expect(Reflect.get(frameElement().style, "width")).toBe("678px");
+    // Unfolded from the cover held across, the case is the same phone's, half round; picked again, as it is drawn.
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    expect(upright.length).toBeGreaterThan(0);
+    expect(buttons()).not.toEqual(upright);
+    const viewBox = (everything().find((element) => element.getAttribute("class") === "mock")?.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const [, , mockWidth = 0] = viewBox;
+    expect(buttons().map((one) => {
+      const [x = 0, , width = 0] = one.split(" ").map(Number);
+      return Math.round((mockWidth - x - width) * 100) / 100 + 0;
+    }).sort((a, b) => a - b)).toEqual(upright.map((one) => Number(one.split(" ")[0])).sort((a, b) => a - b));
+    apply({ ...OPEN, orientation: "landscape" });
+    apply({ ...OPEN, orientation: "portrait", width: 669, height: 951 });
+    expect(buttons()).toEqual(upright);
   });
 
   test("leaves nothing behind when the frame goes mid fold, and swaps at once with less movement", () => {
@@ -1604,13 +1659,17 @@ describe("a phone's body", () => {
     expect(Reflect.get(glass().style, "boxShadow")).toBe("");
     await Bun.sleep(0);
     const [image, ...rest] = mockDrawing().children;
-    expect(rest).toEqual([]);
+    // The island goes flat black over the image's.
+    expect(rest.map((element) => element.getAttribute("class"))).toEqual(["sensor"]);
     expect(image?.tagName).toBe("image");
     expect(image?.getAttribute("href")).toEndWith("/bezels/iphone-18-pro-max.webp");
     expect(image?.getAttribute("width")).toBe("490");
     expect(Reflect.get(glass().style, "left")).toBe(left);
     expect(Reflect.get(glass().style, "borderRadius")).toBe("62px 62px 62px 62px");
     expect(Reflect.get(glass().style, "boxShadow")).toBe("0 0 0 2px #000");
+    // Its continuous corners, where the browser draws them, from the same radius.
+    expect(Reflect.get(glass(), "className")).toBe("glass mocked continuous");
+    expect(glass().style.getPropertyValue("--continuous")).toBe(`${62 * 1.363}px`);
   });
 
   test("is the drawn mock when the image does not load, as with the folder deleted", async () => {
@@ -1832,6 +1891,10 @@ describe("the touch cursor over the screen", () => {
     if (!(letterbox instanceof HTMLElement)) throw new Error("no letterbox");
     const look = {
       background: "rgb(255, 255, 255)",
+      top: "rgb(255, 255, 255)",
+      bottom: "rgb(255, 255, 255)",
+      footer: false,
+      under: [],
       dark: false,
       scheme: "light",
       host: "localhost:3000",

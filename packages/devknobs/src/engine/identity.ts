@@ -1,6 +1,7 @@
 import type { DevknobsState, DprValue } from "../types";
 import { hasTouch } from "./devices";
 import { coarse } from "./media";
+import * as screen from "./screen";
 import * as scrollbars from "./scrollbars";
 import { equip } from "./touch";
 import * as ua from "./ua";
@@ -19,6 +20,9 @@ export interface Identity {
 }
 
 type IdentityKnobs = Pick<DevknobsState, "ua" | "device" | "dpr">;
+
+/** What the frame's new window is patched with: its identity, and the screen it reads. */
+type PatchKnobs = IdentityKnobs & Pick<DevknobsState, "posture" | "orientation">;
 
 export function identityOf(state: IdentityKnobs): Identity {
   const agent = ua.uaPreset(state.ua.preset) ? state.ua.preset : ua.userAgentOf(state.ua);
@@ -48,16 +52,18 @@ export function patchedAs(view: object): Identity | undefined {
 
 /**
  * Patch the frame's new window from the page above, as the frame's own copy
- * would on mount: the user agent, the touch screen, its pointer queries and
- * its scrollbars, before the window's first script. The copy there takes them
- * over. A window patched already keeps what it has, and says what that is.
+ * would on mount: the user agent, the touch screen, its pointer queries, its
+ * scrollbars and the device's screen size, before the window's first script.
+ * The copy there takes them over. A window patched already keeps what it
+ * has, and says what that is.
  */
-export function patchWindow(view: Window, state: IdentityKnobs): Identity {
+export function patchWindow(view: Window, state: PatchKnobs): Identity {
   const had = patchedAs(view);
   if (had) return had;
   const identity = identityOf(state);
   Reflect.set(view, PATCHED, identity);
   ua.apply(state.ua, view);
+  screen.apply(screen.screenSizeOf(state), view);
   if (identity.touch) {
     equip(view, ua.uaPreset(state.ua.preset) === undefined);
     coarse(view);

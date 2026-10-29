@@ -4,12 +4,15 @@ import { BEZEL_URLS, DUO_FOLD } from "./bezelurls";
 import { deviceOf, formId, screenOf, turn } from "./devices";
 import { type FoldShots, openOf, shotAt, shotsWindow, towardFrom } from "./fold";
 import {
+  islandOf,
   type Mock,
   mockOf,
   placeIn,
   type Radius,
+  round,
   type Sides,
   turnRadius,
+  turnRect,
   turnSides,
 } from "./mock";
 
@@ -54,7 +57,9 @@ export interface Bezel {
  * The clip of the 62 px screens, the 16 and 16 Plus, and the Duo's inner
  * screen: the biggest whole radius whose corner still holds every clear pixel
  * of the opening, measured on Apple's PNGs. Each Pixel's is measured the same
- * way on Google's, and the SE's screen is square.
+ * way on Google's, and the SE's screen is square. A phone with an island is
+ * clipped to the continuous corner through the same 45 degree point, and the
+ * Air's, 65, is the iOS 26.5 simulator's, a little inside the image's opening.
  */
 const PRO = 62;
 const BASE = 54;
@@ -116,7 +121,7 @@ export const BEZELS: Record<string, { portrait: Bezel; landscape?: Bezel }> = {
       opening: [60, 72, 1260, 2736],
       body: [6, 26, 1375, 2854],
       cutout: [503.25, 133.05, 373.76, 107.91],
-      radius: PRO,
+      radius: 65,
     },
   },
   "iphone-17": {
@@ -333,6 +338,7 @@ export function bezelMock(id: string, orientation: OrientationValue): Mock | nul
   const own = orientation === "landscape" ? found.landscape : undefined;
   const bezel = own ?? found.portrait;
   const turned = orientation === "landscape" && !own;
+  const clockwise = turned && device.clockwise === true;
   const screen = turn(device, own ? "landscape" : "portrait");
   const scale = density(screen, bezel);
   const [x, y, w, h] = bezel.opening;
@@ -350,22 +356,28 @@ export function bezelMock(id: string, orientation: OrientationValue): Mock | nul
   };
   const width = (right - left) / scale;
   const height = (bottom - top) / scale;
-  const sides = turned ? turnSides(inset) : inset;
+  const sides = turned ? turnSides(inset, clockwise) : inset;
   const size = turned ? { width: height, height: width } : { width, height };
+  // The island flat black over the image's, which shows the camera through it, as the simulator draws it.
+  const island = islandOf(id);
+  const flat = island && round("sensor", { ...island, x: inset.left + island.x, y: inset.top + island.y });
+  const parts = flat ? [turned ? turnRect(flat, width, height, clockwise) : flat] : [];
   return {
     ...size,
     inset: sides,
     body: { x: 0, y: 0, ...size },
-    screenRadius: turned ? turnRadius(bezel.radius) : bezel.radius,
+    screenRadius: turned ? turnRadius(bezel.radius, clockwise) : bezel.radius,
+    continuous: island !== null,
     bodyRadius: 0,
-    parts: [],
+    parts,
     image: {
       file: bezel.file,
       x: -left / scale,
       y: -top / scale,
       width: bezel.size[0] / scale,
       height: bezel.size[1] / scale,
-      turn: turned ? width : null,
+      turn: turned ? (clockwise ? height : width) : null,
+      ...(clockwise ? { clockwise } : {}),
     },
   };
 }

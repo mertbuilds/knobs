@@ -101,25 +101,47 @@ none are switched. the browser knob picks the layout, Safari's compact, bottom
 or top and Chrome's top or bottom, or off for the whole screen. the readout
 says the size the page gets.
 
-on an iPhone the edge to edge switch, on by default, draws the page as the
-phone looks: under Safari's bars to the bottom of the screen, expanded or
-minimized, with the glass over it and a light scroll edge over its last
-stretch. the page is then the screen under the status bar, 402 × 812 on an
-iPhone 16 Pro in every layout, taller than the viewport Safari reports, so
-`position: fixed; bottom: 0` elements and `100dvh` layouts sit lower than on
-the phone: 58 px lower in compact minimized, 98 expanded, 158 in bottom
-expanded. the end of the page gets that much room after it, as a bottom
-margin on the root that follows the bars, so the last content scrolls clear
-of them with the page's background under it, as on the phone: 92 px with the
-bar at the top, none under its pill or turned across. a page that scrolls an
-inner box, or overflows a root of a set height, gets none. turn it off for Safari's real numbers, measured in iOS 26.5:
-402 × 714 in compact, 402 × 654 with the bar at the bottom and 402 × 660 at
-the top, 754, 754 and 768 minimized. the strip under the page then takes the
-page's background, and the end of the page fades into it. Chrome always gives
+upright, the page gets Safari's real viewport, measured in iOS 27.0 (the same
+as in iOS 26.5) on an iPhone 17 Pro: 402 × 714 in compact, 402 × 654 with the bar at the bottom
+and 402 × 660 at the top (the page starts under the address bar, at 122),
+754, 754 and 768 minimized. `innerHeight`, `visualViewport`, `100dvh` and
+`position: fixed; bottom: 0` follow the bars as on the phone. `screen.width`
+and `screen.height` are the device's own size, 402 × 874 on a 17 Pro: an
+iPhone keeps it upright however it is held, an Android phone turns it; the
+iPhone Duo reports its cover screen, 466 × 678, on either screen. under the bars, where the frame
+ends, the page runs on to the bottom of the screen, as a picture of the
+document past the viewport that follows the scroll, or the color of a fixed
+bar at the bottom of the viewport, carried down as on the phone. the strip over the page takes the color of a fixed or
+sticky bar at the top, else the page's background. minimized, the strip
+goes: the content at the top of the page shows under the status bar, in a
+wash of the page's color that fades out over 100 px, and the status bar's
+glyphs follow it. iOS 27 draws no scroll edge under the bottom bars, so the page
+runs on under them at full strength, on the iPhone Duo too. the edge to edge switch
+is offered only with the iPhone held sideways, where it still changes the
+frame: on, by default, the page runs under the top row of bars; off, it
+starts under it. upright it is not offered, and a value set earlier is kept
+for the next turn. Chrome always gives
 its real viewport, as its toolbar is opaque: a Pixel 9 is 412 × 777 with the
 toolbar and 412 × 857 without. the 9s' status bars are AOSP's own. Google
 publishes none for the 10s, so theirs are derived from where the punch hole
 sits, as AOSP lines the 9s' bars up with theirs.
+
+the iPhone Duo has Safari 27.1's own layout, the only one it offers, as
+measured on the iOS 27.1 simulator. upright on the cover screen the status
+and Safari's buttons stack in a column on the right, under the camera hole:
+the time, a ring for the battery round wifi with the signal's four dots in
+its gap, back, reader, and new tab with tabs. the address floats at the
+bottom of the page. the page never runs under the column, which takes the
+page's color. held across, the cover turns its top to the right, the camera
+hole to the bottom right, and has no status and no column: one bar
+along the top holds back, reader, the address, share, new tab and tabs. the
+inner screen has one bar at the top, held either way: back, reader, the
+address, new tab with tabs, then the time and the ring; minimized, only a
+small domain pill is left. the edge to edge switch is not offered on the
+Duo. the page gets the simulator's viewports: 382 × 580 on the cover screen
+upright (618 minimized, WebKit's, as the simulator's cover takes no
+swipe), 678 × 386 and 440 across, 669 × 871 and 900 on the inner screen
+upright, 951 × 589 and 618 across.
 
 the bars minimize and come back with the page's scroll, or stay one way with
 the bars knob. Safari's address capsule, or the bottom layout's card, is one
@@ -130,7 +152,7 @@ from 17 to 13 px in it, the page menu, reload and the bottom buttons fade out
 early and in late, and the capsules beside it fade and drift 10 px. a scroll
 the other way mid way turns it back from where it is. Chrome's toolbar
 slides away under the status bar, or down with the chin, on the same timing.
-where the page's height changes, edge to edge off and on Chrome, it gets one
+as the page's height changes with the bars, it gets one
 resize for each change, at the start when its viewport grows and at the end
 when it shrinks, so no gap shows, and its own scrolling as it settles never
 flips the bars again. with reduced motion in the browser the bars just
@@ -138,8 +160,15 @@ switch. turned across, Safari keeps one row at the top and leaves room for
 the island at both sides. Chrome's numbers come from the Chromium and AOSP
 sources. the screen around
 the bars takes the page's own background, read again on each load,
-navigation and scheme change, and Safari's glass and glyphs go dark on a
-dark page as they do on the phone. the address shows the frame's host, back
+navigation and scheme change. Safari is drawn as iOS 27.0 has it on the
+simulator: its glass takes its tint from the page under it and from the
+scheme, #f8f8f8 over white and gray with black glyphs over black in light,
+gray with white glyphs over white and #222222 over black in dark, and a
+saturated page's own hue, lighter in light. compact ends in the tabs button,
+the page menu is three lines, and the status bar's glyphs are iOS 27's, about
+7% bigger than iOS 26's, with a flat battery: the charged part in the glyph's
+color, the rest gray, no outline. the iOS 27 simulator does not draw the
+dynamic island, so the island keeps its iOS 26.5 size. the address shows the frame's host, back
 and forward step through the frame's history and reload reloads it, and the
 rest is drawn only. the glyphs are drawn for devknobs, none come from Apple
 or Google. tablets, laptops and desktops have no browser drawn.

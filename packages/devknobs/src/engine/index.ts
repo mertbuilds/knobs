@@ -34,6 +34,7 @@ import * as overflow from "./overflow";
 import * as pseudo from "./pseudo";
 import { whenSettled } from "./ready";
 import { replay as replayAnimations } from "./replay";
+import * as screen from "./screen";
 import * as scrollbars from "./scrollbars";
 import { resume as resumeScroll } from "./scrollkeep";
 import * as spacing from "./spacing";
@@ -117,6 +118,7 @@ export function applyState(next: DevknobsState): void {
     points: !nativeTouch && ua.uaPreset(state.ua.preset) === undefined,
   });
   touchPointer.apply(touchScreen && state.touchPointer);
+  screen.apply(inFrame ? screen.screenSizeOf(state) : null);
   scrollbars.apply(touchScreen);
   speed.apply(state.speed);
   locale.apply(state.locale);
@@ -290,6 +292,7 @@ export function stop(): void {
   media.destroy();
   touch.reset();
   touchPointer.reset();
+  screen.reset();
   scrollbars.reset();
   speed.reset();
   locale.reset();

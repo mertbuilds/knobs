@@ -188,7 +188,7 @@ function knobs(): { [K in Exclude<keyof DevknobsState, Skipped>]: Spec } {
     touchPointer: spec("On a touch device, the mouse acts as a finger in its frame.", flag),
     browser: spec("Where a phone's browser keeps its bars, or off.", oneOf(BROWSERS)),
     bars: spec("Whether the browser bars follow the scroll or stay one way.", oneOf(BARS)),
-    edgeToEdge: spec("Safari draws the page under its bars to the bottom of the screen.", flag),
+    edgeToEdge: spec("On an iPhone held sideways, the page runs under Safari's top row. Upright, and on the iPhone Duo, it is ignored.", flag),
     frame: spec("Render the page in a full-width frame even at full width.", flag, "frame"),
     dpr: spec(
       "Device pixel ratio inside the frame.",

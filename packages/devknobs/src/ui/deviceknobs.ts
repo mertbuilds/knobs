@@ -1,4 +1,4 @@
-import { layoutOf, layoutOptions, platformOf } from "../engine/browserui";
+import { layoutOf, layoutOptions, platformOf, runsUnderBars } from "../engine/browserui";
 import { isCustomColor, parseColor, toHex } from "../engine/color";
 import { DEVICES, deviceOf, formId, formOf, hasTouch, POSTURES } from "../engine/devices";
 import { DPR_MAX, DPR_MIN, frameForced, knobFrame, SIZE_MAX, SIZE_MIN } from "../engine/frame";
@@ -199,6 +199,15 @@ function safariShown(state: DevknobsState): boolean {
   return platformOf(screenNow(state)) === "safari" && barsShown(state);
 }
 
+/**
+ * Is Safari drawn on a phone held sideways? Only there does edge to edge
+ * change the frame: upright, the page is always Safari's real viewport, and
+ * the Duo's page is never under its bars.
+ */
+function safariSideways(state: DevknobsState): boolean {
+  return safariShown(state) && state.orientation === "landscape" && runsUnderBars(screenNow(state));
+}
+
 export const EDGE_TO_EDGE: Knob = {
   id: "edgeToEdge",
   label: "edge to edge",
@@ -206,12 +215,12 @@ export const EDGE_TO_EDGE: Knob = {
   control: "switch",
   options: OFF_ON,
   aliases: ["edge", "under bars", "true height", "full height"],
-  // On while Safari is drawn, so an iPhone is what puts it off its default.
-  read: (state) => flag(state.edgeToEdge && safariShown(state)),
+  // On while Safari is drawn sideways, so an iPhone held across is what puts it off its default.
+  read: (state) => flag(state.edgeToEdge && safariSideways(state)),
   write: (value) => ({ edgeToEdge: value === "on" }),
   reset: { edgeToEdge: DEFAULT_STATE.edgeToEdge },
   brief: () => "",
-  offers: (state) => (safariShown(state) ? ["off", "on"] : []),
+  offers: (state) => (safariSideways(state) ? ["off", "on"] : []),
 };
 
 export const WIDTH: Knob = {

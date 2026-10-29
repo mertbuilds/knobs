@@ -18,6 +18,14 @@ const BAND = 2.5;
  */
 export const UNDER = 2;
 
+/**
+ * Apple's continuous screen corner, from the iOS 26.5 simulator's screen
+ * masks: the edge starts to curve `extent` times the radius from the corner,
+ * 84.66 on the 17 Pro, and passes the 45 degree point a circle of the radius
+ * would, 18.19 in. A superellipse of exponent 2 to the `shape` draws it.
+ */
+export const CONTINUOUS = { extent: 1.363, shape: 1.52 } as const;
+
 /** A device's body over the frame, drawn by `drawMock`, in the letterbox's shadow root. */
 export const MOCK_CSS = `
 /* Clips the frame to the screen's corners in a mock, in the body's color so
@@ -26,6 +34,14 @@ export const MOCK_CSS = `
   position: absolute;
   overflow: hidden;
   background: ${BODY};
+}
+/* A phone with an island: its continuous corners where the browser draws
+   them, over the round radius set on it, which the mat still reads. */
+@supports (corner-shape: superellipse(2)) {
+  .glass.continuous {
+    border-radius: var(--continuous) !important;
+    corner-shape: superellipse(${CONTINUOUS.shape});
+  }
 }
 /* Over the frame, and never in the way of a pointer. */
 .mock {
@@ -63,6 +79,32 @@ function roundRect(rect: Rect, radius: Radius): string {
   ].join("");
 }
 
+/** A rect with continuous corners as path data, each corner a superellipse traced in 16 steps. */
+export function continuousRect(rect: Rect, radius: Radius): string {
+  const { x, y, width, height } = rect;
+  const power = 2 / 2 ** CONTINUOUS.shape;
+  const most = Math.min(width, height) / 2;
+  const lengths = corners(radius).map((r) => Math.max(0, Math.min(r * CONTINUOUS.extent, most)));
+  // Each corner's point and the way in from it, clockwise from the top left.
+  const ends: [number, number, number, number][] = [
+    [x, y, 1, 1],
+    [x + width, y, -1, 1],
+    [x + width, y + height, -1, -1],
+    [x, y + height, 1, -1],
+  ];
+  const points = ends.flatMap(([cx, cy, sx, sy], at) => {
+    const length = lengths[at] ?? 0;
+    return Array.from({ length: 17 }, (_, step) => {
+      // The top left and bottom right run from the side to the top or bottom, the others back.
+      const t = ((at % 2 === 0 ? step : 16 - step) / 16) * (Math.PI / 2);
+      const px = cx + sx * length * (1 - Math.cos(t) ** power);
+      const py = cy + sy * length * (1 - Math.sin(t) ** power);
+      return `${px.toFixed(2)} ${py.toFixed(2)}`;
+    });
+  });
+  return `M${points.join("L")}Z`;
+}
+
 /**
  * The device's body, in css px of the frame: the buttons under it, the band,
  * the front glass inside it with the screen cut out, and the island, holes,
@@ -78,14 +120,6 @@ export function drawMock(
     viewBox: `0 0 ${mock.width} ${mock.height}`,
     "aria-hidden": "true",
   });
-  // A picture is the whole body, island and buttons too.
-  if (mock.image && href) {
-    const { x, y, width, height, turn } = mock.image;
-    const image = svgNode("image", { href, x, y, width, height });
-    if (turn !== null) image.setAttribute("transform", `matrix(0 -1 1 0 0 ${turn})`);
-    svg.append(image);
-    return svg;
-  }
   const part = (shape: Mock["parts"][number]) =>
     svgNode("rect", {
       class: shape.kind,
@@ -95,14 +129,25 @@ export function drawMock(
       height: shape.height,
       rx: shape.radius,
     });
+  // A picture is the whole body, buttons too, and its island goes flat black over it.
+  if (mock.image && href) {
+    const { x, y, width, height, turn, clockwise, over } = mock.image;
+    const image = svgNode("image", { href, x, y, width, height });
+    if (turn !== null) {
+      image.setAttribute("transform", clockwise ? `matrix(0 1 -1 0 ${turn} 0)` : `matrix(0 -1 1 0 0 ${turn})`);
+    } else if (over) image.setAttribute("transform", `matrix(-1 0 0 -1 ${mock.width} ${mock.height})`);
+    svg.append(image, ...mock.parts.map(part));
+    return svg;
+  }
   const opening = { x: mock.inset.left, y: mock.inset.top, ...screenSize };
   const { x, y, width, height } = mock.body;
+  const screen = mock.continuous ? continuousRect : roundRect;
   const front = { x: x + BAND, y: y + BAND, width: width - 2 * BAND, height: height - 2 * BAND };
   const inside = roundRect(front, corners(mock.bodyRadius, -BAND));
   svg.append(
     ...mock.parts.filter((shape) => shape.kind === "button").map(part),
     svgNode("path", { class: "band", d: roundRect(mock.body, mock.bodyRadius) + inside }),
-    svgNode("path", { class: "body", d: inside + roundRect(opening, mock.screenRadius) }),
+    svgNode("path", { class: "body", d: inside + screen(opening, mock.screenRadius) }),
     ...mock.parts.filter((shape) => shape.kind !== "button").map(part),
   );
   return svg;

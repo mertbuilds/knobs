@@ -8,13 +8,31 @@ const SVG = "http://www.w3.org/2000/svg";
 export interface Look {
   /** The page's background, which fills the screen around the frame. */
   background: string;
-  /** Is that background dark, so the glass and the glyphs on it go dark too? */
+  /**
+   * Safari's strip over the page, under the status bar: the color of a fixed
+   * or sticky bar touching the top of the viewport, else the page's.
+   */
+  top: string;
+  /** What fills the screen under the viewport: a fixed bar's color touching its bottom, else the content at its bottom edge. */
+  bottom: string;
+  /** Is `bottom` a fixed bar's, carried down under the bars, where Safari shows the page past the viewport otherwise? */
+  footer: boolean;
+  /** The page's color under points of the screen, where Safari's glass takes its tint from. */
+  under: readonly Sample[];
+  /** Is that background dark, so Chrome's bars go dark over it too? Safari's glass reads `under`. */
   dark: boolean;
   /** Does the page get a dark `prefers-color-scheme`? Chrome's own colors follow it. */
   scheme: "light" | "dark";
   host: string;
   canBack: boolean;
   canForward: boolean;
+}
+
+/** The page's color at a point of the screen, in css px. */
+export interface Sample {
+  x: number;
+  y: number;
+  color: string;
 }
 
 /** What the working buttons do to the frame. */

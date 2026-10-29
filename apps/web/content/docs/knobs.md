@@ -47,16 +47,16 @@ every knob and what it does. search finds them by name or value, see [the panel]
 
 these put the page in a frame, a real viewport, so media queries and `vw` follow. see [devices](/docs/devices).
 
-| knob                   | what it does                                   |
-| ---------------------- | ---------------------------------------------- |
-| viewport width, height | a size in px                                   |
-| device, orientation    | a phone, tablet or laptop, turned              |
-| posture                | folds a foldable                               |
-| mock, browser, bars    | the phone's body and its browser               |
-| edge to edge           | the page runs under Safari's bars on an iPhone |
-| touch pointer          | the mouse acts as a finger                     |
-| device pixel ratio     | 1, 2 or 3                                      |
-| frame, zoom, mat       | the frame alone, its zoom, the mat's color     |
+| knob                   | what it does                               |
+| ---------------------- | ------------------------------------------ |
+| viewport width, height | a size in px                               |
+| device, orientation    | a phone, tablet or laptop, turned          |
+| posture                | folds a foldable                           |
+| mock, browser, bars    | the phone's body and its browser           |
+| edge to edge           | the page under Safari's top row, sideways  |
+| touch pointer          | the mouse acts as a finger                 |
+| device pixel ratio     | 1, 2 or 3                                  |
+| frame, zoom, mat       | the frame alone, its zoom, the mat's color |
 
 ## the clock and your server
 

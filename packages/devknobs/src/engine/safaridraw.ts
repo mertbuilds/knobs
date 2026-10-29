@@ -1,23 +1,28 @@
 import type { Actions, Look, Painted, Shapes } from "./browserkit";
 import { CHARGE, el, glyphAt, MORPH, place, svgNode, textWidth } from "./browserkit";
+import { type Color, luminance, parseColor, parseHex } from "./color";
 import {
+  alphaAt,
   type Bars,
-  type Fade,
   type Glyph,
   type Mark,
   SAFARI_TEXT,
   type Shape,
   type StatusBar,
+  type StatusColumn,
 } from "./browserui";
 import type { Rect } from "./mock";
 
 /**
- * iOS 26 Safari: Liquid Glass capsules over the page's own color and the
+ * iOS 27 Safari: Liquid Glass capsules over the page's own color and the
  * status bar. No home indicator: it goes once you switch apps, and here none
  * are switched. The glyphs are drawn here from the common ideas
  * (a chevron, a box with an arrow, an open book), not from Apple's symbols.
  * Colors are sampled from the simulator.
  */
+
+/** The domain's weight, medium and untracked as on the iOS 26.5 simulator. */
+const DOMAIN_WEIGHT = 500;
 
 export const SAFARI_CSS = `
 .safari {
@@ -40,27 +45,37 @@ export const SAFARI_CSS = `
 }
 .safari.dark { color: #f3f3f8; }
 .safari .surface > *, .safari .side > *, .safari .field > * { position: absolute; }
-/* Glass over the page: a fill the page shows faintly through, blurred. */
-.safari .capsule, .safari .card, .safari .surface {
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  -webkit-backdrop-filter: blur(10px) saturate(1.8);
-  backdrop-filter: blur(10px) saturate(1.8);
+/* Glass over the page: a fill in the tone of the page under it, which shows faintly through, blurred. */
+.safari .capsule, .safari .surface {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
-.safari .card, .safari[data-state="max"] .surface.from-card {
-  background: rgba(250, 250, 250, 0.82);
+.safari [data-tone="light"] { color: #000; }
+.safari [data-tone="dark"] { color: #fff; }
+/* Light glass: a thin darker ring outside (#c8c8c8 on white), a white highlight inside, a soft wide shadow. */
+.safari [data-rim="none"] {
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 6px 24px rgba(0, 0, 0, 0.065);
 }
-.safari .field { background: rgba(0, 0, 0, 0.05); }
-/* Sampled from a real iPhone over a dark page. */
-.safari.dark .capsule, .safari.dark .surface {
-  background: rgba(40, 40, 42, 0.75);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13);
+/* Glass in a page's hue: a lighter rim of its own color inside, iOS 27's darker ring outside. */
+.safari [data-rim="tint"] {
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 6px 24px rgba(0, 0, 0, 0.1);
 }
-.safari.dark .card, .safari.dark[data-state="max"] .surface.from-card {
-  background: rgba(46, 46, 48, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+/* Dark glass: a rim as bright at the bottom as at the top (#585858 fading to #2b2b2b on #222), the darker ring outside, and no shadow. */
+.safari [data-rim="highlight"] {
+  box-shadow:
+    0 0 0 0.67px rgba(0, 0, 0, 0.215),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 1.5px 1.5px rgba(255, 255, 255, 0.04);
 }
-.safari.dark .field { background: rgba(0, 0, 0, 0.14); }
+/* Bottom's field: toward #ddd in light (#fcfcfc to #f2f2f2, #888 to #a3a3a3), toward #1f1f1f in dark. */
+.safari .field { background: rgba(221, 221, 221, 0.32); }
+.safari [data-tone="dark"] .field { background: rgba(31, 31, 31, 0.73); }
 .safari .glyph {
   fill: none;
   stroke: currentColor;
@@ -68,13 +83,13 @@ export const SAFARI_CSS = `
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.safari .glyph .solid { fill: currentColor; stroke: none; }
 /* Reload and stop are a shade lighter than the other glyphs and thinner, as measured. */
 .safari .glyph .reload { stroke-width: 1.6; }
 .safari .glyph .stop { stroke-width: 1.82; }
-.safari.light .glyph .reload, .safari.light .glyph .stop { stroke: #191919; }
-.safari .glyph.off { color: #babac7; }
-.safari.dark .glyph.off { color: #58585b; }
+.safari .glyph .page { stroke-width: 2; }
+.safari [data-tone="light"] .glyph .reload, .safari [data-tone="light"] .glyph .stop { stroke: #191919; }
+/* A button that does nothing: its glyph at 30%, #babac7 on white glass, #58585b on dark. */
+.safari .glyph.off { stroke-opacity: 0.3; fill-opacity: 0.3; }
 .safari .domain {
   left: 50%;
   white-space: nowrap;
@@ -82,14 +97,14 @@ export const SAFARI_CSS = `
   text-overflow: ellipsis;
   text-align: center;
   font-size: ${SAFARI_TEXT.field}px;
-  font-weight: 400;
-  letter-spacing: -0.2px;
+  font-weight: ${DOMAIN_WEIGHT};
   transform: translate(-50%, -50%);
 }
-.safari .time { font-weight: 600; letter-spacing: -0.3px; transform: translate(-50%, -50%); }
+.safari .time { font-weight: 600; transform: translate(-50%, -50%); }
 .safari .status { fill: currentColor; }
-.safari .level { fill: #fff; font-size: 9.5px; font-weight: 600; letter-spacing: -0.3px; }
-.safari.dark .level { fill: #000; }
+/* The battery's uncharged rest: #b2b2b2 on white, #808080 on black. */
+.safari .status .rest { fill-opacity: 0.3; }
+.safari.dark .status .rest { fill-opacity: 0.5; }
 /* One surface morphs: its box, corners and color, and the domain glides in it. */
 .safari .surface {
   overflow: hidden;
@@ -102,7 +117,10 @@ export const SAFARI_CSS = `
     background-color var(--main) ${MORPH.ease},
     box-shadow var(--main) ${MORPH.ease};
 }
-.safari .domain, .safari .fade {
+/* A minimized Safari's wash under the status bar comes and goes with the bars. */
+.safari .scrim { left: 0; right: 0; opacity: 0; transition: opacity var(--main) ${MORPH.ease}; }
+.safari[data-state="min"] .scrim[data-on="true"] { opacity: 1; }
+.safari .domain {
   transition:
     top var(--main) ${MORPH.ease},
     height var(--main) ${MORPH.ease},
@@ -193,13 +211,8 @@ const GLYPHS: Record<Glyph, () => Shapes> = {
     path("M6.66 0.92A6.59 6.59 0 1 1 2.93 -5.02", "reload"),
     path("M-0.15 -8.89L3.26 -5.33L-0.16 -1.93", "reload"),
   ],
-  // 15.5 x 18, a page over two lines
-  page: () => [
-    svgNode("rect", { x: -6.8, y: -8.1, width: 13.6, height: 8.6, rx: 2.4 }),
-    path("M-6.8 4.2H6.8M-6.8 8.1H2.6"),
-  ],
-  // Three dots 4 across, 7.8 apart.
-  more: () => [-7.8, 0, 7.8].map((x) => svgNode("circle", { cx: x, cy: 0, r: 2, class: "solid" })),
+  // 16.3 x 12.2, three lines from one left edge, the last 11.3 long, 2 thick
+  page: () => [path("M-6.3 -5.1H8M-6.3 0H8M-6.3 5.1H3", "page")],
   plus: () => [path("M0 -8.5V8.5M-8.5 0H8.5")],
   home: () => [],
   tune: () => [],
@@ -212,6 +225,57 @@ function stopGlyph(): Shapes {
   return [path("M-5.66 -5.54L5.88 6M5.88 -5.54L-5.66 6", "stop")];
 }
 
+/**
+ * The status bar's glyphs, measured on the iOS 27.0 simulator in pt, on the
+ * 17 Pro and, a size up, on the 17 Pro Max and the Air: each about 7% bigger
+ * than iOS 26's. Each sits on the island's center line: the time's digits a
+ * little under it, the bars and wifi by their bottom and the battery by its
+ * middle, `drop` px down.
+ */
+export const STATUS_GLYPHS = {
+  regular: {
+    time: { size: 18, spacing: -0.09, drop: 0.33 },
+    /** The gap between the bars, wifi and the battery. */
+    gap: 8.5,
+    signal: { width: 3.33, pitch: 5.67, heights: [6.33, 8.67, 11, 13.67], radius: 1.1, drop: 7.67 },
+    // Three bands round the bottom corner, their ends rounded by a stroke `round` wide.
+    wifi: {
+      width: 18.67,
+      height: 13.67,
+      bands: [0, 3.14, 6.09, 7.83, 10.78, 12.57],
+      angle: 45.4,
+      round: 1.1,
+      drop: 7.33,
+    },
+    battery: { width: 26.33, height: 13.67, radius: 4.67, gap: 0.67, cap: [2, 5], drop: -0.5 },
+  },
+  large: {
+    time: { size: 19, spacing: -0.09, drop: 0.5 },
+    gap: 8.67,
+    signal: { width: 3.67, pitch: 6.11, heights: [7, 9.33, 12, 15], radius: 1.2, drop: 8.33 },
+    wifi: {
+      width: 20.33,
+      height: 15,
+      bands: [0, 3.45, 6.68, 8.59, 11.83, 13.79],
+      angle: 45,
+      round: 1.2,
+      drop: 8,
+    },
+    battery: { width: 29.33, height: 15, radius: 5, gap: 1, cap: [2, 5], drop: -0.5 },
+  },
+} as const;
+
+type Glyphs = (typeof STATUS_GLYPHS)[keyof typeof STATUS_GLYPHS];
+
+/** Wifi's size: its box, the bands' radii in pairs, their angle each side of up, and their rounding. */
+interface WifiSize {
+  width: number;
+  height: number;
+  bands: readonly number[];
+  angle: number;
+  round: number;
+}
+
 /** A ring sector `from` to `to` px out of the corner, `angle` degrees each side of up. */
 function fan(from: number, to: number, angle: number): string {
   const rad = (angle * Math.PI) / 180;
@@ -221,54 +285,96 @@ function fan(from: number, to: number, angle: number): string {
   return `M${at(to, -1)}A${to} ${to} 0 0 1 ${at(to, 1)}${inner}`;
 }
 
-/** Wifi, 17 x 12.3: a dot and two bands fanning out of the bottom corner. */
-function wifi(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "-8.5 -12.3 17 12.3" });
-  place(svg, x, y - 6.15, 17, 12.3);
-  svg.append(
-    ...[fan(0, 3.6, 46), fan(5.5, 8.2, 46), fan(9.9, 12.3, 46)].map((d) => {
-      const round = { "stroke-linejoin": "round", stroke: "currentColor", "stroke-width": 0.6 };
-      return svgNode("path", { d, ...round });
-    }),
-  );
+/** Wifi, its bottom on `bottom`: a dot and two bands fanning out of the bottom corner. */
+function wifi(x: number, bottom: number, size: WifiSize): SVGSVGElement {
+  const { width, height, bands, angle, round } = size;
+  const viewBox = `${-width / 2} ${round / 2 - height} ${width} ${height}`;
+  const svg = svgNode("svg", { class: "status", viewBox });
+  place(svg, x, bottom - height, width, height);
+  const stroke = { "stroke-linejoin": "round", stroke: "currentColor", "stroke-width": round };
+  const pairs = [0, 2, 4].map((at) => fan(bands[at] ?? 0, bands[at + 1] ?? 0, angle));
+  svg.append(...pairs.map((d) => svgNode("path", { d, ...stroke })));
   return svg;
 }
 
-/** Cellular, 18 x 12: four bars rising left to right. An estimate, the simulator shows dots. */
-function signal(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "0 0 18 12" });
-  place(svg, x, y - 6, 18, 12);
+/** Cellular, its bottom on `bottom`: four bars rising left to right. */
+function signal(x: number, bottom: number, size: Glyphs["signal"]): SVGSVGElement {
+  const { width, pitch, heights, radius } = size;
+  const tall = Math.max(...heights);
+  const wide = pitch * (heights.length - 1) + width;
+  const svg = svgNode("svg", { class: "status", viewBox: `0 0 ${wide} ${tall}` });
+  place(svg, x, bottom - tall, wide, tall);
   svg.append(
-    ...[4.4, 6.8, 9.2, 12].map((height, at) =>
-      svgNode("rect", { x: at * 4.93, y: 12 - height, width: 3.2, height, rx: 1 }),
+    ...heights.map((height, at) =>
+      svgNode("rect", { x: at * pitch, y: tall - height, width, height, rx: radius }),
     ),
   );
   return svg;
 }
 
+/** The battery's whole width: the body, the gap and its cap. */
+export function batteryWidth(size: Glyphs["battery"]): number {
+  return size.width + size.gap + size.cap[0];
+}
+
 /**
- * Battery, 27.3 x 13: the cell filled to its charge over a dimmer rest, the
- * charge written across both, as iOS 26 shows it with the percentage on, and its nub.
+ * The charged part of a body `width` by `height` with corners `radius`
+ * round: the body cut straight down `level` in from its left.
  */
-function battery(x: number, y: number): SVGSVGElement {
-  const svg = svgNode("svg", { class: "status", viewBox: "0 0 27.3 13" });
-  place(svg, x, y - 6.5, 27.3, 13);
-  const level = svgNode("text", {
-    class: "level",
-    x: 12.6,
-    y: 6.9,
-    "text-anchor": "middle",
-    "dominant-baseline": "middle",
-  });
-  level.textContent = String(CHARGE);
-  const edge = ((25.2 * CHARGE) / 100).toFixed(2);
+function chargedPath(width: number, height: number, radius: number, level: number): string {
+  const r = Math.min(radius, height / 2, width / 2);
+  const x = Math.max(0, Math.min(width, level));
+  // How far down from the top edge the corner's curve is at `along` in from the nearer side.
+  const inset = (along: number) => r - Math.sqrt(Math.max(0, r * r - (r - along) ** 2));
+  const f = (n: number) => Number(n.toFixed(3));
+  if (x <= r) {
+    const y = inset(x);
+    return `M${f(x)} ${f(y)}A${r} ${r} 0 0 0 0 ${r}V${f(height - r)}A${r} ${r} 0 0 0 ${f(x)} ${f(height - y)}Z`;
+  }
+  const left = `H${r}A${r} ${r} 0 0 0 0 ${r}V${f(height - r)}A${r} ${r} 0 0 0 ${r} ${height}`;
+  if (x < width - r) return `M${f(x)} 0${left}H${f(x)}Z`;
+  const y = inset(width - x);
+  return (
+    `M${f(x)} ${f(y)}A${r} ${r} 0 0 0 ${f(width - r)} 0${left}` +
+    `H${f(width - r)}A${r} ${r} 0 0 0 ${f(x)} ${f(height - y)}Z`
+  );
+}
+
+/**
+ * iOS 27's battery, in px of its box: a solid flat body, as much of it as
+ * the charge in the glyph's color and the rest flat gray, no outline, and
+ * the cap apart from the body, gray too. No percentage, as iOS shows it by
+ * default. Measured on the iOS 27.0 simulator: 26.33 x 13.67 with a 2 x 5
+ * cap 0.67 off on the 17 Pro, 29.33 x 15 and 1 off on the Pro Max.
+ */
+export function batteryParts(size: Glyphs["battery"], charge: number) {
+  const { width, height, radius, gap, cap } = size;
+  const [capWidth, capHeight] = cap;
+  return {
+    body: { x: 0, y: 0, width, height, rx: radius },
+    level: { d: chargedPath(width, height, radius, (width * charge) / 100) },
+    cap: { x: width + gap, y: (height - capHeight) / 2, width: capWidth, height: capHeight },
+  };
+}
+
+/** The battery, its middle on `middle`. */
+function battery(x: number, middle: number, size: Glyphs["battery"]): SVGSVGElement {
+  const wide = batteryWidth(size);
+  const svg = svgNode("svg", { class: "status", viewBox: `0 0 ${wide} ${size.height}` });
+  place(svg, x, middle - size.height / 2, wide, size.height);
+  const { body, level, cap } = batteryParts(size, CHARGE);
+  // The cap's outer end is round.
+  const r = Math.min(cap.width, cap.height / 2);
+  const end = cap.x + cap.width;
+  const bottom = cap.y + cap.height;
   svg.append(
-    svgNode("rect", { x: 0, y: 0, width: 25.2, height: 13, rx: 4.2, "fill-opacity": 0.4 }),
-    svgNode("path", { d: `M4.2 0H${edge}V13H4.2A4.2 4.2 0 0 1 0 8.8V4.2A4.2 4.2 0 0 1 4.2 0Z` }),
-    level,
+    svgNode("rect", { ...body, class: "rest" }),
+    svgNode("path", level),
     svgNode("path", {
-      d: "M26.1 4.6a1.2 1.2 0 0 1 1.2 1.2v1.4a1.2 1.2 0 0 1-1.2 1.2Z",
-      "fill-opacity": 0.4,
+      d:
+        `M${cap.x} ${cap.y}H${end - r}A${r} ${r} 0 0 1 ${end} ${cap.y + r}` +
+        `V${bottom - r}A${r} ${r} 0 0 1 ${end - r} ${bottom}H${cap.x}Z`,
+      class: "rest",
     }),
   );
   return svg;
@@ -276,25 +382,107 @@ function battery(x: number, y: number): SVGSVGElement {
 
 /** The time at its center, the icons beside the island, or the SE's either side of the time. */
 function statusBar(status: StatusBar): Element[] {
+  const glyphs = status.large ? STATUS_GLYPHS.large : STATUS_GLYPHS.regular;
   const time = el("div", "time", "04:20");
   time.style.left = `${status.time.x}px`;
-  time.style.top = `${status.time.y}px`;
+  time.style.top = `${status.time.y + glyphs.time.drop}px`;
   time.style.fontSize = `${status.time.size}px`;
+  time.style.letterSpacing = `${glyphs.time.spacing}px`;
   const { icons } = status;
+  const { signal: bars, wifi: air, battery: cell } = glyphs;
   if (icons.align === "start") {
-    // The SE's icons are a size smaller. An estimate from its 2x screenshots.
+    // The SE's icons are a size smaller, on the time's line. An estimate from its 2x screenshots.
     const end = status.battery ?? { x: icons.x, y: icons.y };
+    const bottom = icons.y + Math.max(...bars.heights) / 2;
     const nodes = [
-      signal(icons.x, icons.y),
-      wifi(icons.x + 23, icons.y),
-      battery(end.x - 27.3, end.y),
+      signal(icons.x, bottom, bars),
+      wifi(icons.x + 23, icons.y + air.height / 2, air),
+      battery(end.x - batteryWidth(cell), end.y, cell),
     ];
     for (const node of nodes) node.style.transform = "scale(0.85)";
     return [time, ...nodes];
   }
-  const cell = icons.x - 27.3;
-  const air = cell - 7.3 - 17;
-  return [time, signal(air - 6 - 18, icons.y), wifi(air, icons.y), battery(cell, icons.y)];
+  const right = icons.x - batteryWidth(cell);
+  const middle = right - glyphs.gap - air.width;
+  const left = middle - glyphs.gap - (bars.pitch * (bars.heights.length - 1) + bars.width);
+  return [
+    time,
+    signal(left, icons.y + bars.drop, bars),
+    wifi(middle, icons.y + air.drop, air),
+    battery(right, icons.y + cell.drop, cell),
+  ];
+}
+
+/**
+ * The Duo's status, measured on the iOS 27.1 simulator in pt: the ring is
+ * open at the bottom, its ends 55 degrees each side of straight down, and the
+ * signal's four dots, 4 round, sit on its circle in the gap, 10 and 30.5
+ * degrees each side. Wifi in the ring is the iPhone's, 18.2 by 13.33. The
+ * ring's arc is the battery: as much of it as the charge, the rest at 35%.
+ */
+export const DUO_GLYPHS = {
+  time: { spacing: 0, drop: 0.8 },
+  ends: 55,
+  dots: [-30.5, -10, 10, 30.5],
+  dot: 2,
+  rest: 0.35,
+  wifi: {
+    width: 18.2,
+    height: 13.33,
+    bands: [0, 3.06, 5.94, 7.64, 10.51, 12.26],
+    angle: 45.4,
+    round: 1.1,
+    drop: 0,
+  },
+} as const;
+
+/** The point `angle` degrees round from the right, clockwise on screen, `r` out. */
+function onCircle(r: number, angle: number): string {
+  const rad = (angle * Math.PI) / 180;
+  return `${(r * Math.cos(rad)).toFixed(2)} ${(r * Math.sin(rad)).toFixed(2)}`;
+}
+
+/** An arc of radius `r` from `from` to `to` degrees, clockwise on screen. */
+function arc(r: number, from: number, to: number): string {
+  const large = to - from > 180 ? 1 : 0;
+  return `M${onCircle(r, from)}A${r} ${r} 0 ${large} 1 ${onCircle(r, to)}`;
+}
+
+/** The ring, centered on `x`, `y`: the battery's arc over the top, the signal's dots in its gap. */
+function ring(x: number, y: number, size: StatusColumn["ring"]): SVGSVGElement {
+  const { radius, stroke } = size;
+  const reach = radius + stroke;
+  const svg = svgNode("svg", { class: "status ring", viewBox: `${-reach} ${-reach} ${2 * reach} ${2 * reach}` });
+  place(svg, x - reach, y - reach, 2 * reach, 2 * reach);
+  // Down is 90 degrees: from the left end, over the top, round to the right end.
+  const from = 90 + DUO_GLYPHS.ends;
+  const to = 450 - DUO_GLYPHS.ends;
+  const charged = from + ((to - from) * CHARGE) / 100;
+  const line = { fill: "none", stroke: "currentColor", "stroke-width": stroke, "stroke-linecap": "round" };
+  svg.append(
+    svgNode("path", { d: arc(radius, charged, to), ...line, "stroke-opacity": DUO_GLYPHS.rest }),
+    svgNode("path", { d: arc(radius, from, charged), ...line }),
+    ...DUO_GLYPHS.dots.map((angle) => {
+      const rad = ((90 + angle) * Math.PI) / 180;
+      return svgNode("circle", { cx: radius * Math.cos(rad), cy: radius * Math.sin(rad), r: DUO_GLYPHS.dot });
+    }),
+  );
+  return svg;
+}
+
+/** The Duo's status: the time, and the ring round wifi. */
+function statusColumn(column: StatusColumn): (HTMLElement | SVGSVGElement)[] {
+  const time = el("div", "time", "04:20");
+  time.style.left = `${column.time.x}px`;
+  time.style.top = `${column.time.y + DUO_GLYPHS.time.drop}px`;
+  time.style.fontSize = `${column.time.size}px`;
+  time.style.letterSpacing = `${DUO_GLYPHS.time.spacing}px`;
+  const air = DUO_GLYPHS.wifi;
+  return [
+    time,
+    ring(column.x, column.ring.y, column.ring),
+    wifi(column.x - air.width / 2, column.ring.y + air.height / 2, air),
+  ];
 }
 
 /** What a glyph does when pressed, where it does anything. */
@@ -313,10 +501,148 @@ function glyphIn(mark: Mark, origin: Rect, className: string, actions: Actions):
   return svg;
 }
 
-/** The minimized domain pill's box: as wide as its text and 19 px either side. */
+/** The address as Safari shows it: the host alone, without its port. */
+export function domainOf(host: string): string {
+  return host.replace(/:\d+$/, "");
+}
+
+/** The minimized domain pill's box: its domain's advance and the pill's room either side. */
 export function pillBox(pill: Shape, host: string): Rect {
-  const width = Math.round(textWidth(host, SAFARI_TEXT.pill, 400, -0.2)) + 38;
+  const size = pill.text?.size ?? SAFARI_TEXT.pill;
+  const width = Math.round(textWidth(domainOf(host), size, DOMAIN_WEIGHT)) + (pill.text?.pad ?? 0);
   return { x: pill.x - width / 2, y: pill.y, width, height: pill.height };
+}
+
+/** A color's hue in degrees, its saturation and its lightness, both from 0 to 1. */
+function hslOf({ red, green, blue }: Color): [number, number, number] {
+  const [r, g, b] = [red / 255, green / 255, blue / 255];
+  const high = Math.max(r, g, b);
+  const low = Math.min(r, g, b);
+  const lightness = (high + low) / 2;
+  const span = high - low;
+  if (span === 0) return [0, 0, lightness];
+  const saturation = span / (1 - Math.abs(2 * lightness - 1));
+  const hue = high === r ? (g - b) / span + 6 : high === g ? (b - r) / span + 2 : (r - g) / span + 4;
+  return [(hue * 60) % 360, saturation, lightness];
+}
+
+function fromHsl(hue: number, saturation: number, lightness: number): Color {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const at = (((hue % 360) + 360) % 360) / 60;
+  const second = chroma * (1 - Math.abs((at % 2) - 1));
+  const sectors = [
+    [chroma, second, 0],
+    [second, chroma, 0],
+    [0, chroma, second],
+    [0, second, chroma],
+    [second, 0, chroma],
+    [chroma, 0, second],
+  ];
+  const [r = 0, g = 0, b = 0] = sectors[Math.floor(at) % 6] ?? [];
+  const m = lightness - chroma / 2;
+  return { red: (r + m) * 255, green: (g + m) * 255, blue: (b + m) * 255, alpha: 1 };
+}
+
+function hexOf({ red, green, blue }: Color): string {
+  const pair = (channel: number) =>
+    Math.min(255, Math.max(0, Math.round(channel))).toString(16).padStart(2, "0");
+  return `#${pair(red)}${pair(green)}${pair(blue)}`;
+}
+
+/** How Safari's glass looks over a color of the page. */
+export interface Tint {
+  /** The glass's color where the page under it is that color all over. */
+  fill: string;
+  /** The tone of the glyphs and text on it. */
+  glyph: "light" | "dark";
+  /** Its edge: none and a soft shadow, a rim of its own hue, or dark glass's highlight. */
+  rim: "none" | "tint" | "highlight";
+}
+
+/**
+ * The glass's neutral gray over black and over white content, by scheme,
+ * measured on the iOS 27.0 simulator: the scheme pulls it toward its own
+ * side, so black content in light gives gray glass and white content in dark
+ * a lighter gray.
+ */
+const GLASS_GRAY = { light: [0x89, 0xf8], dark: [0x22, 0xb3] } as const;
+
+/**
+ * The glass over `under` in a page of `scheme`, from pairs measured on the
+ * iOS 27.0 simulator. The glass takes its tone from the content and from the
+ * scheme: light mode gives #f8f8f8 over white and #898989 over black, dark
+ * mode #b3b3b3 over white and #222222 over black, gray in between by the
+ * content's lightness. Saturated content gives glass in its own hue, lighter
+ * in light (#1e5bd7 gives #7eb1ff, #13a538 #5ce37e) and a little brighter in
+ * dark (#2a6ef2, #0ead37). Colors in between mix the two by how saturated
+ * they are. The glyphs on it follow the scheme alone: black in light, white
+ * in dark, whatever the glass.
+ */
+export function glassTint(under: Color, scheme: "light" | "dark"): Tint {
+  const [hue, saturation, lightness] = hslOf(under);
+  const [low, high] = GLASS_GRAY[scheme];
+  const gray = low + (high - low) * lightness;
+  const neutral: Color = { red: gray, green: gray, blue: gray, alpha: 1 };
+  const light = scheme === "light";
+  const hued = light
+    ? fromHsl(hue - 4, Math.min(1, saturation * 1.3 + 0.05), Math.min(0.9, lightness + 0.26))
+    : fromHsl(hue, Math.min(1, saturation + 0.15), Math.min(0.9, lightness * 1.4 - 0.1));
+  const chroma = saturation * (1 - Math.abs(2 * lightness - 1));
+  const share = Math.min(1, chroma / (light ? 0.8 : 0.7));
+  const mix = (a: number, b: number) => a + (b - a) * share;
+  const fill: Color = {
+    red: mix(neutral.red, hued.red),
+    green: mix(neutral.green, hued.green),
+    blue: mix(neutral.blue, hued.blue),
+    alpha: 1,
+  };
+  const glyph = light ? "dark" : "light";
+  const rim = share > 0.3 ? "tint" : light ? "none" : "highlight";
+  return { fill: hexOf(fill), glyph, rim };
+}
+
+/** How much of the page under it the glass hides. */
+const GLASS_ALPHA = 0.9;
+
+/**
+ * The glass's own fill, which shows the page faintly through, so that over
+ * a page of `under` all over it reads as `fill`.
+ */
+function glassFill(fill: Color, under: Color): string {
+  const own = (want: number, page: number) =>
+    Math.min(255, Math.max(0, Math.round((want - (1 - GLASS_ALPHA) * page) / GLASS_ALPHA)));
+  const [r, g, b] = [
+    own(fill.red, under.red),
+    own(fill.green, under.green),
+    own(fill.blue, under.blue),
+  ];
+  return `rgba(${r}, ${g}, ${b}, ${GLASS_ALPHA})`;
+}
+
+const WHITE: Color = { red: 255, green: 255, blue: 255, alpha: 1 };
+
+/** The page's color under the point of the screen nearest `x`, `y`, else the page's own. */
+export function underAt(look: Look, x: number, y: number): Color {
+  let best: string | null = null;
+  let far = Infinity;
+  for (const sample of look.under) {
+    const distance = Math.hypot(sample.x - x, sample.y - y);
+    if (distance < far) {
+      far = distance;
+      best = sample.color;
+    }
+  }
+  return parseColor(best ?? look.background) ?? WHITE;
+}
+
+/** Tint a piece of glass for the page under its middle. */
+function tintGlass(node: HTMLElement, box: Rect, look: Look): Color {
+  const under = underAt(look, box.x + box.width / 2, box.y + box.height / 2);
+  const tint = glassTint(under, look.scheme);
+  node.style.backgroundColor = glassFill(parseHex(tint.fill) ?? WHITE, under);
+  node.dataset.tone = tint.glyph === "dark" ? "light" : "dark";
+  node.dataset.rim = tint.rim;
+  return under;
 }
 
 function placeBox(node: HTMLElement, box: Rect, radius: number): void {
@@ -324,34 +650,54 @@ function placeBox(node: HTMLElement, box: Rect, radius: number): void {
   node.style.borderRadius = `${radius}px`;
 }
 
-/** The scroll edge's box and its gradient of the page's color. */
-function placeFade(node: HTMLElement, fade: Fade | null, look: Look): void {
-  node.hidden = fade === null;
-  if (!fade) return;
-  node.style.top = `${fade.y}px`;
-  node.style.height = `${fade.height}px`;
-  // The page's color, `rgb(r, g, b)`, at each stop's opacity.
-  const color = (alpha: number) => look.background.replace(/^rgb\((.*)\)$/, `rgba($1, ${alpha})`);
-  const stops = fade.stops.map(({ at, alpha }) => `${color(alpha)} ${at}px`);
+/** `top` over `under`, `alpha` of the way. */
+function over(top: Color, under: Color, alpha: number): Color {
+  const mix = (a: number, b: number) => a * alpha + b * (1 - alpha);
+  return {
+    red: mix(top.red, under.red),
+    green: mix(top.green, under.green),
+    blue: mix(top.blue, under.blue),
+    alpha: 1,
+  };
+}
+
+/**
+ * Lay the minimized bars' scrim in the page's color, and say what the status
+ * bar then shows under its glyphs: the content at the top of the page through
+ * the scrim. Null where a fixed or sticky bar holds the top, which keeps its
+ * color as the strip, and where the bars have no scrim.
+ */
+export function scrimOver(node: HTMLElement, mini: Bars, look: Look): Color | null {
+  const { scrim, status } = mini;
+  const held = look.top !== look.background;
+  node.dataset.on = String(scrim !== null && !held);
+  if (!scrim || held) return null;
+  const page = parseColor(look.background) ?? WHITE;
+  const { red, green, blue } = page;
+  node.style.top = `${scrim.y}px`;
+  node.style.height = `${scrim.height}px`;
+  const stops = scrim.stops.map(({ at, alpha }) => `rgba(${red}, ${green}, ${blue}, ${alpha}) ${at}px`);
   node.style.background = `linear-gradient(to bottom, ${stops.join(", ")})`;
+  const content = underAt(look, scrim.at.x, scrim.at.y);
+  return over(page, content, alphaAt(scrim, status?.time.y ?? 0));
 }
 
 /**
  * Safari's bars, drawn once for both states (the plus to menu morph of
  * transitions.dev). The address capsule, Bottom's card or Top's address bar
  * is one surface that becomes the minimized pill: its box and corners tween,
- * the domain glides and scales from 17 to 13 px in it, and the page menu,
- * reload and Bottom's buttons fade out as an icon swap. The capsules beside
- * it fade and drift 10 px. The scroll edge moves on the same curve.
+ * the domain glides and scales from 17 to the pill's size in it, and the page
+ * menu, reload and Bottom's buttons fade out as an icon swap. The capsules
+ * beside it fade and drift 10 px.
  */
 export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions): Painted {
   const root = el("div", "safari");
   root.style.inset = "0";
-  const fade = el("div", "fade");
-  fade.style.left = "0";
-  fade.style.right = "0";
-  root.append(fade);
+  const scrim = el("div", "scrim");
+  root.append(scrim);
   if (full.status) root.append(...statusBar(full.status));
+  const column = full.column ? statusColumn(full.column) : [];
+  root.append(...column);
   const pill = mini.shapes.find((shape) => shape.kind === "pill") ?? null;
   // The shape that becomes the pill: the one with the domain, or Bottom's card.
   const main = pill
@@ -410,11 +756,13 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
   surface?.append(progress);
   /** Each load, so a finish that a new load cut short leaves the line alone. */
   let loads = 0;
+  const sides: { node: HTMLElement; box: Rect }[] = [];
   // Everything else leaves as a side capsule, toward the surface, or up when turned across.
   for (const shape of full.shapes) {
     if (shape === main || shape.kind === "field") continue;
     const side = el("div", "side capsule");
     placeBox(side, shape, shape.radius);
+    sides.push({ node: side, box: shape });
     const middle = shape.x + shape.width / 2;
     const across = full.orientation === "landscape";
     const toward = main ? main.x + main.width / 2 : middle;
@@ -437,11 +785,19 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
     root,
     apply(minimized, sight) {
       root.dataset.state = minimized ? "min" : "max";
-      root.className = sight.dark ? "safari dark" : "safari light";
-      placeFade(fade, (minimized ? mini : full).fade, sight);
+      const behind = scrimOver(scrim, mini, sight);
+      // The status bar's glyphs follow the strip they are on, or minimized the
+      // page under them. The Duo cover's column is the page's own color.
+      const own = full.column && !full.column.strip ? sight.background : sight.top;
+      const strip = (minimized ? behind : null) ?? parseColor(own) ?? WHITE;
+      const darkStrip = luminance(strip.red, strip.green, strip.blue) < 0.4;
+      root.className = darkStrip ? "safari dark" : "safari light";
+      // The Duo's inner screen hides its status minimized.
+      for (const node of column) node.style.display = minimized && !mini.column ? "none" : "";
       for (const text of Array.from(root.querySelectorAll<HTMLElement>(".domain"))) {
-        text.textContent = sight.host;
+        text.textContent = domainOf(sight.host);
       }
+      for (const { node, box } of sides) tintGlass(node, box, sight);
       for (const { node, glyph } of glyphs) {
         const off =
           (glyph === "back" && !sight.canBack) || (glyph === "forward" && !sight.canForward);
@@ -451,9 +807,10 @@ export function buildSafari(full: Bars, mini: Bars, look: Look, actions: Actions
       if (surface && domain && main && pill) {
         const box = minimized ? pillBox(pill, sight.host) : main;
         placeBox(surface, box, minimized ? pill.radius : main.radius);
+        tintGlass(surface, box, sight);
         const top = minimized ? pill.height / 2 : Number(domain.dataset.top);
         domain.style.top = `${top}px`;
-        const scale = minimized ? SAFARI_TEXT.pill / SAFARI_TEXT.field : 1;
+        const scale = minimized ? (pill.text?.size ?? SAFARI_TEXT.pill) / SAFARI_TEXT.field : 1;
         domain.style.transform = `translate(-50%, -50%) scale(${scale})`;
       }
     },

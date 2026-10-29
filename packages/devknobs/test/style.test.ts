@@ -27,7 +27,7 @@ function frameRealm() {
   );
   vm.runInContext(`${source.replace(/^export /gm, "")}\nglobalThis.copy = { ensureStyle, findStyle, removeStyle };`, realm);
   const copy: Copy = Reflect.get(realm, "copy");
-  // The page above passes the frame's document in, as it does to scrollbars and endroom.
+  // The page above passes the frame's document in, as it does to scrollbars.
   const frameDoc: Document = Reflect.get(realm, "document");
   const sheets = (): string[] => doc.adoptedStyleSheets.map((sheet: { rules: string }) => sheet.rules);
   return { copy, doc: frameDoc, sheets };
@@ -45,7 +45,7 @@ test("a sheet the page above adopts into the frame's document is the frame's own
 test("the page above looking for a sheet in the frame leaves the frame's sheets findable", () => {
   const { copy, doc, sheets } = frameRealm();
   copy.ensureStyle("outlines").textContent = "outline";
-  expect(findStyle("endroom", doc)).toBeNull();
+  expect(findStyle("scrollbars", doc)).toBeNull();
   expect(findStyle("outlines", doc)?.textContent).toBe("outline");
   copy.removeStyle("outlines");
   expect(sheets()).toEqual([]);
@@ -53,11 +53,11 @@ test("the page above looking for a sheet in the frame leaves the frame's sheets 
 
 test("the frame takes away a sheet the page above put there", () => {
   const { copy, doc, sheets } = frameRealm();
-  ensureStyle("endroom", doc).textContent = "html{margin-bottom:1px}";
-  expect(copy.findStyle("endroom")?.textContent).toBe("html{margin-bottom:1px}");
-  copy.removeStyle("endroom");
+  ensureStyle("scrollbars", doc).textContent = "html{scrollbar-width:none}";
+  expect(copy.findStyle("scrollbars")?.textContent).toBe("html{scrollbar-width:none}");
+  copy.removeStyle("scrollbars");
   expect(sheets()).toEqual([]);
-  expect(findStyle("endroom", doc)).toBeNull();
+  expect(findStyle("scrollbars", doc)).toBeNull();
 });
 
 test("a sheet found again is the same handle", () => {

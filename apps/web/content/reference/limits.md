@@ -88,8 +88,10 @@ still get hover moves, and ones it put there before devknobs loaded read
 `Touch` constructor, so they get the cursor, the pointer type and the scrolling
 but no touch events. turn the switch off for the mouse as it is: clicks,
 hover and `pointerType: "mouse"`. `ontouchstart` is on the window only, not on
-elements or the document. `screen.width`,
-`screen.height` and `screen.orientation` keep the real screen's.
+elements or the document. in a phone's or tablet's frame `screen.width`,
+`screen.height`, `availWidth` and `availHeight` are the device's (the
+iPhone Duo's cover screen on either of its screens); `screen.orientation`
+keeps the real screen's.
 
 a touch device's scrollbars are hidden, not drawn as a phone draws them: the
 thin indicator that shows over the page while it scrolls is left out, and a
@@ -100,16 +102,25 @@ the frame.
 
 the bars follow the scroll of the document only, as on the phone, so a page
 that scrolls an inner box keeps them as they are, and they do not come back
-at the bottom of the page. with edge to edge off the page is not drawn under
-the glass: the screen there takes the page's background color, and Safari's
-scroll edge fades the last 64 px of the page into that color, eased from
-clear to 0.85 opaque at the frame's end and 0.92 at the bottom, where on the
-phone the page runs on under the bars. the top edge has no fade, as Safari
+at the bottom of the page. upright, what shows of the page under Safari's
+bottom bars, past the viewport, is a picture of it, not the page itself:
+what is fixed to the screen is left out, pictures, videos and drawings show
+as the background of their box, it is taken again at most four times a
+second while the page changes, and a page from another origin gets one
+color there, the content's at the page's bottom edge. a fixed footer's
+color is carried down, as on the phone. minimized, the content under the
+status bar is that at the page's top, not what scrolled past it. `100svh`, `100lvh` and `100vh` follow the frame's
+height, where Safari keeps `svh` at the expanded height and `lvh` and `vh`
+at the minimized one (the whole screen in top), and so does
+`document.documentElement.clientHeight`, which Safari keeps at the expanded
+height: both are the frame's own layout viewport, which a page's script and
+css cannot set apart from `innerHeight`. the edge to edge switch
+only works with the phone held sideways. the top edge has no fade, as Safari
 shows none there. `env(safe-area-inset-*)` stays 0. there is no keyboard, and the tabs, the
 menus and the share sheet do not open. a page that changes its background
 without a load, a navigation or a scheme change keeps the old color around
-the bars until the next one. Safari is drawn as iOS 26.5 has it, with the
-more button in compact, where iOS 27 has the tabs button. Chrome is its
+the bars until the next one. Safari is drawn as iOS 27.0 has it; the dynamic
+island keeps its iOS 26.5 size, as the iOS 27 simulator does not draw it. Chrome is its
 classic toolbar, with no theme color and no dynamic color.
 
 ## the frame

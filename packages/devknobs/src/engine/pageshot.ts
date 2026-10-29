@@ -420,8 +420,11 @@ function blankPictures(live: Element, copy: Element): void {
   });
 }
 
-/** The page in `frame`, copied as it is now for `paintPage`, or null where it is out of reach. */
-export function copyPage(frame: HTMLIFrameElement): Element | null {
+/**
+ * The page in `frame`, copied as it is now for `paintPage`, or null where it
+ * is out of reach. What `leave` picks of the page is left out of the copy.
+ */
+export function copyPage(frame: HTMLIFrameElement, leave?: (node: Element) => boolean): Element | null {
   const doc = frame.contentDocument;
   if (!doc?.documentElement) return null;
   // Its styles inlined, as a drawing of it loads nothing of its own, and the
@@ -439,6 +442,15 @@ export function copyPage(frame: HTMLIFrameElement): Element | null {
   // copy in the frame's would fetch its pictures again and run their handlers.
   const inert = doc.implementation.createHTMLDocument("");
   const root = inert.importNode(doc.documentElement, true);
+  if (leave) {
+    // The copy has the page's elements in the same order until some are taken out.
+    const live = doc.documentElement.getElementsByTagName("*");
+    const copied = root.getElementsByTagName("*");
+    for (let index = 0; index < live.length; index++) {
+      const node = live[index];
+      if (node && leave(node)) copied[index]?.setAttribute("data-devknobs", "");
+    }
+  }
   blankPictures(doc.documentElement, root);
   // And nothing devknobs put on the page: what its knobs write is in the rules.
   for (const node of root.querySelectorAll("script, link, style, noscript, [data-devknobs]")) node.remove();

@@ -40,6 +40,10 @@ export interface Part extends Rect {
 export interface MockImage extends Rect {
   file: string;
   turn: number | null;
+  /** Turned the other way, its top to the right, `turn` then the upright mock's height. */
+  clockwise?: boolean;
+  /** Not turned, but half round in the mock: the case held the other way up, as `flipMock` has it. */
+  over?: boolean;
 }
 
 /** A device's body around its screen, in css px of the screen. */
@@ -52,14 +56,22 @@ export interface Mock {
   /** The body, in the mock. */
   body: Rect;
   screenRadius: Radius;
+  /** The screen's corners are continuous, as on the phones with an island, not round. */
+  continuous: boolean;
   bodyRadius: Radius;
   parts: Part[];
   /** The body as a picture, which then has every part in it, in place of the drawn one. */
   image?: MockImage;
 }
 
+/** The island of a phone that has one, a pill over the top of its screen held upright. */
+export function islandOf(id: string): Front | null {
+  const sensor = BODIES[id]?.front.find((front) => front.kind === "sensor");
+  return sensor && sensor.width > sensor.height ? sensor : null;
+}
+
 /** A rect with fully round ends. */
-function round(kind: Part["kind"], rect: Rect): Part {
+export function round(kind: Part["kind"], rect: Rect): Part {
   return { kind, ...rect, radius: Math.min(rect.width, rect.height) / 2 };
 }
 
@@ -85,7 +97,7 @@ function keyOf(front: Front): Rect | null {
  * A rect of a portrait mock `width` wide and `height` tall, turned a quarter
  * so its top is on the left, or `clockwise`, on the right.
  */
-function turnRect<T extends Rect>(rect: T, width: number, height: number, clockwise: boolean): T {
+export function turnRect<T extends Rect>(rect: T, width: number, height: number, clockwise: boolean): T {
   const { x, y } = rect;
   const turned = { width: rect.height, height: rect.width };
   return clockwise
@@ -158,7 +170,8 @@ export function mockOf(id: string, orientation: OrientationValue): Mock | null {
       return key ? [shown, round("key", at(key))] : [shown];
     }),
   ];
-  const upright: Mock = { width, height, inset, body, screenRadius, bodyRadius, parts };
+  const continuous = islandOf(id) !== null;
+  const upright: Mock = { width, height, inset, body, screenRadius, continuous, bodyRadius, parts };
   if (orientation === "portrait") return upright;
   const clockwise = device.clockwise === true;
   return {

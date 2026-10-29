@@ -16,6 +16,7 @@ devknobs works from inside the page, so some things stay out of its reach.
 - the speed knob slows what the Web Animations API sees. a `requestAnimationFrame` loop keeps its own pace.
 - the touch pointer is made in the page. css `:hover` still follows the mouse, and there is one finger only, with no pinch.
 - the phone's browser bars do not open their menus, and there is no keyboard.
+- the phone's browser gives the page Safari's real viewport, but `100svh`, `100lvh`, `100vh` and `clientHeight` follow the frame's height. under the bars the screen is one solid color, not the page itself. edge to edge only works with the phone held sideways.
 - the frame loads the page a second time, so in-memory state is not shared between the two.
 
 ## what only devtools can do

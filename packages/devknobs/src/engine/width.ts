@@ -26,7 +26,7 @@ import { landSplash, spreadMat } from "./matsplash";
 import { type FrameRefusal, handing, nativeEnabled, settles } from "./native";
 import { createNotice, explain } from "./notice";
 import type { Mock, Rect } from "./mock";
-import { corners, drawMock, UNDER } from "./mockdraw";
+import { CONTINUOUS, corners, drawMock, UNDER } from "./mockdraw";
 import { drawnAt, glideFrame, gliding, landGlide, placeKey } from "./frameglide";
 import {
   finishFold,
@@ -37,6 +37,7 @@ import {
   forgetFold,
   holdFold,
 } from "./foldrun";
+import { caseOver, flipMock, openUpright } from "./foldflip";
 import { hingeMoved } from "./foldtune";
 import { folds, type Hole, moves, readCorners, shapeOf, turnOf, windowRect } from "./morph";
 import {
@@ -595,13 +596,16 @@ function showMock(mock: Mock | null, place: Fit): void {
     mockDrawing?.remove();
     mockDrawing = mock ? drawMock(mock, place, href) : null;
     if (mockDrawing) screen.append(mockDrawing);
-    glass.className = mock ? "glass mocked" : "glass";
+    glass.className = mock ? `glass mocked${mock.continuous ? " continuous" : ""}` : "glass";
   }
   const zoom = place.zoom;
   glass.style.left = mock ? `${mock.inset.left * zoom}px` : "";
   glass.style.top = mock ? `${mock.inset.top * zoom}px` : "";
   const round = mock ? corners(mock.screenRadius).map((radius) => `${radius * zoom}px`) : [];
   glass.style.borderRadius = round.join(" ");
+  const [corner = 0] = mock ? corners(mock.screenRadius) : [];
+  const continuous = mock?.continuous ? `${corner * CONTINUOUS.extent * zoom}px` : "";
+  glass.style.setProperty("--continuous", continuous);
   glass.style.boxShadow = href ? `0 0 0 ${UNDER * zoom}px #000` : "";
   if (mock && mockDrawing) {
     mockDrawing.style.width = `${mock.width * zoom}px`;
@@ -658,8 +662,12 @@ function showMat(size: { width: number; height: number }): void {
 
 /** The body around the frame for `value`, which draws the frame again once its picture is in. */
 function bodyFor(value: ViewportValue): Mock | null {
-  return bodyOf(value, resize);
+  const body = bodyOf(value, resize);
+  return body && over && openUpright(shapeOf(value)) ? flipMock(body) : body;
 }
+
+/** Is the open Duo's case held the other way up, as it is unfolded from its cover held across? For the session only. */
+let over = false;
 
 function resize(): void {
   if (!frame || !letterbox || !stage || !drawing || !screen || !readout || !caption) return;
@@ -906,6 +914,7 @@ foldableShown(() => {
 
 /** Fold the device to the posture `value` has, in view, and draw it that way once it is there, or, `held`, as a hand moves it. */
 export function foldDevice(value: ViewportValue, held = false): boolean {
+  over = caseOver(shapeOf(current), shapeOf(value), over);
   landGlide();
   touchDot?.rest();
   return foldIn(current, value, foldScene(), draw, held);
@@ -1285,6 +1294,7 @@ function close(follow: boolean): void {
 export function apply(value: ViewportValue): void {
   const shape = shapeOf(value);
   const from = heading;
+  over = caseOver(from, shape, over);
   heading = shape;
   const first = !settled;
   settled = true;
@@ -1382,5 +1392,6 @@ export function apply(value: ViewportValue): void {
 export function reset(): void {
   close(false);
   heading = "closed";
+  over = false;
   settled = false;
 }

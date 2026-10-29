@@ -21,6 +21,10 @@ const PHONE = merge(DEFAULT_STATE, { device: "iphone-18-pro" });
 const VIEW = { innerWidth: 1440, innerHeight: 900, devicePixelRatio: 2 };
 const LOOK = {
   background: "rgb(255, 255, 255)",
+  top: "rgb(255, 255, 255)",
+  bottom: "rgb(255, 255, 255)",
+  footer: false,
+  under: [],
   dark: false,
   scheme: "light",
   host: "localhost:3000",
