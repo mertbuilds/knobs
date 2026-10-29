@@ -19,6 +19,7 @@ import { mockOf } from "../src/engine/mock";
 import { DEFAULT_STATE, merge, parse } from "../src/engine/store";
 import * as devknobs from "../src/index";
 import { DEVICE } from "../src/ui/deviceknobs";
+import { addFrom } from "../src/engine/customload";
 import { decodePng, drawFrame, encodePng, pngDataUrl } from "./png";
 
 class MemoryStorage {
@@ -171,6 +172,26 @@ describe("the registry", () => {
       ["custom:test-phone-3", "Test phone"],
       ["custom:test-phone", "Renamed"],
     ]);
+  });
+
+  test("devices.add without an id never replaces: a second one gets a numbered id", async () => {
+    expect((await addFrom(DEVICE_JSON)).id).toBe("custom:test-phone");
+    expect((await addFrom({ ...DEVICE_JSON, dpr: 3 })).id).toBe("custom:test-phone-2");
+    expect(customDevices().map((device) => [device.id, device.dpr])).toEqual([
+      ["custom:test-phone", 2],
+      ["custom:test-phone-2", 3],
+    ]);
+  });
+
+  test("a long label keeps an id that reads back, numbered too", () => {
+    const label = "a".repeat(64);
+    expect(validateDevice({ ...DEVICE_JSON, label: "b".repeat(70) }).id).toBe(`custom:${"b".repeat(64)}`);
+    expect(validateDevice({ ...DEVICE_JSON, label: `${"c".repeat(63)} d` }).id).toBe(`custom:${"c".repeat(63)}`);
+    addDevice({ ...DEVICE_JSON, label });
+    const second = addDevice({ ...DEVICE_JSON, label });
+    expect(second.id).toBe(`custom:${"a".repeat(62)}-2`);
+    reloadDevices();
+    expect(customDevices().length).toBe(2);
   });
 
   test("another tab's change reads again on the next lookup", () => {

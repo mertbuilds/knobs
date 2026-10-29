@@ -77,12 +77,17 @@ function rectOf(value: unknown, path: string, size: [number, number]): Rect {
   return { x, y, width, height };
 }
 
+/** The longest slug an id takes after `custom:`, as `validateDevice` checks it. */
+const SLUG_MAX = 64;
+
 /** A label as an id: `My phone` is `custom:my-phone`. */
 export function slugOf(label: string): string {
   const slug = label
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+/, "")
+    .slice(0, SLUG_MAX)
+    .replace(/-+$/, "");
   return `${CUSTOM_PREFIX}${slug || "device"}`;
 }
 
@@ -220,8 +225,13 @@ function keep(next: CustomDevice[]): void {
 /** `id`, or with -2, -3 and on after it while a device has it. */
 function freeId(id: string): string {
   const taken = new Set(customDevices().map((device) => device.id));
+  const slug = id.slice(CUSTOM_PREFIX.length);
   let next = id;
-  for (let n = 2; taken.has(next); n++) next = `${id}-${n}`;
+  for (let n = 2; taken.has(next); n++) {
+    // Short enough that the number still fits the id's length.
+    const base = slug.slice(0, SLUG_MAX - String(n).length - 1).replace(/-+$/, "");
+    next = `${CUSTOM_PREFIX}${base}-${n}`;
+  }
   return next;
 }
 

@@ -1,4 +1,4 @@
-import { addDevice, type CustomDevice, type CustomDeviceInput, importDevice } from "./custom";
+import { addDevice, type CustomDevice, type CustomDeviceInput } from "./custom";
 import { detectScreen, pixelsOf, viewportFor } from "./detect";
 import type { Rect } from "./mock";
 
@@ -95,8 +95,12 @@ export async function addFrom(input: string | object, image?: string): Promise<C
   } catch {
     throw new TypeError("devknobs: a custom device's json does not parse");
   }
-  const own = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "image") : undefined;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new TypeError("devknobs: a custom device is an object");
+  }
+  const own: unknown = Reflect.get(parsed, "image");
   const picture = image ?? (typeof own === "string" ? own : undefined);
   const data = picture === undefined ? undefined : await dataUrlOf(picture);
-  return addDevice(importDevice(json, data));
+  // The record as given, so one without an id gets a free one rather than replacing.
+  return addDevice(data === undefined ? parsed : { ...parsed, image: data });
 }
