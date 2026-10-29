@@ -821,9 +821,10 @@ export type BarsEvent =
   /**
    * The page scrolled to `y` at `time`. `room` is how far up minimizing
    * moves the page's top, as Safari's top bars do, and how far the page
-   * scrolls to keep its content in place.
+   * scrolls to keep its content in place. `rest` is how far the page can
+   * still scroll once the frame grows for minimized bars.
    */
-  | { type: "scroll"; y: number; time: number; room?: number }
+  | { type: "scroll"; y: number; time: number; room?: number; rest?: number }
   | { type: "tap" }
   | { type: "navigate" }
   /** The frame was resized for the bars, at `time`. */
@@ -863,8 +864,9 @@ export function barsStep(state: BarsMotion, event: BarsEvent): BarsMotion {
   const anchor = Math.min(state.anchor, y);
   // Top bars give their room back by scrolling the page as far up, so the
   // content stays put: only from far enough down that it stays clear of
-  // where they come back, so the two never undo each other.
-  const clear = y - 2 * room >= BARS_DOWN;
+  // where they come back, so the two never undo each other. A short page
+  // has only as much to scroll back as is left once the frame grows.
+  const clear = Math.min(y, event.rest ?? Infinity) - 2 * room >= BARS_DOWN;
   if (y - anchor >= BARS_DOWN && clear) return { ...state, minimized: true, y, anchor: y };
   return { ...state, y, anchor };
 }
