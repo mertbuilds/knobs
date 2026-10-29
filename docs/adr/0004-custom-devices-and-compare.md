@@ -58,7 +58,7 @@ The device row gets a `custom…` chip. It opens the editor over the page: drop 
 
 ```ts
 devknobs.devices.list(): CustomDevice[]
-devknobs.devices.add(device: CustomDeviceInput, image?: string): Promise<CustomDevice>
+devknobs.devices.add(device: string | object, image?: string): Promise<CustomDevice>  // an explicit id replaces; without one a taken id gets -2, -3
 devknobs.devices.fromImage(image: string, options?: Partial<CustomDeviceInput>): Promise<CustomDevice>  // URL or data URL, detects the screen
 devknobs.devices.remove(id: string): boolean
 devknobs.devices.select(id: string): DevknobsState
@@ -76,7 +76,7 @@ The smallest design that gives each frame its own knobs reuses what the device f
 
 So compare is one more module, `engine/compare.ts`, loaded on first use, that lays N iframes side by side in an overlay. Each iframe is marked as a devknobs frame, loads the page's address, and on its `ready` gets its own state: the base state (the panel's) merged with that frame's patch, run through `framed()`. A change in the panel reposts every frame; a change to one frame's chip reposts that frame. The main width frame and its module are untouched.
 
-- Layout: one row, each cell an equal share of the window. `fit()` places each frame in its cell with its mock, so every device is drawn at its own fitted scale and the row fits the canvas. Below about 360 px per cell the row scrolls.
+- Layout: one row, each cell an equal share of the window. `fit()` places each frame in its cell with its mock, so every device is drawn at its own fitted scale and the row fits the canvas. Below 300 px per cell (`CELL_MIN`) the row keeps cells 300 px wide and scrolls.
 - Each cell has a chip over it that names the frame's diff from the base (`text 20 · dark`), or `base`. Clicking it opens a small editor for that frame: device (custom ones too), text size, scheme, motion, contrast, locale, network. `+` adds a frame (a copy of the last), `×` removes one; one frame left exits compare.
 - Scroll sync: on by default, proportional (each frame scrolls to the same fraction of its scrollable height, so two text sizes stay on the same content). Modes `proportional`, `pixel`, `off`. A frame that a sync moved does not echo its scroll back.
 - Text sizes take numbers, or Dynamic Type names mapped to a root size from iOS body sizes over Large (17 pt), times 16: `xs` 13, `s` 14, `m` 15, `l` 16, `xl` 18, `xxl` 20, `xxxl` 22, `ax1` 26, `ax2` 31, `ax3` 38, `ax4` 44, `ax5` 50.
@@ -87,6 +87,8 @@ Per frame: device (built-in and custom), orientation, mock, dpr, text size and s
 
 Global:
 
+- Locale stores: the locale knob points the page's own stores (cookies, `localStorage`) at the tag and reloads. A compare frame skips that and keeps its locale in memory (`navigator.language`, `Intl`, `lang`), since the stores are the origin's and a write would move every frame and the page above.
+
 - Storage: `localStorage`, cookies, IndexedDB and caches are per origin, so every frame shares them. A frame that writes is seen by the others.
 - The `native` driver (the extension's DevTools protocol) sets knobs for the whole tab. In compare every frame emulates in page, so the extension's real ua, throttling and media do not split per frame.
 - The panel, its keys, grab and inspect stay with the page above and the main width frame: inspect does not reach into compare frames.
@@ -96,7 +98,8 @@ Global:
 ### Agent API
 
 ```ts
-devknobs.compare(frames: CompareFrameInput[], options?: { sync?: "proportional" | "pixel" | "off" }): CompareState
+devknobs.compare(frames: CompareFrameInput[], options?: { sync?: "proportional" | "pixel" | "off" }): Promise<CompareState>  // loads compare.ts on first use
+devknobs.setCompareFrame(index: number, frame: CompareFrameInput): Promise<CompareState | null>
 devknobs.exitCompare(): void
 devknobs.compareState(): CompareState | null  // per frame: patch, full state, and once loaded the computed root font size
 ```

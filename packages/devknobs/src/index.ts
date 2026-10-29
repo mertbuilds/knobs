@@ -340,7 +340,10 @@ export function describe(): (KnobDescription | CompareDescription)[] {
       value: {
         type: "object",
         fields: {
-          frames: { description: "setState patches, one per frame, plus textSize.", value: { type: "number", min: 0 } },
+          frames: {
+            description: "How many frames are up, 0 with compare off. compare() takes an array of two or more setState patches, one per frame, each with textSize too.",
+            value: { type: "number", min: 0 },
+          },
           sync: { description: "How a scroll in one frame moves the others.", value: { type: "enum", values: ["proportional", "pixel", "off"] } },
         },
       },
