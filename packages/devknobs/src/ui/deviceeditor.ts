@@ -1,5 +1,6 @@
 import {
   addDevice,
+  type ChromeStyle,
   CHROME_STYLES,
   type CustomDevice,
   type CustomDeviceInput,
@@ -11,7 +12,28 @@ import {
 } from "../engine/custom";
 import { dataUrlOf, dprFor, shrunk } from "../engine/customload";
 import { detectScreen, pixelsOf, viewportFor } from "../engine/detect";
+import type { DeviceKind } from "../engine/devices";
 import type { Rect, Sides } from "../engine/mock";
+
+/** The picture types the editor takes. */
+const PICTURES = ["image/png", "image/svg+xml", "image/jpeg", "image/webp"];
+
+function kindOf(value: string): DeviceKind {
+  return KINDS.find((known) => known === value) ?? "phone";
+}
+
+function chromeOf(value: string): ChromeStyle {
+  return CHROME_STYLES.find((known) => known === value) ?? "none";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** An error as the editor says it, without the package's prefix. */
+function sayError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).replace(/^devknobs: /, "");
+}
 
 /**
  * The custom device editor: a picture of a device's body in, its screen hole
@@ -47,7 +69,7 @@ h2 { grid-column: 1 / -1; margin: 0; font-size: 15px; font-weight: 500; }
 }
 .stage { position: relative; line-height: 0; }
 .stage img { display: block; max-width: 100%; max-height: 62vh; user-select: none; -webkit-user-drag: none; }
-.stage svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.stage svg { touch-action: none; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .hole { fill: rgb(26 101 173 / 0.18); stroke: #1a65ad; stroke-width: 1.5; cursor: move; }
 .notch { fill: rgb(229 72 77 / 0.25); stroke: #e5484d; stroke-width: 1.5; cursor: move; }
 .safe { fill: none; stroke: #18794e; stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
@@ -162,7 +184,7 @@ export function openDeviceEditor(
   const art = node("div", { class: "art" });
   const stage = node("div", { class: "stage" });
   const picture = node("img", { alt: "" });
-  const layer = svg("svg", {}) as SVGSVGElement;
+  const layer = svg("svg", {});
   stage.append(picture, layer);
   const empty = node("div", { class: "empty" }, "drop a PNG or SVG of the device here, with its screen cut out or a flat color");
   art.append(empty, stage);
@@ -239,10 +261,15 @@ export function openDeviceEditor(
 
   function autoViewport(): void {
     if (draft.typed || !draft.screen) return;
-    draft.viewport = viewportFor(draft.screen, Number(dpr.value) || dprFor(kind.value as CustomDevice["kind"]));
+    draft.viewport = viewportFor(draft.screen, Number(dpr.value) || dprFor(kindOf(kind.value)));
   }
 
   function fill(): void {
+    sides.forEach((input, at) => {
+      const side = (["top", "right", "bottom", "left"] as const)[at];
+      if (side) input.value = String(draft.safe[side]);
+    });
+    notch.checked = draft.cutout !== null;
     if (draft.viewport) {
       width.value = String(draft.viewport.width);
       height.value = String(draft.viewport.height);
@@ -274,6 +301,9 @@ export function openDeviceEditor(
     return [box, ...grips];
   }
 
+  /** Ends the drag under way, so a close never leaves its listeners behind. */
+  let stopDrag: (() => void) | null = null;
+
   /** Follow a drag of `target`, in picture px from where it started. */
   function drag(target: SVGElement, move: (dx: number, dy: number) => void): void {
     target.addEventListener("pointerdown", (event: PointerEvent) => {
@@ -281,13 +311,23 @@ export function openDeviceEditor(
       event.stopPropagation();
       const k = scale();
       const start = { x: event.clientX, y: event.clientY };
+      try {
+        target.setPointerCapture(event.pointerId);
+      } catch {
+        // A pointer already gone: the window's listeners still follow it.
+      }
       const onMove = (next: PointerEvent) => move(Math.round((next.clientX - start.x) * k), Math.round((next.clientY - start.y) * k));
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (stopDrag === onUp) stopDrag = null;
       };
+      stopDrag?.();
+      stopDrag = onUp;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
     });
   }
 
@@ -348,7 +388,12 @@ export function openDeviceEditor(
 
   async function detectNow(): Promise<void> {
     if (!draft.image) return;
-    const pixels = await pixelsOf(draft.image);
+    commitDetect(draft.image, await pixelsOf(draft.image));
+  }
+
+  /** Take a picture read and its screen found, or a box to drag where none is. */
+  function commitDetect(image: string, pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }): void {
+    draft.image = image;
     draft.imageSize = [pixels.width, pixels.height];
     const found = detectScreen(pixels);
     const [w, h] = draft.imageSize;
@@ -360,13 +405,18 @@ export function openDeviceEditor(
     fill();
   }
 
+  /** Read a picture, and only once it has decoded put it in place of the last. */
   async function load(src: string | Blob): Promise<void> {
     tell("");
+    if (typeof src !== "string" && !PICTURES.includes(src.type)) {
+      tell("pick a PNG, SVG, JPEG or WebP picture");
+      return;
+    }
     const { image } = await shrunk(await dataUrlOf(src));
-    draft.image = image;
+    const pixels = await pixelsOf(image);
     picture.src = image;
     await picture.decode().catch(() => {});
-    await detectNow();
+    commitDetect(image, pixels);
     if (!label.value && typeof src !== "string" && "name" in src) label.value = String(src.name).replace(/\.[a-z]+$/i, "");
     draw();
   }
@@ -376,13 +426,13 @@ export function openDeviceEditor(
     if (!draft.viewport) return "set the viewport";
     const device: CustomDeviceInput = {
       label: label.value.trim() || "custom device",
-      kind: kind.value as CustomDevice["kind"],
+      kind: kindOf(kind.value),
       image: draft.image,
       imageSize: draft.imageSize,
       screen: draft.screen,
       viewport: draft.viewport,
       dpr: Number(dpr.value),
-      chrome: chrome.value as CustomDevice["chrome"],
+      chrome: chromeOf(chrome.value),
     };
     if (known) device.id = known.id;
     if (draft.cutout) device.cutout = draft.cutout;
@@ -409,23 +459,34 @@ export function openDeviceEditor(
 
   file.addEventListener("change", () => {
     const picked = file.files?.[0];
-    if (picked) load(picked).catch((error: unknown) => tell(String(error)));
+    if (picked) load(picked).catch((error: unknown) => tell(sayError(error)));
   });
   art.addEventListener("dragover", (event: DragEvent) => event.preventDefault());
   art.addEventListener("drop", (event: DragEvent) => {
     event.preventDefault();
     const dropped = event.dataTransfer?.files[0];
-    if (dropped) load(dropped).catch((error: unknown) => tell(String(error)));
+    if (dropped) load(dropped).catch((error: unknown) => tell(sayError(error)));
   });
   importer.addEventListener("change", async () => {
     const picked = importer.files?.[0];
     if (!picked) return;
     try {
       const text = await picked.text();
-      const parsed = JSON.parse(text) as { image?: unknown };
-      const device = importDevice(text, typeof parsed.image === "string" ? undefined : draft.image ?? undefined);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new TypeError("devknobs: this file is not json");
+      }
+      const own = isRecord(parsed) ? Reflect.get(parsed, "image") : undefined;
+      const source = typeof own === "string" ? own : draft.image;
+      if (source === null) {
+        tell("this json has no picture: pick the picture first, then import");
+        return;
+      }
+      const device = importDevice(text, await dataUrlOf(source));
       Object.assign(draft, { image: device.image, imageSize: device.imageSize, screen: device.screen, cutout: device.cutout ?? null, viewport: device.viewport, typed: true });
-      if (device.safe) draft.safe = { ...device.safe };
+      draft.safe = device.safe ? { ...device.safe } : { top: 0, right: 0, bottom: 0, left: 0 };
       label.value = device.label;
       kind.value = device.kind;
       dpr.value = String(device.dpr);
@@ -436,7 +497,7 @@ export function openDeviceEditor(
       draw();
       tell("");
     } catch (error) {
-      tell(error instanceof Error && /image/.test(error.message) ? "this json has no picture: pick the picture first, then import" : String(error));
+      tell(sayError(error));
     }
   });
   radius.addEventListener("input", () => {
@@ -464,7 +525,7 @@ export function openDeviceEditor(
   detect.addEventListener("click", () => {
     detectNow()
       .then(draw)
-      .catch((error: unknown) => tell(String(error)));
+      .catch((error: unknown) => tell(sayError(error)));
   });
   exporter.addEventListener("click", () => {
     const device = input();
@@ -473,7 +534,7 @@ export function openDeviceEditor(
       const kept = importDevice(JSON.stringify(device));
       download(`${kept.id.replace("custom:", "")}.json`, exportDevice(kept));
     } catch (error) {
-      tell(String(error));
+      tell(sayError(error));
     }
   });
   form.addEventListener("submit", (event) => {
@@ -481,8 +542,14 @@ export function openDeviceEditor(
     saveNow();
   });
   cancel.addEventListener("click", () => editor.close());
+  // Only a press that starts on the veil closes: a drag let go over it does not.
+  let pressedOnVeil = false;
+  veil.addEventListener("pointerdown", (event) => {
+    pressedOnVeil = event.target === veil;
+  });
   veil.addEventListener("click", (event) => {
-    if (event.target === veil) editor.close();
+    if (pressedOnVeil && event.target === veil) editor.close();
+    pressedOnVeil = false;
   });
   const onKey = (event: KeyboardEvent) => {
     if (event.key === "Escape") editor.close();
@@ -497,6 +564,7 @@ export function openDeviceEditor(
     draft: input,
     save: saveNow,
     close() {
+      stopDrag?.();
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("resize", onResize);
       host.remove();
