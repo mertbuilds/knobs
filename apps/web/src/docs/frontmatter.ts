@@ -35,6 +35,26 @@ export function frontmatter(slug: string, source: string): Frontmatter {
   };
 }
 
+/**
+ * A docs page's frontmatter: as above, and `updated` is required and a real
+ * day. The reference pages have no `updated`, so they use `frontmatter`.
+ * `scripts/docs-check.ts` runs this on every page at build time, so a bad page
+ * fails the build instead of the Worker.
+ */
+export function docFrontmatter(slug: string, source: string): Frontmatter & { updated: string } {
+  const fields = frontmatter(slug, source);
+  const { updated } = fields;
+  if (
+    updated === undefined ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(updated) ||
+    Number.isNaN(Date.parse(updated)) ||
+    new Date(updated).toISOString().slice(0, 10) !== updated
+  ) {
+    throw new Error(`docs: ${slug}.md needs updated: YYYY-MM-DD, a real day`);
+  }
+  return { ...fields, updated };
+}
+
 /** The heading id rule the content's own links are written against. */
 export function slugify(text: string): string {
   return text

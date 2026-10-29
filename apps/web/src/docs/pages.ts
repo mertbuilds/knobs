@@ -1,7 +1,7 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
 import { Marked, type Token, type TokensList } from 'marked';
-import { frontmatter, slugify } from './frontmatter.ts';
+import { docFrontmatter, slugify } from './frontmatter.ts';
 import { highlight } from './highlight.ts';
 
 /**
@@ -229,15 +229,7 @@ function render(body: string): {
 }
 
 function parse(slug: string, source: string): Page {
-  const { body, description, order, title, updated } = frontmatter(slug, source);
-  if (
-    updated === undefined ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(updated) ||
-    Number.isNaN(Date.parse(updated)) ||
-    new Date(updated).toISOString().slice(0, 10) !== updated
-  ) {
-    throw new Error(`docs: ${slug}.md needs updated: YYYY-MM-DD`);
-  }
+  const { body, description, order, title, updated } = docFrontmatter(slug, source);
   return { description, order, slug, title, updated, ...render(body) };
 }
 
