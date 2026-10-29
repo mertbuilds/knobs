@@ -11,6 +11,9 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,3 +37,20 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
           preCommands: pnpm build
+      - name: Google sign-in for Search Console (keyless)
+        id: gauth
+        if: ${{ vars.GCP_WIF_PROVIDER != '' && vars.GCP_SA_EMAIL != '' }}
+        continue-on-error: true
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/webmasters
+      - name: Tell search engines what changed
+        continue-on-error: true
+        uses: vinenastudio/deploy-indexing@f06da2e77733df43b250a2bb2c446b0d4f97b457 # v1.0.0
+        with:
+          site-url: https://knobs.dev
+          indexnow-key: 78542e187dcb354c241595d0ddb65792
+          google-access-token: ${{ steps.gauth.outputs.access_token }}
