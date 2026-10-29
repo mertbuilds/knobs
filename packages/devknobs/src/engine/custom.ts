@@ -96,39 +96,42 @@ export function validateDevice(input: unknown): CustomDevice {
   if (typeof label !== "string" || label.trim() === "" || label.length > 80) throw bad("label", label);
   const id = input.id === undefined ? slugOf(label) : input.id;
   if (typeof id !== "string" || !/^custom:[a-z0-9][a-z0-9-]{0,63}$/.test(id)) throw bad("id", id);
-  if (typeof kind !== "string" || !KINDS.includes(kind as DeviceKind)) throw bad("kind", kind);
+  const knownKind = KINDS.find((known) => known === kind);
+  if (!knownKind) throw bad("kind", kind);
   if (typeof image !== "string" || !/^data:image\/(png|svg\+xml|jpeg|webp)[;,]/.test(image)) throw bad("image", image);
   if (!Array.isArray(imageSize) || imageSize.length !== 2 || !imageSize.every(positive)) throw bad("imageSize", imageSize);
-  const size: [number, number] = [imageSize[0] as number, imageSize[1] as number];
+  const [imageWidth, imageHeight] = imageSize;
+  if (!positive(imageWidth) || !positive(imageHeight)) throw bad("imageSize", imageSize);
+  const size: [number, number] = [imageWidth, imageHeight];
   const hole = rectOf(screen, "screen", size);
   const radius = isRecord(screen) ? screen.radius : undefined;
   if (!nonNegative(radius) || radius > Math.min(hole.width, hole.height) / 2) throw bad("screen.radius", radius);
   if (!isRecord(viewport) || !positive(viewport.width) || viewport.width > 8192) throw bad("viewport.width", isRecord(viewport) ? viewport.width : viewport);
   if (!positive(viewport.height) || viewport.height > 8192) throw bad("viewport.height", viewport.height);
   if (!positive(dpr) || dpr > 5) throw bad("dpr", dpr);
-  if (typeof chrome !== "string" || !CHROME_STYLES.includes(chrome as ChromeStyle)) throw bad("chrome", chrome);
+  const knownChrome = CHROME_STYLES.find((known) => known === chrome);
+  if (!knownChrome) throw bad("chrome", chrome);
   const device: CustomDevice = {
     v: DEVICES_VERSION,
     id,
     label: label.trim(),
-    kind: kind as DeviceKind,
+    kind: knownKind,
     image,
     imageSize: size,
     screen: { ...hole, radius },
     viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
     dpr,
-    chrome: chrome as ChromeStyle,
+    chrome: knownChrome,
   };
   if (cutout !== undefined) device.cutout = rectOf(cutout, "cutout", size);
   if (safe !== undefined) {
     if (!isRecord(safe)) throw bad("safe", safe);
-    const sides = {} as Sides;
-    for (const side of ["top", "right", "bottom", "left"] as const) {
+    const sideOf = (side: keyof Sides): number => {
       const value = safe[side] ?? 0;
       if (!nonNegative(value)) throw bad(`safe.${side}`, value);
-      sides[side] = value;
-    }
-    device.safe = sides;
+      return value;
+    };
+    device.safe = { top: sideOf("top"), right: sideOf("right"), bottom: sideOf("bottom"), left: sideOf("left") };
   }
   return device;
 }

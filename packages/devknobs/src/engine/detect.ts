@@ -47,8 +47,9 @@ export function detectScreen(pixels: Pixels): ScreenHole | null {
   let bottom = cy;
   let count = 0;
   while (stack.length > 0) {
-    const y = stack.pop() as number;
-    let x = stack.pop() as number;
+    const y = stack.pop();
+    let x = stack.pop();
+    if (x === undefined || y === undefined) break;
     if (seen[y * width + x] || !hole(x, y)) continue;
     while (x > 0 && !seen[y * width + x - 1] && hole(x - 1, y)) x--;
     let above = false;

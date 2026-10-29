@@ -1,4 +1,4 @@
-import type { DevknobsState, DevknobsStatePatch } from "../types";
+import type { DevknobsState, DevknobsStatePatch, ZoomValue } from "../types";
 import { bezelUrl, bodyOf } from "./bezels";
 import { checkPatch } from "./check";
 import { customDevices } from "./custom";
@@ -9,7 +9,7 @@ import { fresh, FRESH_ATTRIBUTE } from "./fresh";
 import * as engine from "./index";
 import type { Mock } from "./mock";
 import { corners, drawMock, MOCK_CSS } from "./mockdraw";
-import { FRAME_STATE_ATTRIBUTE, merge, STATE_VERSION } from "./store";
+import { CONNECTIONS, CONTRASTS, FRAME_STATE_ATTRIBUTE, merge, MOTIONS, SCHEMES, STATE_VERSION } from "./store";
 import { stamped } from "./stored";
 import { TEXT_MAX, TEXT_MIN } from "./text";
 
@@ -212,14 +212,16 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?
   return node;
 }
 
+const FIT: ZoomValue = "fit";
+
 /** Draw a cell's device in its stage, fitted, its body round it where it has one. */
 function layout(cell: Cell): void {
   const state = stateOf(cell);
   const device = formOf(state.device, state.posture);
   const size = { width: cell.stage.clientWidth, height: cell.stage.clientHeight };
   const knobs = device
-    ? { width: Number(state.width) || device.width, height: Number(state.height) || device.height, zoom: "fit" as const }
-    : { width: Number(state.width) || 390, height: Number(state.height) || 844, zoom: "fit" as const };
+    ? { width: Number(state.width) || device.width, height: Number(state.height) || device.height, zoom: FIT }
+    : { width: Number(state.width) || 390, height: Number(state.height) || 844, zoom: FIT };
   const body: Mock | null = device ? bodyOf({ ...state, mock: state.mock }, () => layout(cell)) : null;
   const zoom = typeof state.dpr === "number" && window.devicePixelRatio > 0 ? state.dpr / window.devicePixelRatio : 1;
   const place = fit(knobs, { width: size.width, height: size.height + 32 }, { frameZoom: zoom, ...(body ? { mock: body.inset } : {}) });
@@ -339,15 +341,15 @@ function openEditor(cell: Cell): void {
   box.append(
     choice("device", devices, state.device, (device) => ({ device })),
     choice("text size", texts, String(state.text), (text) => ({ text: text === "system" ? "system" : Number(text) })),
-    choice("scheme", [["system", "system"], ["light", "light"], ["dark", "dark"]], state.scheme, (scheme) => ({ scheme: scheme as DevknobsState["scheme"] })),
-    choice("motion", [["system", "system"], ["reduce", "reduce"]], state.motion, (motion) => ({ motion: motion as DevknobsState["motion"] })),
-    choice("contrast", [["system", "system"], ["more", "more"]], state.contrast, (contrast) => ({ contrast: contrast as DevknobsState["contrast"] })),
+    choice("scheme", [["system", "system"], ["light", "light"], ["dark", "dark"]], state.scheme, (scheme) => ({ scheme: SCHEMES.find((known) => known === scheme) ?? "system" })),
+    choice("motion", [["system", "system"], ["reduce", "reduce"]], state.motion, (motion) => ({ motion: MOTIONS.find((known) => known === motion) ?? "system" })),
+    choice("contrast", [["system", "system"], ["more", "more"]], state.contrast, (contrast) => ({ contrast: CONTRASTS.find((known) => known === contrast) ?? "system" })),
     langWrap,
     choice(
       "network",
       [["system", "system"], ["offline", "offline"], ["slow-2g", "slow 2g"], ["3g", "3g"], ["4g", "4g"]],
       state.network.online === "offline" ? "offline" : state.network.type,
-      (value) => (value === "offline" ? { network: { online: "offline" } } : { network: { online: "system", type: value as DevknobsState["network"]["type"] } }),
+      (value) => (value === "offline" ? { network: { online: "offline" } } : { network: { online: "system", type: CONNECTIONS.find((known) => known === value) ?? "system" } }),
     ),
     done,
   );
@@ -406,7 +408,7 @@ function build(): void {
   }
   syncSelect.value = sync;
   syncSelect.addEventListener("change", () => {
-    sync = (syncSelect?.value as SyncMode | undefined) ?? "proportional";
+    sync = SYNC_MODES.find((mode) => mode === syncSelect?.value) ?? "proportional";
   });
   const exit = el("button", "", "exit");
   exit.addEventListener("click", exitCompare);
@@ -464,7 +466,7 @@ export function compare(frames: readonly CompareFrameInput[], options: { sync?: 
   sync = options.sync ?? "proportional";
   build();
   for (const patch of patches) addFrame(patch);
-  return compareState() as CompareState;
+  return { sync, frames: framesNow() };
 }
 
 export function exitCompare(): void {
@@ -484,11 +486,12 @@ export function exitCompare(): void {
 
 /** Each frame's patch, knobs and computed root font size, or null with no compare up. */
 export function compareState(): CompareState | null {
-  if (!host) return null;
+  return host ? { sync, frames: framesNow() } : null;
+}
+
+function framesNow(): CompareFrameState[] {
   const now = base();
-  return {
-    sync,
-    frames: cells.map((cell, index) => {
+  return cells.map((cell, index) => {
       const state = stateOf(cell);
       let fontSize: number | null = null;
       try {
@@ -498,8 +501,7 @@ export function compareState(): CompareState | null {
         fontSize = null;
       }
       return { index, patch: cell.patch, diff: diffOf(now, state), state, fontSize, loaded: cell.loaded };
-    }),
-  };
+  });
 }
 
 /** Set how a scroll in one frame moves the others. */
