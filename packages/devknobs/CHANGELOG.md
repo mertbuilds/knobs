@@ -1,6 +1,6 @@
 # changelog
 
-## unreleased
+## 0.5.2
 
 - a host can let a page's own copy run the panel: `mount({ host: true, prefer })` shows prefer (extension or page) in the settings, and with page, a copy the page mounts takes the page from the host, which takes its panel, frame and patches away and does not take it back. `setPrefer()` brings a choice that comes in after the mount. page copies from 0.4.0 to 0.5.1 cannot take over, so the extension's panel stays on those pages. the footer names the copy that runs the panel and its version, such as `extension 0.5.1` or `page 0.5.1-local.1767225600`; `bun run link` builds the local version into the code
 - two hosts on one page, such as the store's extension and a local build of it: `mount({ host: true, build: 'store' | 'local', stoodDown })` puts the host's rank on the page, and the one that ranks higher holds the page whichever mounted first (a local build over a store one, then the newer version). the other stands down for that page load, calls `stoodDown` and does not take the page back, and the holder's footer adds `store extension stood down`. a host with a build takes the page back from an older host that has none
