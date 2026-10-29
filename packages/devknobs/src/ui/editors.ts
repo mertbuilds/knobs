@@ -1,5 +1,6 @@
 import * as engine from "../engine";
 import { now, realNow } from "../engine/clock";
+import { customDevice } from "../engine/custom";
 import { deviceOf } from "../engine/devices";
 import { resolveTimeZone } from "../engine/time";
 import { userAgentOf } from "../engine/ua";
@@ -341,7 +342,9 @@ export function createEditors(context: EditorsContext): Editors {
     const height = numberField("height", "viewport height in pixels");
     const rotate = button("chip", "rotate");
     const fold = button("chip", "unfold");
-    box.append(width, el("span", "unit", "×"), height, rotate, fold);
+    const custom = button("chip", "custom…");
+    custom.title = "add a device from a picture of it, or edit the custom one in use";
+    box.append(width, el("span", "unit", "×"), height, rotate, fold, custom);
     const slider = createFoldSlider((posture) => commit("device", { posture }));
     foldSlider = slider;
     extra.append(box, slider.node);
@@ -355,6 +358,18 @@ export function createEditors(context: EditorsContext): Editors {
     rotate.addEventListener("click", () => {
       const turned = engine.getState().orientation === "portrait" ? "landscape" : "portrait";
       commit("device", { orientation: turned });
+    });
+    // The editor loads on first use, so a panel that never opens it never pays for it.
+    custom.addEventListener("click", () => {
+      void import("./deviceeditor").then(({ openDeviceEditor }) => {
+        const state = engine.getState();
+        const device = customDevice(state.device);
+        openDeviceEditor({
+          ...(device ? { device } : {}),
+          saved: (kept) => commit("device", { device: kept.id }),
+          removed: () => commit("device", { device: "none", width: "full", height: "full", dpr: "system" }),
+        });
+      });
     });
     // The chip takes the hinge from the slider, held or on its way, and folds it to the other posture.
     fold.addEventListener("click", () => {
