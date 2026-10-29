@@ -1,5 +1,6 @@
 import { addDevice, type CustomDevice, type CustomDeviceInput, importDevice } from "./custom";
 import { detectScreen, pixelsOf, viewportFor } from "./detect";
+import type { Rect } from "./mock";
 
 /**
  * Bringing a custom device's picture in: from a url or a data url, kept as
@@ -59,9 +60,15 @@ export async function deviceFromImage(
   src: string | Blob,
   options: Partial<CustomDeviceInput> = {},
 ): Promise<CustomDevice> {
-  const { image } = await shrunk(await dataUrlOf(src));
+  const { image, scale } = await shrunk(await dataUrlOf(src));
   const pixels = await pixelsOf(image);
-  const screen = options.screen ?? detectScreen(pixels);
+  // Geometry given for the picture as it came, on the picture as it is kept.
+  const at = <T extends Rect>(rect: T): T => {
+    const out = { ...rect, x: rect.x * scale, y: rect.y * scale, width: rect.width * scale, height: rect.height * scale };
+    if ("radius" in out && typeof out.radius === "number") out.radius *= scale;
+    return out;
+  };
+  const screen = options.screen ? at(options.screen) : detectScreen(pixels);
   if (!screen) throw new Error("devknobs: no screen hole found in the picture; pass screen: { x, y, width, height, radius }");
   const kind = options.kind ?? "phone";
   const dpr = options.dpr ?? dprFor(kind);
@@ -69,6 +76,7 @@ export async function deviceFromImage(
     label: "custom device",
     chrome: "none",
     ...options,
+    ...(options.cutout ? { cutout: at(options.cutout) } : {}),
     kind,
     dpr,
     image,

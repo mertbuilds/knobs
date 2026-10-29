@@ -131,6 +131,25 @@ describe("compare in Chromium", () => {
     expect(atLoad[1]?.font).toBe("20px");
   }, 30_000);
 
+  test("a picture drawn smaller to keep takes the screen and cutout given with it", async () => {
+    const device = await page.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 2000;
+      canvas.height = 4000;
+      const context = canvas.getContext("2d") as CanvasRenderingContext2D;
+      const noise = context.createImageData(2000, 4000);
+      for (let i = 0; i < noise.data.length; i++) noise.data[i] = (i * 2654435761) % 251;
+      context.putImageData(noise, 0, 0);
+      const image = canvas.toDataURL("image/png");
+      const screen = { x: 100, y: 200, width: 1800, height: 3600, radius: 50 };
+      const cutout = { x: 800, y: 300, width: 400, height: 100 };
+      return window.devknobs?.devices.fromImage(image, { label: "Big", screen, cutout });
+    });
+    expect(device?.imageSize).toEqual([800, 1600]);
+    expect(device?.screen).toEqual({ x: 40, y: 80, width: 720, height: 1440, radius: 20 });
+    expect(device?.cutout).toEqual({ x: 320, y: 120, width: 160, height: 40 });
+  }, 30_000);
+
   test("dark and light frames each see their own scheme, and exit takes the frames away", async () => {
     await page.evaluate(() =>
       window.devknobs?.compare([{ scheme: "light" }, { scheme: "dark" }, { scheme: "dark", textSize: 24 }]),
