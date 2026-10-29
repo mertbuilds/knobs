@@ -482,11 +482,8 @@ export function createBrowser(
     const moved = before && page && before.y !== page.y && before.x === page.x && before.width === page.width;
     if (moved) {
       try {
-        const inner = frame.contentWindow;
-        // At the top of the page the bars come back above it, and it shows from its start.
-        const atTop = page.y > before.y && (inner?.scrollY ?? 0) <= 1;
         // Instant, past a page's own smooth scrolling.
-        if (!atTop) inner?.scrollBy({ top: page.y - before.y, behavior: "instant" });
+        frame.contentWindow?.scrollBy({ top: page.y - before.y, behavior: "instant" });
       } catch {
         // The frame went to another origin.
       }
@@ -500,12 +497,15 @@ export function createBrowser(
   };
   /**
    * The frame grows at once, under bars that are leaving, and shrinks once
-   * the bars are in. A redraw while it waits to shrink to the same box leaves
-   * the wait be, so the frame still gets there.
+   * the bars are in. Under top bars it takes its box at once either way, as
+   * the page scrolls with its top and its content stays put: a wait would
+   * let the page reach its top first, with no room left to scroll. A redraw
+   * while it waits to shrink to the same box leaves the wait be, so the
+   * frame still gets there.
    */
   const placeFrame = (instant: boolean) => {
     const page = view?.page ?? null;
-    const shrinks = !instant && page && applied && page.height < applied.height;
+    const shrinks = !instant && page && applied && page.height < applied.height && page.y === applied.y;
     if (shrinks && shrinking && same(page, shrinkTo)) return;
     stopShrink();
     if (!shrinks) {

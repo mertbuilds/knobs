@@ -407,7 +407,7 @@ describe("createBrowser", () => {
     expect(browser.look()).toBe(chrome);
   });
 
-  test("top bars that minimize or expand scroll the page as far as its top moves, so it stays put", () => {
+  test("top bars that minimize or expand move the frame at once and scroll the page as far, so it stays put", () => {
     const { show, view } = browserOver(() => BLUE);
     const scrolled: number[] = [];
     Object.assign(view, { scrollY: 300, scrollBy: ({ top }: { top: number }) => scrolled.push(top) });
@@ -418,16 +418,15 @@ describe("createBrowser", () => {
     // Minimized, the frame grows up at once, and the page scrolls up as far.
     expect(scrolled).toEqual([top(true) - top(false)]);
     expect(scrolled[0]).toBeLessThan(0);
+    // Back out, the frame takes its box at once, with no wait for the bars, and the page scrolls down as far.
     show(false, "iphone-17-pro", "top");
-    for (const timer of shrinks()) timer.run();
+    expect(shrinks()).toEqual([]);
     expect(scrolled.at(-1)).toBe(top(false) - top(true));
-    // At the top of the page the bars come back above it, which shows from its start.
+    // At the top of the page too: the content never moves, even with the page's start under the bars.
     show(true, "iphone-17-pro", "top");
     view.scrollY = 0;
-    const count = scrolled.length;
     show(false, "iphone-17-pro", "top");
-    for (const timer of shrinks()) timer.run();
-    expect(scrolled.length).toBe(count);
+    expect(scrolled.at(-1)).toBe(top(false) - top(true));
   });
 
   test("bars at the bottom never scroll the page, as its top stays", () => {
