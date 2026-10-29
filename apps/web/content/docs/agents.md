@@ -29,6 +29,19 @@ every way in puts the api on `window.devknobs` while devknobs is mounted: the
 script tag, `mount()` and `<DevKnobs />`. so does the copy inside the width
 knob's frame, and the [chrome extension](/docs/extension) on any page it runs on.
 
+## custom devices and compare
+
+```js
+await devknobs.devices.fromImage(dataUrl, { label: 'My phone', dpr: 3 });
+devknobs.devices.select('custom:my-phone');
+await devknobs.compare([{ device: 'iphone-17-pro' }, { device: 'iphone-17-pro', textSize: 'xxl' }]);
+devknobs.compareState(); // each frame's patch, state and root font size
+devknobs.exitCompare();
+```
+
+`describe()` lists custom ids among the device values and ends with a
+`compare` entry that says whether compare is on.
+
 ## the agent skill
 
 the package ships an agent skill that walks an agent through the loop: learn
