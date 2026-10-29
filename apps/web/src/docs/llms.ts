@@ -1,3 +1,4 @@
+import { postFrontmatter } from '../blog/frontmatter.ts';
 import { CANONICAL_ORIGIN } from '../lib/canonical.ts';
 import { type Frontmatter, frontmatter, slugify } from './frontmatter.ts';
 
@@ -33,6 +34,19 @@ const pages = glob(
     query: '?raw',
   }),
 );
+
+/** The blog posts, newest first. */
+const posts = Object.entries(
+  import.meta.glob<string>('../../content/blog/*.md', {
+    eager: true,
+    import: 'default',
+    query: '?raw',
+  }),
+)
+  .map(([path, source]) =>
+    postFrontmatter(path.slice(path.lastIndexOf('/') + 1, -'.md'.length), source),
+  )
+  .toSorted((a, b) => b.date.localeCompare(a.date));
 
 /** The h2 and h3 ids of each human page, outside its code blocks. */
 const anchors = new Map(
@@ -75,6 +89,13 @@ export const llmsTxt = `${header}
 
 ${pages
   .map((page) => `- [${page.title}](${CANONICAL_ORIGIN}/docs/${page.slug}): ${page.description}`)
+  .join('\n')}
+
+## Blog
+
+- [Blog](${CANONICAL_ORIGIN}/blog): every post, newest first
+${posts
+  .map((post) => `- [${post.title}](${CANONICAL_ORIGIN}/blog/${post.slug}): ${post.description}`)
   .join('\n')}
 
 ## Full reference

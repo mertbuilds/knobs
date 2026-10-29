@@ -88,6 +88,8 @@ const WIDE = '@media (min-width: 640px)';
 
 const DOCS = '/docs';
 
+const BLOG = '/blog';
+
 const EXTENSION_DOCS = '/docs/extension';
 
 // Where the hero's "Add to Chrome" goes: the extension's Chrome Web Store listing.
@@ -338,6 +340,9 @@ function Landing() {
         </a>
         <a href={EXTENSION_DOCS} onClick={onExtension('footer')} {...props(styles.link)}>
           {m.link_extension()}
+        </a>
+        <a href={BLOG} {...props(styles.link)}>
+          {m.link_blog()}
         </a>
         <a
           href={REPO}

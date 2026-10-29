@@ -1,6 +1,6 @@
 import { colors, font, radius, spacing } from '@knobs/ui/tokens.stylex';
 import { create, props, type StyleXStyles } from '@stylexjs/stylex';
-import { Marked, type Token, type TokensList } from 'marked';
+import { Marked, type RendererObject, type Token, type TokensList } from 'marked';
 import { docFrontmatter, slugify } from './frontmatter.ts';
 import { highlight } from './highlight.ts';
 
@@ -115,47 +115,57 @@ export const prose = create({
 
 const cls = (style: StyleXStyles) => props(style).className ?? '';
 
-const markdown = new Marked({
+const renderer: RendererObject = {
+  blockquote({ tokens }) {
+    return `<blockquote class="${cls(prose.blockquote)}">${this.parser.parse(tokens)}</blockquote>\n`;
+  },
+  codespan({ text }) {
+    return `<code class="${cls(prose.code)}">${escapeHtml(text)}</code>`;
+  },
+  heading({ depth, text, tokens }) {
+    const style = depth === 2 ? prose.h2 : prose.h3;
+    return `<h${depth} class="${cls(style)}" id="${slugify(text)}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+  },
+  link({ href, tokens }) {
+    const outbound = href.startsWith('http') ? ' rel="noreferrer" target="_blank"' : '';
+    return `<a href="${escapeHtml(href)}"${outbound}><span class="${cls(prose.linkText)}">${this.parser.parseInline(tokens)}</span></a>`;
+  },
+  list(token) {
+    const tag = token.ordered ? 'ol' : 'ul';
+    const items = token.items
+      .map((item) => `<li class="${cls(prose.li)}">${this.parser.parse(item.tokens)}</li>\n`)
+      .join('');
+    return `<${tag} class="${cls(prose.list)}">\n${items}</${tag}>\n`;
+  },
+  paragraph({ tokens }) {
+    return `<p class="${cls(prose.p)}">${this.parser.parseInline(tokens)}</p>\n`;
+  },
+  strong({ tokens }) {
+    return `<strong class="${cls(prose.strong)}">${this.parser.parseInline(tokens)}</strong>`;
+  },
+  table(token) {
+    const cell = (tokens: Array<Token>, head: boolean) => {
+      const tag = head ? 'th' : 'td';
+      const style = cls([prose.cell, head && prose.head]);
+      return `<${tag} class="${style}">${this.parser.parseInline(tokens)}</${tag}>`;
+    };
+    const head = token.header.map((c) => cell(c.tokens, true)).join('');
+    const rows = token.rows
+      .map((row) => `<tr>${row.map((c) => cell(c.tokens, false)).join('')}</tr>\n`)
+      .join('');
+    return `<div class="${cls(prose.tableScroll)}"><table class="${cls(prose.table)}"><thead><tr>${head}</tr></thead><tbody>\n${rows}</tbody></table></div>\n`;
+  },
+};
+
+const markdown = new Marked({ gfm: true, renderer });
+
+/** The blog's markdown: as the docs', but every link opens in the same tab. */
+export const blogMarkdown = new Marked({
   gfm: true,
   renderer: {
-    blockquote({ tokens }) {
-      return `<blockquote class="${cls(prose.blockquote)}">${this.parser.parse(tokens)}</blockquote>\n`;
-    },
-    codespan({ text }) {
-      return `<code class="${cls(prose.code)}">${escapeHtml(text)}</code>`;
-    },
-    heading({ depth, text, tokens }) {
-      const style = depth === 2 ? prose.h2 : prose.h3;
-      return `<h${depth} class="${cls(style)}" id="${slugify(text)}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
-    },
+    ...renderer,
     link({ href, tokens }) {
-      const outbound = href.startsWith('http') ? ' rel="noreferrer" target="_blank"' : '';
-      return `<a href="${escapeHtml(href)}"${outbound}><span class="${cls(prose.linkText)}">${this.parser.parseInline(tokens)}</span></a>`;
-    },
-    list(token) {
-      const tag = token.ordered ? 'ol' : 'ul';
-      const items = token.items
-        .map((item) => `<li class="${cls(prose.li)}">${this.parser.parse(item.tokens)}</li>\n`)
-        .join('');
-      return `<${tag} class="${cls(prose.list)}">\n${items}</${tag}>\n`;
-    },
-    paragraph({ tokens }) {
-      return `<p class="${cls(prose.p)}">${this.parser.parseInline(tokens)}</p>\n`;
-    },
-    strong({ tokens }) {
-      return `<strong class="${cls(prose.strong)}">${this.parser.parseInline(tokens)}</strong>`;
-    },
-    table(token) {
-      const cell = (tokens: Array<Token>, head: boolean) => {
-        const tag = head ? 'th' : 'td';
-        const style = cls([prose.cell, head && prose.head]);
-        return `<${tag} class="${style}">${this.parser.parseInline(tokens)}</${tag}>`;
-      };
-      const head = token.header.map((c) => cell(c.tokens, true)).join('');
-      const rows = token.rows
-        .map((row) => `<tr>${row.map((c) => cell(c.tokens, false)).join('')}</tr>\n`)
-        .join('');
-      return `<div class="${cls(prose.tableScroll)}"><table class="${cls(prose.table)}"><thead><tr>${head}</tr></thead><tbody>\n${rows}</tbody></table></div>\n`;
+      return `<a href="${escapeHtml(href)}"><span class="${cls(prose.linkText)}">${this.parser.parseInline(tokens)}</span></a>`;
     },
   },
 });
@@ -169,7 +179,7 @@ function escapeHtml(text: string): string {
 }
 
 /** Markdown inline text as plain text: link text without its address, no backticks or emphasis marks. */
-const plain = (text: string) =>
+export const plain = (text: string) =>
   text
     .replaceAll(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replaceAll(/[`*]/g, '')
@@ -181,12 +191,15 @@ const plain = (text: string) =>
  * html. The paragraphs under a `## faq` heading are its questions: each runs to
  * its first `?`, and the rest of the paragraph is the answer.
  */
-function render(body: string): {
+export function render(
+  body: string,
+  md: Marked = markdown,
+): {
   faq: Array<Faq>;
   headings: Array<Heading>;
   segments: Array<Segment>;
 } {
-  const tokens = markdown.lexer(body);
+  const tokens = md.lexer(body);
   const segments: Array<Segment> = [];
   const headings: Array<Heading> = [];
   const faq: Array<Faq> = [];
@@ -195,7 +208,7 @@ function render(body: string): {
   const flush = () => {
     if (run.length > 0) {
       const list: TokensList = Object.assign(run, { links: tokens.links });
-      segments.push({ html: markdown.parser(list), id: segments.length, kind: 'html' });
+      segments.push({ html: md.parser(list), id: segments.length, kind: 'html' });
       run = [];
     }
   };
