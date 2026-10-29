@@ -6,8 +6,9 @@ import { type Browser, chromium, type Page } from "playwright-core";
  * as a page with the script tag does, in the window and in each frame.
  */
 
-const PAGE = `<!doctype html><html><head><meta name="viewport" content="width=device-width">
+const PAGE = (early: boolean) => `<!doctype html><html><head><meta name="viewport" content="width=device-width">
 <style>html{font-size:100%} body{margin:0;font-family:sans-serif} p{font-size:1rem;margin:0;padding:8px}</style>
+${early ? '<script src="/early.js"></script><script>window.beforeMount = { screen: screen.width };</script>' : ""}
 <script src="/knobs.js"></script>
 <script>window.atLoad = { lang: navigator.language, font: getComputedStyle(document.documentElement).fontSize };</script></head><body>${Array.from({ length: 200 }, (_, i) => `<p>line ${i}</p>`).join("")}</body></html>`;
 
@@ -16,20 +17,26 @@ let browser: Browser;
 let page: Page;
 
 beforeAll(async () => {
-  const built = await Bun.build({
-    entrypoints: [new URL("../src/global.ts", import.meta.url).pathname],
-    format: "iife",
-    define: { "import.meta.url": '""', DEVKNOBS_TUNE: "false" },
-  });
-  const [bundle] = built.outputs;
-  if (!bundle) throw new Error("no bundle");
-  const script = await bundle.text();
+  const bundle = async (entry: string) => {
+    const built = await Bun.build({
+      entrypoints: [new URL(entry, import.meta.url).pathname],
+      format: "iife",
+      define: { "import.meta.url": '""', DEVKNOBS_TUNE: "false" },
+    });
+    const [output] = built.outputs;
+    if (!output) throw new Error(`no bundle for ${entry}`);
+    return output.text();
+  };
+  const scripts: Record<string, string> = { "/knobs.js": await bundle("../src/global.ts"), "/early.js": await bundle("../src/early.ts") };
   server = Bun.serve({
     port: 0,
-    fetch: (request) =>
-      new URL(request.url).pathname === "/knobs.js"
+    fetch: (request) => {
+      const url = new URL(request.url);
+      const script = scripts[url.pathname];
+      return script
         ? new Response(script, { headers: { "content-type": "text/javascript; charset=utf-8" } })
-        : new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } }),
+        : new Response(PAGE(url.searchParams.has("early")), { headers: { "content-type": "text/html; charset=utf-8" } });
+    },
   });
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -148,6 +155,19 @@ describe("compare in Chromium", () => {
     expect(device?.imageSize).toEqual([800, 1600]);
     expect(device?.screen).toEqual({ x: 40, y: 80, width: 720, height: 1440, radius: 20 });
     expect(device?.cutout).toEqual({ x: 320, y: 120, width: 160, height: 40 });
+  }, 30_000);
+
+  test("with the early script, a frame's page reads its device's screen before devknobs mounts", async () => {
+    await page.goto(`http://localhost:${server.port}/?early`);
+    await page.waitForFunction(() => window.devknobs);
+    await page.evaluate(() => window.devknobs?.compare([{ device: "iphone-17-pro" }, { device: "pixel-10" }]));
+    await loaded();
+    const screens = await page.evaluate(() =>
+      Array.from(document.querySelector("[data-devknobs-compare]")?.shadowRoot?.querySelectorAll("iframe") ?? []).map(
+        (frame) => Reflect.get(frame.contentWindow ?? {}, "beforeMount"),
+      ),
+    );
+    expect(screens).toEqual([{ screen: 402 }, { screen: 412 }]);
   }, 30_000);
 
   test("dark and light frames each see their own scheme, and exit takes the frames away", async () => {
