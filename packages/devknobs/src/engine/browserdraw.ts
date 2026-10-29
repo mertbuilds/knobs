@@ -631,6 +631,8 @@ export function createBrowser(
       // The window stays the same across loads, its document does not.
       const page = frame.contentWindow;
       const doc = frame.contentDocument;
+      // A new document, not a new address the page gave itself.
+      const arrived = doc !== watched;
       if (page && doc && doc !== watched) {
         query?.removeEventListener("change", read);
         query = page.matchMedia("(prefers-color-scheme: dark)");
@@ -642,7 +644,7 @@ export function createBrowser(
       const now = page?.location.href ?? "";
       if (now !== href) {
         href = now;
-        landed = true;
+        landed = arrived;
         step({ type: "navigate" });
       }
     } catch {

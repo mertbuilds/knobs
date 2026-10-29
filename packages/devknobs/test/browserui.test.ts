@@ -587,6 +587,9 @@ describe("barsStep", () => {
     expect(run([short(20, -28), short(80, -28)]).minimized).toBe(false);
     expect(run([short(2 * room + BARS_DOWN, 2 * room + BARS_DOWN - 1)]).minimized).toBe(false);
     expect(run([short(2 * room + BARS_DOWN, 2 * room + BARS_DOWN)]).minimized).toBe(true);
+    // Bars at the bottom move no top, and go as before however short the page.
+    const bottom = (y: number): BarsEvent => ({ type: "scroll", y, time: 1000, room: 0, rest: 0 });
+    expect(run([bottom(BARS_DOWN)]).minimized).toBe(true);
   });
 
   test("top bars come back while the page is still their room from its top, never at it", () => {
