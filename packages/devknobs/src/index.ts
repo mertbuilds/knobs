@@ -1,7 +1,9 @@
 import * as engine from "./engine";
 import { checkPatch } from "./engine/check";
 import { type CustomDevice, type CustomDeviceInput, customDevice, customDevices, exportDevice, removeDevice } from "./engine/custom";
-import { describe as describeKnobs, type KnobDescription } from "./engine/describe";
+import type { CompareFrameInput, CompareState, SyncMode } from "./engine/compare";
+import { compareLoaded, loadCompare } from "./engine/compares";
+import { describe as describeKnobs, type KnobDescription, type KnobShape, type KnobValue } from "./engine/describe";
 import { DEVICES } from "./engine/devices";
 import { isDevknobsFrame } from "./engine/frame";
 import { GEO_PRESETS } from "./engine/geo";
@@ -63,6 +65,7 @@ export type {
   KnobValue,
 } from "./engine/describe";
 export type { DeviceKind, DevicePreset } from "./engine/devices";
+export type { CompareFrameInput, CompareFrameState, CompareState, SyncMode } from "./engine/compare";
 export type { ChromeStyle, CustomDevice, CustomDeviceInput, ScreenHole } from "./engine/custom";
 export type { GeoPreset } from "./engine/geo";
 export type { UaBrand, UaHints, UaPreset } from "./engine/ua";
@@ -226,6 +229,7 @@ function adopt(options: object): void {
 /** Remove the panel and undo every knob. A copy that was taken over has done so already. */
 export function unmount(): void {
   hostedBy = null;
+  compareLoaded()?.exitCompare();
   if (superseded(window, unmount)) return;
   detach();
   // A host keeps its switch's choice through a take-back: off stays off.
@@ -307,8 +311,69 @@ export function ready(): Promise<DevknobsState> {
   return (hosted("ready") ?? engine.ready)();
 }
 
-export function describe(): KnobDescription[] {
-  return (hosted("describe") ?? describeKnobs)();
+/**
+ * Not a knob: the compare layout, which `compare()` sets up and `setState`
+ * does not take. `describe()` lists it after the knobs, with its state.
+ */
+export interface CompareDescription {
+  key: "compare";
+  description: string;
+  value: KnobShape;
+  default: KnobValue;
+  reload: "frame";
+}
+
+export function describe(): (KnobDescription | CompareDescription)[] {
+  // A host's describe says its own compare, where it has one.
+  const host = hosted("describe");
+  if (host) return host();
+  const knobs = describeKnobs();
+  const now = compareLoaded()?.compareState() ?? null;
+  const on = now
+    ? `On: ${now.frames.length} frames (${now.frames.map((frame) => frame.diff).join("; ")}), scroll sync ${now.sync}.`
+    : "Off.";
+  return [
+    ...knobs,
+    {
+      key: "compare",
+      description: `Devices side by side, each frame with its own knobs over these. Not a setState knob: call devknobs.compare([{ device: "iphone-17-pro" }, { device: "iphone-17-pro", textSize: "xxl" }], { sync: "proportional" }), devknobs.compareState() and devknobs.exitCompare(). textSize takes px or xs, s, m, l, xl, xxl, xxxl, ax1 to ax5. ${on}`,
+      value: {
+        type: "object",
+        fields: {
+          frames: { description: "setState patches, one per frame, plus textSize.", value: { type: "number", min: 0 } },
+          sync: { description: "How a scroll in one frame moves the others.", value: { type: "enum", values: ["proportional", "pixel", "off"] } },
+        },
+      },
+      default: { frames: now?.frames.length ?? 0, sync: now?.sync ?? "proportional" },
+      reload: "frame",
+    },
+  ];
+}
+
+/**
+ * Lay two or more frames side by side, each running the page with the
+ * panel's knobs and its own patch on top: a `setState` patch, with
+ * `textSize` as px or a Dynamic Type name such as `xxl`. Loads on first use.
+ */
+export async function compare(
+  frames: CompareFrameInput[],
+  options?: { sync?: SyncMode },
+): Promise<CompareState> {
+  return (await loadCompare()).compare(frames, options);
+}
+
+/** Change one compare frame's patch. */
+export async function setCompareFrame(index: number, frame: CompareFrameInput): Promise<CompareState | null> {
+  return (await loadCompare()).setFrame(index, frame);
+}
+
+export function exitCompare(): void {
+  compareLoaded()?.exitCompare();
+}
+
+/** Each frame's patch, knobs and computed root font size, or null with no compare up. */
+export function compareState(): CompareState | null {
+  return compareLoaded()?.compareState() ?? null;
 }
 
 /**
@@ -369,7 +434,22 @@ export const devices = {
   },
 };
 
-const api = { mount, unmount, getState, setState, reset, replay, grab, describe, ready, devices };
+const api = {
+  mount,
+  unmount,
+  getState,
+  setState,
+  reset,
+  replay,
+  grab,
+  describe,
+  ready,
+  devices,
+  compare,
+  setCompareFrame,
+  exitCompare,
+  compareState,
+};
 
 /** What `mount` puts at `window.devknobs`, for agents that run code in the page. */
 export type DevknobsApi = typeof api;

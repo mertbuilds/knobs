@@ -1,5 +1,6 @@
 import * as engine from "../engine";
 import { now, realNow } from "../engine/clock";
+import { loadCompare } from "../engine/compares";
 import { customDevice } from "../engine/custom";
 import { deviceOf } from "../engine/devices";
 import { resolveTimeZone } from "../engine/time";
@@ -344,7 +345,9 @@ export function createEditors(context: EditorsContext): Editors {
     const fold = button("chip", "unfold");
     const custom = button("chip", "custom…");
     custom.title = "add a device from a picture of it, or edit the custom one in use";
-    box.append(width, el("span", "unit", "×"), height, rotate, fold, custom);
+    const compare = button("chip", "compare");
+    compare.title = "this device side by side with a copy at the xxl text size";
+    box.append(width, el("span", "unit", "×"), height, rotate, fold, custom, compare);
     const slider = createFoldSlider((posture) => commit("device", { posture }));
     foldSlider = slider;
     extra.append(box, slider.node);
@@ -369,6 +372,12 @@ export function createEditors(context: EditorsContext): Editors {
           saved: (kept) => commit("device", { device: kept.id }),
           removed: () => commit("device", { device: "none", width: "full", height: "full", dpr: "system" }),
         });
+      });
+    });
+    compare.addEventListener("click", () => {
+      void loadCompare().then((loaded) => {
+        if (loaded.compareState()) loaded.exitCompare();
+        else loaded.compare([{}, { textSize: "xxl" }]);
       });
     });
     // The chip takes the hinge from the slider, held or on its way, and folds it to the other posture.

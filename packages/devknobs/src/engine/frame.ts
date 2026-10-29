@@ -12,6 +12,26 @@ export const FRAME_ATTRIBUTE = "data-devknobs-frame";
  */
 export const FRAME_NAME = "devknobs-frame";
 
+/**
+ * Everything an app on this origin does unframed, pointer lock, presentation
+ * and orientation lock included, short of navigating the window above on its
+ * own: a frame-busting script would reload the page into its frame forever. A
+ * click still can, so `target="_top"` links work.
+ */
+export const SANDBOX = [
+  "allow-scripts",
+  "allow-same-origin",
+  "allow-forms",
+  "allow-popups",
+  "allow-popups-to-escape-sandbox",
+  "allow-modals",
+  "allow-downloads",
+  "allow-pointer-lock",
+  "allow-presentation",
+  "allow-orientation-lock",
+  "allow-top-navigation-by-user-activation",
+].join(" ");
+
 /** The smallest and the largest frame width or height, in px. */
 export const SIZE_MIN = 120;
 export const SIZE_MAX = 8192;

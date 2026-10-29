@@ -397,8 +397,23 @@ function item(kind: "session" | "local", key: string): string | null {
   }
 }
 
+/**
+ * A compare frame's own knobs, which its element carries, so the page in it
+ * starts with them: the session's stored ones are the page above's.
+ */
+export const FRAME_STATE_ATTRIBUTE = "data-devknobs-state";
+
+function frameOwn(): string | null {
+  try {
+    const owner: unknown = Reflect.get(globalThis.window ?? {}, "frameElement");
+    return owner instanceof Element ? owner.getAttribute(FRAME_STATE_ATTRIBUTE) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function load(): DevknobsState {
-  return parse(item("session", STORAGE_KEY), item("local", PLACE_KEY));
+  return parse(frameOwn() ?? item("session", STORAGE_KEY), item("local", PLACE_KEY));
 }
 
 export function save(state: DevknobsState): void {
