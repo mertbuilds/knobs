@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { runInNewContext } from "node:vm";
 import { apply, screenSizeOf } from "../src/engine/screen";
 import { DEFAULT_STATE, merge } from "../src/engine/store";
 import type { DevknobsStatePatch } from "../src/types";
@@ -59,6 +60,18 @@ describe("screenSizeOf", () => {
 });
 
 describe("apply", () => {
+  test("gives back what a copy of devknobs in another realm kept", () => {
+    const view = hostWindow();
+    const { screen } = view;
+    // As a copy in the page above a frame keeps them: a Map of that realm.
+    const kept = runInNewContext("new Map()") as Map<string, PropertyDescriptor | undefined>;
+    for (const key of ["width", "height", "availWidth", "availHeight"]) kept.set(key, undefined);
+    Object.defineProperty(screen, Symbol.for("devknobs.screen"), { configurable: true, value: kept });
+    Object.defineProperty(screen, "width", { configurable: true, get: () => 402 });
+    apply(null, view);
+    expect(screen.width).toBe(1400);
+  });
+
   test("puts the device's size on the window's screen, and gives the host's back", () => {
     const view = hostWindow();
     apply({ width: 402, height: 874 }, view);

@@ -45,7 +45,8 @@ type Originals = Map<(typeof KEYS)[number], PropertyDescriptor | undefined>;
 
 function originalsOf(own: object): Originals | undefined {
   const held: unknown = Reflect.get(own, ORIGINALS);
-  return held instanceof Map ? (held as Originals) : undefined;
+  // A Map from another realm, such as the page above a frame, fails instanceof.
+  return Object.prototype.toString.call(held) === "[object Map]" ? (held as Originals) : undefined;
 }
 
 /** Put `size` on the screen of the window `scope`, or null to give it back what it had. */
