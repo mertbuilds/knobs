@@ -134,7 +134,7 @@ export function validateDevice(input: unknown): CustomDevice {
 }
 
 let devices: CustomDevice[] | null = null;
-const watchers = new Set<() => void>();
+let listening = false;
 
 function storage(): Storage | null {
   try {
@@ -165,6 +165,13 @@ export function parseDevices(json: string | null): CustomDevice[] {
 
 /** The custom devices, read once from storage. */
 export function customDevices(): readonly CustomDevice[] {
+  // Another tab's change reads again on the next lookup.
+  if (!listening && typeof globalThis.addEventListener === "function") {
+    listening = true;
+    globalThis.addEventListener("storage", (event: StorageEvent) => {
+      if (event.key === DEVICES_KEY || event.key === null) reloadDevices();
+    });
+  }
   if (devices === null) {
     let json: string | null = null;
     try {
@@ -205,12 +212,25 @@ function keep(next: CustomDevice[]): void {
     }
   }
   devices = next;
-  for (const watcher of Array.from(watchers)) watcher();
 }
 
-/** Add a device, or replace the one with its id. Returns it as kept. */
+/** `id`, or with -2, -3 and on after it while a device has it. */
+function freeId(id: string): string {
+  const taken = new Set(customDevices().map((device) => device.id));
+  let next = id;
+  for (let n = 2; taken.has(next); n++) next = `${id}-${n}`;
+  return next;
+}
+
+/**
+ * Add a device. One with an id of its own replaces the device with that id,
+ * as the editor saves an edit; one without takes its label's id, numbered
+ * where a device has it already. Returns it as kept.
+ */
 export function addDevice(input: unknown): CustomDevice {
-  const device = validateDevice(input);
+  const named = validateDevice(input);
+  const own = isRecord(input) && input.id !== undefined;
+  const device = own ? named : { ...named, id: freeId(named.id) };
   keep([...customDevices().filter((known) => known.id !== device.id), device]);
   return device;
 }
@@ -220,14 +240,6 @@ export function removeDevice(id: string): boolean {
   if (!list.some((device) => device.id === id)) return false;
   keep(list.filter((device) => device.id !== id));
   return true;
-}
-
-/** Hear when the list changes. Returns the way to stop. */
-export function watchDevices(watcher: () => void): () => void {
-  watchers.add(watcher);
-  return () => {
-    watchers.delete(watcher);
-  };
 }
 
 /** For tests and another tab's change: read the list again from storage. */

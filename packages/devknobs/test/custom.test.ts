@@ -161,6 +161,25 @@ describe("the registry", () => {
     expect(device?.value.type === "enum" && device.value.values.includes("custom:test-phone")).toBe(true);
   });
 
+  test("a second device with the same label gets a numbered id, and only an explicit id replaces", () => {
+    expect(addDevice(DEVICE_JSON).id).toBe("custom:test-phone");
+    expect(addDevice(DEVICE_JSON).id).toBe("custom:test-phone-2");
+    expect(addDevice(DEVICE_JSON).id).toBe("custom:test-phone-3");
+    addDevice({ ...DEVICE_JSON, id: "custom:test-phone", label: "Renamed" });
+    expect(customDevices().map((device) => [device.id, device.label])).toEqual([
+      ["custom:test-phone-2", "Test phone"],
+      ["custom:test-phone-3", "Test phone"],
+      ["custom:test-phone", "Renamed"],
+    ]);
+  });
+
+  test("another tab's change reads again on the next lookup", () => {
+    expect(customDevices()).toEqual([]);
+    storage.setItem(DEVICES_KEY, JSON.stringify({ v: 1, devices: [validateDevice(DEVICE_JSON)] }));
+    globalThis.dispatchEvent(Object.assign(new Event("storage"), { key: DEVICES_KEY }));
+    expect(customDevices().map((device) => device.id)).toEqual(["custom:test-phone"]);
+  });
+
   test("a stored state and a merge keep a custom device", () => {
     addDevice(DEVICE_JSON);
     const state = merge(DEFAULT_STATE, { device: "custom:test-phone" });
