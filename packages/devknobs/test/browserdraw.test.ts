@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createBrowser, readLook, screenFill } from "../src/engine/browserdraw";
 import type { Look } from "../src/engine/browserkit";
 import { MORPH } from "../src/engine/browserkit";
-import { barsOf, type Screen, viewportOf } from "../src/engine/browserui";
+import { BARS_DOWN, barsOf, type Screen, viewportOf } from "../src/engine/browserui";
 import { screenOf } from "../src/engine/devices";
 
 const PRO = screenOf("iphone-17-pro") as Screen;
@@ -357,6 +357,18 @@ function browserOver(color: () => string) {
 
 const shrinks = () => timers.filter((timer) => timer.delay === MORPH.expand);
 
+/** A page `tall` px long whose scrollBy clamps as a browser's does, and the moves asked of it. */
+function scrollable(view: { scrollY: number; innerHeight: number }, tall = 5000) {
+  const scrolled: number[] = [];
+  Object.assign(view, {
+    scrollBy: ({ top }: { top: number }) => {
+      scrolled.push(top);
+      view.scrollY = Math.min(Math.max(0, view.scrollY + top), Math.max(0, tall - view.innerHeight));
+    },
+  });
+  return scrolled;
+}
+
 describe("createBrowser", () => {
   test("a page changing color under the glass leaves a pending shrink to land", () => {
     let color = BLUE;
@@ -409,8 +421,8 @@ describe("createBrowser", () => {
 
   test("top bars that minimize or expand move the frame at once and scroll the page as far, so it stays put", () => {
     const { show, view } = browserOver(() => BLUE);
-    const scrolled: number[] = [];
-    Object.assign(view, { scrollY: 300, scrollBy: ({ top }: { top: number }) => scrolled.push(top) });
+    view.scrollY = 300;
+    const scrolled = scrollable(view);
     const top = (minimized: boolean) => viewportOf(PRO, "portrait", "top", minimized, true).y;
     show(false, "iphone-17-pro", "top");
     expect(scrolled).toEqual([]);
@@ -429,10 +441,60 @@ describe("createBrowser", () => {
     expect(scrolled.at(-1)).toBe(top(false) - top(true));
   });
 
+  test("a new page that comes in under minimized top bars starts at its own place", () => {
+    const { browser, show, view } = browserOver(() => BLUE);
+    view.scrollY = 300;
+    const scrolled = scrollable(view);
+    show(false, "iphone-17-pro", "top");
+    show(true, "iphone-17-pro", "top");
+    const before = scrolled.length;
+    // A link: the new page is at its top, and the bars come back for it.
+    view.location.href = "http://127.0.0.1:8765/next";
+    view.scrollY = 0;
+    browser.refresh();
+    show(false, "iphone-17-pro", "top");
+    expect(scrolled.length).toBe(before);
+    expect(view.scrollY).toBe(0);
+  });
+
+  test("Chrome's top toolbar comes back and goes by the same points as Safari's top bars", () => {
+    const { browser, show, scroll, view } = browserOver(() => BLUE);
+    const pixel = screenOf("pixel-10") as Screen;
+    const [full, mini] = [false, true].map((minimized) => viewportOf(pixel, "portrait", "top", minimized, true));
+    const room = (full?.y ?? 0) - (mini?.y ?? 0);
+    expect(room).toBeGreaterThan(0);
+    let now = 0;
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    show(false, "pixel-10", "top");
+    // Reading the page starts listening to its scroll.
+    browser.refresh();
+    // Each scroll comes well after the last resize's lock.
+    const to = (y: number) => {
+      now += 1000;
+      view.scrollY = y;
+      scroll();
+    };
+    to(2 * room + BARS_DOWN - 1);
+    expect(browser.minimized()).toBe(false);
+    to(2 * room + BARS_DOWN);
+    expect(browser.minimized()).toBe(true);
+    // The frame grows up for it, and the page scrolls up by the room, which counts from there.
+    const scrolled = scrollable(view);
+    show(true, "pixel-10", "top");
+    expect(scrolled).toEqual([-room]);
+    // Its own scroll comes while the resize settles.
+    scroll();
+    // Up toward the top: back while the page is still the toolbar's room from it.
+    to(room + 2);
+    expect(browser.minimized()).toBe(true);
+    to(room + 1);
+    expect(browser.minimized()).toBe(false);
+    clock.mockRestore();
+  });
+
   test("bars at the bottom never scroll the page, as its top stays", () => {
     const { show, view } = browserOver(() => BLUE);
-    const scrolled: number[] = [];
-    Object.assign(view, { scrollBy: ({ top }: { top: number }) => scrolled.push(top) });
+    const scrolled = scrollable(view);
     show(false);
     show(true);
     show(false);

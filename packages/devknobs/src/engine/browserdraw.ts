@@ -383,6 +383,8 @@ export function createBrowser(
   let watched: Document | null = null;
   let href = "";
   let motion: BarsMotion = BARS_START;
+  /** A new page came in, and the frame has not been sized for it since, nor has it scrolled. */
+  let landed = false;
   /** A page is loading, and the bars keep the look they had. */
   let busy = false;
   /** The wait for the reloaded page to paint. */
@@ -436,18 +438,29 @@ export function createBrowser(
     placeBand();
     painted?.apply(bars.minimized, look);
   };
-  /** How far up minimizing moves the page's top: the room Safari's top bars give it. */
-  const room = (): number => {
+  /**
+   * How far up minimizing moves the page's top, the room top bars give it,
+   * and how much taller the frame gets.
+   */
+  const growth = (): { room: number; grow: number } => {
     const bars = view?.bars;
-    if (!bars || bars.platform !== "safari") return 0;
+    if (!bars) return { room: 0, grow: 0 };
     const { screen, orientation, layout, edge } = bars;
-    const top = (minimized: boolean) => viewportOf(screen, orientation, layout, minimized, edge).y;
-    return Math.max(0, top(false) - top(true));
+    const [full, mini] = [false, true].map((minimized) => viewportOf(screen, orientation, layout, minimized, edge));
+    if (!full || !mini) return { room: 0, grow: 0 };
+    return { room: Math.max(0, full.y - mini.y), grow: Math.max(0, mini.height - full.height) };
   };
   const onScroll = () => {
     band.move();
+    landed = false;
     const page = frame.contentWindow;
-    if (page) step({ type: "scroll", y: page.scrollY, time: performance.now(), room: room() });
+    if (page) {
+      const { room, grow } = growth();
+      // How far the page can still be scrolled once the frame grows for minimized bars.
+      const tall = frame.contentDocument?.documentElement?.scrollHeight;
+      const rest = typeof tall === "number" ? tall - page.innerHeight - grow : Number.POSITIVE_INFINITY;
+      step({ type: "scroll", y: page.scrollY, time: performance.now(), room, rest });
+    }
     if (!sampling) sampling = window.requestAnimationFrame(resample);
   };
   const actions: Actions = {
@@ -481,9 +494,12 @@ export function createBrowser(
     applied = page;
     const moved = before && page && before.y !== page.y && before.x === page.x && before.width === page.width;
     if (moved) {
+      // A new page starts at its own place, which the bars coming back for it never move.
+      const fresh = landed;
+      landed = false;
       try {
         // Instant, past a page's own smooth scrolling.
-        frame.contentWindow?.scrollBy({ top: page.y - before.y, behavior: "instant" });
+        if (!fresh) frame.contentWindow?.scrollBy({ top: page.y - before.y, behavior: "instant" });
       } catch {
         // The frame went to another origin.
       }
@@ -626,6 +642,7 @@ export function createBrowser(
       const now = page?.location.href ?? "";
       if (now !== href) {
         href = now;
+        landed = true;
         step({ type: "navigate" });
       }
     } catch {

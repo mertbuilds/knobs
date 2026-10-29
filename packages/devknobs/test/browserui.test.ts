@@ -580,6 +580,15 @@ describe("barsStep", () => {
     expect(run([near(2 * room + BARS_DOWN)]).minimized).toBe(true);
   });
 
+  test("a short page keeps its top bars, as it could not scroll back by their room once the frame grows", () => {
+    const room = 16;
+    const short = (y: number, rest: number): BarsEvent => ({ type: "scroll", y, time: 1000, room, rest });
+    // 80 px to scroll, the frame 108 taller minimized: nothing left to scroll back by.
+    expect(run([short(20, -28), short(80, -28)]).minimized).toBe(false);
+    expect(run([short(2 * room + BARS_DOWN, 2 * room + BARS_DOWN - 1)]).minimized).toBe(false);
+    expect(run([short(2 * room + BARS_DOWN, 2 * room + BARS_DOWN)]).minimized).toBe(true);
+  });
+
   test("top bars come back while the page is still their room from its top, never at it", () => {
     const room = 29;
     const near = (y: number, time = 1000): BarsEvent => ({ type: "scroll", y, time, room });
