@@ -1,5 +1,10 @@
 # changelog
 
+## unreleased
+
+- a host can load the frame's page itself: `native.load(frame, url)`, given an address on the page's own origin, sets the frame's address where the host can, such as a browser extension from its own world, which the page's `frame-src` policy does not bind, and returns true. false, or no `load`, and devknobs sets it as before, on its first load and on each load again
+- with a host that answers `native.refused`, the refusal notice waits for its answer, and a `retry` with `now` runs with the notice hidden and loads the frame again, so a refusal the host gets past never shows. with no host the notice shows at once, as before
+
 ## 0.5.2
 
 - a host can let a page's own copy run the panel: `mount({ host: true, prefer })` shows prefer (extension or page) in the settings, and with page, a copy the page mounts takes the page from the host, which takes its panel, frame and patches away and does not take it back. `setPrefer()` brings a choice that comes in after the mount. page copies from 0.4.0 to 0.5.1 cannot take over, so the extension's panel stays on those pages. the footer names the copy that runs the panel and its version, such as `extension 0.5.1` or `page 0.5.1-local.1767225600`; `bun run link` builds the local version into the code
