@@ -40,7 +40,7 @@ function checkTitle(name: string, title: string) {
 function pngSize(file: string): [number, number] | undefined {
   try {
     const head = readFileSync(file).subarray(0, 24);
-    return head.toString('latin1', 1, 4) === 'PNG'
+    return head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
       ? [head.readUInt32BE(16), head.readUInt32BE(20)]
       : undefined;
   } catch {

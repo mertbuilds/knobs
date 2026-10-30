@@ -2,7 +2,7 @@
  * Fails when a page's `<head>` breaks the share rules: the home, `/blog`,
  * every post and every docs page, each merged under the root's head the way
  * TanStack merges them (the deepest route's tag of each name or property
- * wins). Each tag appears once, `og:image` comes before its size, type and
+ * wins). Each route's own list holds each tag once, posts are articles, `og:image` comes before its size, type and
  * alt, the X tags repeat the page's title and description, the title is 50 to
  * 60 characters and the description 120 to 160. Runs after `vite build` in
  * the web app's `build` script, which generates the messages it reads.
@@ -33,17 +33,20 @@ const root: Array<Meta> = [
   ...shareMeta({ description: m.home_description(), title: m.home_title() }),
 ];
 
+/** A tag's name or property, or `title` for the title. */
+const key = (tag: Meta) => (tag.title === undefined ? (tag.name ?? tag.property) : 'title');
+
 /** The root's tags with the page's over them, as TanStack writes them. */
 function merge(page: Array<Meta>): Array<Meta> {
   const out: Array<Meta> = [];
   const seen = new Set<string>();
   for (const tag of [...root, ...page].reverse()) {
-    const key = tag.title === undefined ? (tag.name ?? tag.property) : 'title';
-    if (key !== undefined && seen.has(key)) {
+    const k = key(tag);
+    if (k !== undefined && seen.has(k)) {
       continue;
     }
-    if (key !== undefined) {
-      seen.add(key);
+    if (k !== undefined) {
+      seen.add(k);
     }
     out.push(tag);
   }
@@ -69,12 +72,16 @@ for (const [url, page] of pages) {
     bad += 1;
     process.stderr.write(`head-check: ${url} ${message}\n`);
   };
-  const tags = merge(page);
-  const keys = tags.map((tag) => (tag.title === undefined ? (tag.name ?? tag.property) : 'title'));
-  const twice = keys.filter((key, index) => key !== undefined && keys.indexOf(key) !== index);
-  if (twice.length > 0) {
-    fail(`repeats ${twice.join(', ')}`);
+  // TanStack drops a repeat across routes, but a route's own list must hold each tag once.
+  for (const own of [root, page]) {
+    const ownKeys = own.map(key);
+    const twice = ownKeys.filter((k, index) => k !== undefined && ownKeys.indexOf(k) !== index);
+    if (twice.length > 0) {
+      fail(`repeats ${twice.join(', ')}`);
+    }
   }
+  const tags = merge(page);
+  const keys = tags.map(key);
   const get = (key: string) => tags.find((tag) => (tag.name ?? tag.property) === key)?.content;
   const title = tags.find((tag) => tag.title !== undefined)?.title ?? '';
   const description = get('description') ?? '';
@@ -99,6 +106,9 @@ for (const [url, page] of pages) {
     if (image === -1 || keys.indexOf(key) < image) {
       fail(`${key} is missing or comes before og:image`);
     }
+  }
+  if (get('og:type') !== (url.startsWith('/blog/') ? 'article' : 'website')) {
+    fail(`og:type is ${get('og:type')}`);
   }
   if (get('twitter:image') !== get('og:image') || get('og:site_name') === undefined) {
     fail('needs twitter:image equal to og:image and og:site_name');

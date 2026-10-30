@@ -132,6 +132,10 @@ const QUIET = `
 // upper two thirds: X lays the site's name over the bottom left corner.
 // A wrapped headline stays clear of the device's edge. A popover,
 // so it sits in the top layer with devknobs' own layers.
+/** A post title as html text. */
+const escape = (text: string) =>
+  text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
 const overlay = (headline: Take['headline']) => `
 <style>
   .og {
@@ -148,7 +152,7 @@ const overlay = (headline: Take['headline']) => `
 </style>
 <div class="og" data-devknobs="og" popover="manual">
   <div class="brand"><img alt="" src="${mark}">${messages['app_name']}</div>
-  <h1>${typeof headline === 'string' ? headline : headline.map((line) => `<span style="display: block; white-space: nowrap">${line}</span>`).join('')}</h1>
+  <h1>${typeof headline === 'string' ? escape(headline) : headline.map((line) => `<span style="display: block; white-space: nowrap">${line}</span>`).join('')}</h1>
 </div>`;
 
 /** Every open shadow root on the page, for the style that quiets devknobs' own strip. */
