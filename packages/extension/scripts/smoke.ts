@@ -319,8 +319,12 @@ self.addEventListener('fetch', (event) => {
   response.setHeader('content-type', 'text/html');
   // A page whose own policy lets no frame of its origin in, and one whose frame-ancestors
   // already lets the page itself frame it, whose policy then stays: its inline script is blocked.
-  if (path === '/frame-src') {
+  if (path === '/frame-src' || path === '/frame-src-next') {
     response.setHeader('content-security-policy', 'frame-src https://example.com');
+  }
+  if (path === '/frame-src-next') {
+    response.end(page().replace('<h1>devknobs smoke</h1>', '<h1>the next page</h1>'));
+    return;
   }
   const ancestors = /^\/ancestors-(self|none)$/.exec(path)?.[1];
   if (ancestors) {
@@ -1403,7 +1407,37 @@ async function firstOpen() {
     log('first open frame-src', framed);
     assert.equal(framed.text, 'devknobs smoke');
     assert.equal(framed.noticed, false);
-    await unframe();
+    // A link clicked in the frame, then a reload of it from the page above, as devknobs' own
+    // reloads go: the page's frame-src holds them too, and they land all the same.
+    await tab.evaluate(() => {
+      const inner = document
+        .querySelector('[data-devknobs="viewport"]')!
+        .shadowRoot!.querySelector<HTMLIFrameElement>(
+          'iframe[data-devknobs-frame]',
+        )!.contentDocument!;
+      const link = inner.createElement('a');
+      link.href = '/frame-src-next';
+      inner.body.append(link);
+      link.click();
+    });
+    const clicked = await opens('the next page');
+    await tab.evaluate(() => {
+      const inner = document
+        .querySelector('[data-devknobs="viewport"]')!
+        .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')!;
+      inner.contentDocument!.querySelector('h1')!.textContent = 'before the reload';
+      inner.contentWindow!.location.reload();
+    });
+    const reloadedFrame = await opens('the next page');
+    log('first open frame-src link and reload', { clicked, reloadedFrame });
+    assert.equal(clicked.text, 'the next page');
+    assert.equal(reloadedFrame.text, 'the next page');
+    // Closed, the frame hands the tab the page it went to.
+    await Promise.all([
+      tab.waitForURL(`${url}frame-src-next`),
+      set(tab, { frame: false, width: 'full' }).catch(() => {}),
+    ]);
+    await ready(tab);
 
     // (b) A CSP whose frame-ancestors has 'self' stays, X-Frame-Options aside; 'none' goes.
     const policies: Record<string, unknown> = {};

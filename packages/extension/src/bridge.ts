@@ -80,6 +80,43 @@ document.addEventListener(
   true,
 );
 
+// Chrome holds every later load of the frame to the page's frame-src too: a link clicked in it,
+// or devknobs reloading it. Such a load of the page's own origin, refused by the page's policy,
+// is loaded again from here, in devknobs' frame alone. The event is the page's to forge as well,
+// so the same checks hold: devknobs' frame, an address on the page's origin.
+const FRAME_DIRECTIVES = new Set(['frame-src', 'child-src', 'default-src']);
+// The last address loaded so, since when, and how often: one refused even so is not loaded
+// again forever, only up to `RELOAD_MAX` times in `RELOAD_MS`.
+let reloaded = { at: 0, times: 0, url: '' };
+const RELOAD_MAX = 3;
+const RELOAD_MS = 2000;
+
+document.addEventListener(
+  'securitypolicyviolation',
+  ({ blockedURI, effectiveDirective }) => {
+    const frame = document
+      .querySelector('[data-devknobs="viewport"]')
+      ?.shadowRoot?.querySelector<HTMLIFrameElement>(`iframe[name="${FRAME_NAME}"]`);
+    if (
+      !frame ||
+      !FRAME_DIRECTIVES.has(effectiveDirective) ||
+      URL.parse(blockedURI)?.origin !== location.origin
+    ) {
+      return;
+    }
+    const now = performance.now();
+    if (reloaded.url !== blockedURI || now - reloaded.at > RELOAD_MS) {
+      reloaded = { at: now, times: 0, url: blockedURI };
+    }
+    reloaded.times += 1;
+    if (reloaded.times > RELOAD_MAX) {
+      return;
+    }
+    frame.src = blockedURI;
+  },
+  true,
+);
+
 chrome.runtime.onMessage.addListener((message: TabMessage) => {
   toPage(message);
 });
