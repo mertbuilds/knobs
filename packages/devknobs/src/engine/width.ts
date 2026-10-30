@@ -197,6 +197,8 @@ let exit: (() => void) | null = null;
 let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
 /** Hears the frame open and go. The engine hands it in. */
 let framed: ((open: boolean) => void | Promise<void>) | null = null;
+/** Loads the frame's page in place of setting its `src`. The engine hands it in. */
+let loader: ((frame: HTMLIFrameElement, url: string) => boolean) | null = null;
 /** Counts the refusals, so an answer to an older one is dropped. */
 let refusals = 0;
 let current: ViewportValue = {
@@ -280,19 +282,51 @@ export function onFramed(handler: ((open: boolean) => void | Promise<void>) | nu
   framed = handler;
 }
 
-/** Ask the host why the page was refused, and say so under the notice. */
+export function onLoader(handler: ((frame: HTMLIFrameElement, url: string) => boolean) | null): void {
+  loader = handler;
+}
+
+/** Send the frame to `url`, through the host where it loads the page itself. */
+function navigate(target: HTMLIFrameElement, url: string): void {
+  if (!loader?.(target, url)) target.src = url;
+}
+
+/**
+ * Ask the host why the page was refused, and say so under the notice. With a
+ * host to ask, the notice waits for its answer, and one that loads the page
+ * again at once keeps it hidden: a refusal it gets past never shows.
+ */
 function whyRefused(): void {
   const box = notice;
   const turn = ++refusals;
   if (!box) return;
   explain(box, null, loadAgain);
-  askWhy?.(frameUrl).then(
+  if (!askWhy) {
+    box.hidden = false;
+    return;
+  }
+  const still = () => turn === refusals && notice === box;
+  const show = (refusal: FrameRefusal | null) => {
+    if (!still()) return;
+    box.hidden = false;
+    explain(box, refusal, loadAgain);
+  };
+  askWhy(frameUrl).then(
     (refusal) => {
-      if (turn === refusals && notice === box && !box.hidden) explain(box, refusal, loadAgain);
+      const retry = refusal?.retry;
+      if (!retry?.now) {
+        show(refusal);
+        return;
+      }
+      retry.run().then(
+        () => {
+          if (still()) loadAgain();
+        },
+        (error: unknown) => show({ why: error instanceof Error ? error.message : String(error) }),
+      );
     },
-    () => {
-      // The host could not say: the notice stays as it is.
-    },
+    // The host could not say: the notice shows as it is.
+    () => show(null),
   );
 }
 
@@ -303,7 +337,7 @@ function loadAgain(): void {
   readyPage = null;
   refusals += 1;
   if (notice) notice.hidden = true;
-  frame.src = frameUrl;
+  navigate(frame, frameUrl);
 }
 
 export function onZoom(handler: ((zoom: ZoomValue) => void) | null): void {
@@ -329,8 +363,9 @@ function onLoad(): void {
   loaded = true;
   loadedAt = performance.now();
   const doc = frameDocument();
-  if (notice) notice.hidden = doc !== null;
+  if (notice) notice.hidden = true;
   if (doc === null) whyRefused();
+  else refusals += 1;
   locate();
   const view = frameWindow();
   if (view && doc) {
@@ -1132,12 +1167,12 @@ function open(veiled: number | null, first: boolean): void {
     const opened = frame;
     void waiting.then(() => {
       if (frame !== opened) return;
-      opened.src = frameUrl;
       opened.addEventListener("load", onLoad);
+      navigate(opened, frameUrl);
     });
   } else {
-    frame.src = frameUrl;
     frame.addEventListener("load", onLoad);
+    navigate(frame, frameUrl);
   }
   reload.track({
     view: frameWindow,
