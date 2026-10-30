@@ -245,7 +245,7 @@ async function shoot(page: Page, url: string, headline: Take['headline']) {
     document.querySelector<HTMLElement>('.og')?.showPopover();
   }, overlay(headline));
   await page.evaluate(() => document.fonts.ready);
-  // A long title steps down in size until it fits three lines.
+  // A long title steps down in size until it fits three lines and its width.
   await page.evaluate(() => {
     const h1 = document.querySelector<HTMLElement>('.og h1');
     if (h1 === null) {
@@ -253,7 +253,10 @@ async function shoot(page: Page, url: string, headline: Take['headline']) {
     }
     for (let size = 60; size >= 36; size -= 2) {
       h1.style.fontSize = `${size}px`;
-      if (h1.getBoundingClientRect().height <= size * 1.06 * 3 + 1) {
+      if (
+        h1.getBoundingClientRect().height <= size * 1.06 * 3 + 1 &&
+        h1.scrollWidth <= h1.clientWidth
+      ) {
         return;
       }
     }
