@@ -1,5 +1,5 @@
 import type { NativeUa, SystemMedia } from '@vinena/knobs';
-import { isFramePage, movedTo } from './follow.ts';
+import { type Handoff, isFramePage, movedTo, takeHandoff } from './follow.ts';
 import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from './knobs.ts';
 import {
   type Answer,
@@ -368,8 +368,9 @@ async function setFramed(tabId: number, host: string | null): Promise<void> {
     tabs.delete(tabId);
   }
   void chrome.storage.session.set({ [FRAMED_KEY]: Object.fromEntries(tabs) });
-  return ruleFraming().catch(() => {
-    // The next change puts them in again.
+  return ruleFraming().catch((error: unknown) => {
+    // oxlint-disable-next-line no-console -- a rule Chrome refused leaves frames refused, unseen otherwise
+    console.warn('knobs: framing rules', error);
   });
 }
 
@@ -413,7 +414,7 @@ async function pageLoads(tabId: number, url: string) {
 // The user agent the ua knob, or a device's browser, sends to servers, with no debugger: a rule
 // per tab sets it and its client hints on every request of the tab, and one per host on what
 // that host's service worker fetches, which belongs to no tab. The ids are any free ones, since
-// the framing rules take tab ids and host hashes: these are told apart by their request headers.
+// the framing rules take tab ids and free ids too: these are told apart by their request headers.
 const UA_KEY = 'ua';
 let uaTabsKept: Promise<Map<number, { host: string | null; ua: NativeUa }>> | null = null;
 
@@ -530,12 +531,13 @@ async function setUa(tabId: number, ua: NativeUa | null, url: string | undefined
 }
 
 // devknobs' frame in each tab as it opens: the page it was sent to, and its frame's id once
-// that load starts, until it lands. One that lands on another origin, as a server sends a
-// phone's browser to its mobile host, has the tab follow it there: the tab's page hands its
-// knobs on (`carry`), and the tab's next page on that origin takes them, within `HANDOFF_MS`.
+// that load starts, until it lands. One that lands on another origin of the same site, as a
+// server sends a phone's browser to its mobile host, has the tab follow it there: the tab's page
+// hands its knobs on (`carry`), and the tab's next page on that origin takes them, within
+// `HANDOFF_MS`. One sent to another site gets devknobs' notice, as before.
 const firstLoads = new Map<number, { frameId?: number; page: string }>();
 const follows = new Map<number, { until: number; url: string }>();
-const handoffs = new Map<number, { origin: string; state: Carry; until: number }>();
+const handoffs = new Map<number, Handoff<Carry>>();
 const HANDOFF_MS = 30_000;
 
 function landed({ frameId, tabId, url }: { frameId: number; tabId: number; url: string }) {
@@ -565,16 +567,11 @@ async function follow(tabId: number, state: Carry) {
 
 /** The knobs handed to the tab's page at `url`, once, or none. */
 function handedTo(tabId: number, url: string | undefined): Carry | undefined {
-  const handoff = handoffs.get(tabId);
-  if (handoff && handoff.until < Date.now()) {
+  const { keep, state } = takeHandoff(handoffs.get(tabId), url, Date.now());
+  if (!keep) {
     handoffs.delete(tabId);
-    return undefined;
   }
-  if (!handoff || URL.parse(url ?? '')?.origin !== handoff.origin) {
-    return undefined;
-  }
-  handoffs.delete(tabId);
-  return handoff.state;
+  return state;
 }
 
 // The frame goes with the page it was on: its rules go too, until the next page opens one.
@@ -623,13 +620,19 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // A new tab's id can be one another rule took: the tab's framing rule would replace it.
+// Read in turn with the rules' changes, so one on its way in cannot take the id unseen.
 chrome.tabs.onCreated.addListener(({ id }) => {
-  void chrome.declarativeNetRequest.getSessionRules().then((rules) => {
-    const taken = rules.find((rule) => rule.id === id);
-    if (taken) {
-      void (isUaRule(taken) ? ruleUas() : ruleFraming());
-    }
-  });
+  ruling = ruling
+    .catch(() => {})
+    .then(async () => {
+      const taken = (await chrome.declarativeNetRequest.getSessionRules()).find(
+        (rule) => rule.id === id,
+      );
+      if (taken) {
+        void (isUaRule(taken) ? ruleUas() : ruleFraming());
+      }
+    })
+    .catch(() => {});
 });
 
 chrome.action.onClicked.addListener(({ id }) => {

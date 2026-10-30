@@ -35,6 +35,6 @@ while text size, offline, a preference or the viewport is set, Chrome shows its 
 - `declarativeNetRequestWithHostAccess` and `<all_urls>`: the user agent and framing rules.
 - `offscreen`: reads your own scheme and motion.
 - `storage`: each tab's knobs and the real or in-page switch.
-- `webNavigation`: drops framing rules when a tab loads another page, and sees the width knob's frame sent to another site.
+- `webNavigation`: drops framing rules when a tab loads another page, and sees the width knob's frame sent to another host of the same site.
 
-pages that refuse frames still load in the width knob's frame: while it is open, the extension removes `X-Frame-Options` from that tab's frame loads of the page's host, and `Content-Security-Policy` where its `frame-ancestors` leaves the page out. a site that sends the frame to another site, such as a mobile one for a phone, takes the tab there, with your knobs.
+pages that refuse frames still load in the width knob's frame: while it is open, the extension removes `X-Frame-Options` from that tab's frame loads of the page's host, and `Content-Security-Policy` where its `frame-ancestors` leaves the page out. a site that sends the frame to another host of its own, such as its mobile one for a phone, takes the tab there, with your knobs.

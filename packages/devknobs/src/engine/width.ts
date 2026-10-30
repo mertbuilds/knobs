@@ -199,6 +199,11 @@ let askWhy: ((url: string) => Promise<FrameRefusal | null>) | null = null;
 let framed: ((open: boolean) => void | Promise<void>) | null = null;
 /** Loads the frame's page in place of setting its `src`. The engine hands it in. */
 let loader: ((frame: HTMLIFrameElement, url: string) => boolean) | null = null;
+/**
+ * How long the notice waits for the host's answer, in ms: past it, as with a
+ * host that never answers, it shows as it is.
+ */
+const ANSWER_WAIT = 6000;
 /** Counts the refusals, so an answer to an older one is dropped. */
 let refusals = 0;
 let current: ViewportValue = {
@@ -306,13 +311,18 @@ function whyRefused(): void {
     return;
   }
   const still = () => turn === refusals && notice === box;
+  let answered = false;
   const show = (refusal: FrameRefusal | null) => {
     if (!still()) return;
     box.hidden = false;
     explain(box, refusal, loadAgain);
   };
+  window.setTimeout(() => {
+    if (!answered) show(null);
+  }, ANSWER_WAIT);
   askWhy(frameUrl).then(
     (refusal) => {
+      answered = true;
       const retry = refusal?.retry;
       if (!retry?.now) {
         show(refusal);
@@ -326,7 +336,10 @@ function whyRefused(): void {
       );
     },
     // The host could not say: the notice shows as it is.
-    () => show(null),
+    () => {
+      answered = true;
+      show(null);
+    },
   );
 }
 

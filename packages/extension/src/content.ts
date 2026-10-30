@@ -16,7 +16,6 @@ import { DEFAULT_STATE, type KnobState, patchOf, sameState } from './knobs.ts';
 import {
   type Answer,
   type Ask,
-  type Carry,
   LEGACY_TO_PAGE,
   LOAD_FRAME,
   type NativeReason,
@@ -96,10 +95,21 @@ function send() {
 let asked = 0;
 const answers = new Map<number, (answer: Answer) => void>();
 
+// How long a question waits for the service worker, in ms: past it, the extension was reloaded
+// or removed since the page loaded, and nothing answers.
+const ASK_MS = 5000;
+
 function ask(question: Ask): Promise<Answer> {
   const id = ++asked;
   return new Promise((resolve) => {
-    answers.set(id, resolve);
+    const timer = setTimeout(() => {
+      answers.delete(id);
+      resolve({ error: 'the extension did not answer: reload the page' });
+    }, ASK_MS);
+    answers.set(id, (answer) => {
+      clearTimeout(timer);
+      resolve(answer);
+    });
     toBridge({ ...question, id });
   });
 }
@@ -212,7 +222,7 @@ async function refused(url: string): Promise<FrameRefusal | null> {
   const saved = record.response?.fromServiceWorker === true && !bypassed;
   return {
     details: JSON.stringify(record, null, 2),
-    why: saved ? WORKER_WHY : describeLoad(record),
+    why: saved ? `${describeLoad(record)}; ${WORKER_WHY}` : describeLoad(record),
     ...(saved ? { retry: bypass() } : {}),
   };
 }
@@ -387,7 +397,7 @@ function onMessage(event: Event) {
     setState({ panel: { open: !getState().panel.open } });
   } else if (message.type === 'carry') {
     // The tab follows its frame to another origin: the page there takes these knobs.
-    void ask({ state: getState() as unknown as Carry, type: 'carry' });
+    void ask({ state: { ...getState() }, type: 'carry' });
   } else if (message.type === 'detached') {
     // The tab's own size is back too, so a size the tab had goes with it.
     const sized: DevknobsStatePatch = knobs.viewport
