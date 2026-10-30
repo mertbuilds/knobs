@@ -323,6 +323,31 @@ self.addEventListener('fetch', (event) => {
   response.setHeader('content-type', 'text/html');
   // A page whose own policy lets no frame of its origin in, and one whose frame-ancestors
   // already lets the page itself frame it, whose policy then stays: its inline script is blocked.
+  // The same, with a next page that takes 1.5 seconds to answer, with or without a service
+  // worker that lets every load through.
+  const slow = /^\/slow\/(plain|sw)\/(page|next|sw\.js)$/.exec(path);
+  if (slow) {
+    const [, kind, part] = slow;
+    if (part === 'sw.js') {
+      response.setHeader('content-type', 'text/javascript');
+      response.end(networkWorker);
+      return;
+    }
+    response.setHeader('content-type', 'text/html');
+    response.setHeader('content-security-policy', 'frame-src https://example.com');
+    const register =
+      kind === 'sw' ? `<script>navigator.serviceWorker.register("/slow/sw/sw.js")</script>` : '';
+    if (part === 'next') {
+      setTimeout(
+        () =>
+          response.end(page(register).replace('<h1>devknobs smoke</h1>', '<h1>the next page</h1>')),
+        1500,
+      );
+      return;
+    }
+    response.end(page(register));
+    return;
+  }
   // The same with a policy that only reports, and the times each next page was sent.
   if (path === '/frame-src-report' || path === '/frame-src-next?report') {
     response.setHeader('content-security-policy-report-only', 'frame-src https://example.com');
@@ -1450,6 +1475,53 @@ async function firstOpen() {
       set(tab, { frame: false, width: 'full' }).catch(() => {}),
     ]);
     await ready(tab);
+
+    // A next page slow to answer, with and without a service worker: the frame lands on it,
+    // a link clicked and a reload alike, and the notice never shows meanwhile.
+    for (const kind of ['plain', 'sw']) {
+      await tab.goto(`${url}slow/${kind}/page`);
+      if (kind === 'sw') {
+        await tab.evaluate(async () => {
+          await navigator.serviceWorker.ready;
+        });
+        await tab.reload();
+      }
+      await ready(tab);
+      await set(tab, { frame: true, width: 400 });
+      await opens('devknobs smoke');
+      await tab.evaluate(() => {
+        const inner = document
+          .querySelector('[data-devknobs="viewport"]')!
+          .shadowRoot!.querySelector<HTMLIFrameElement>(
+            'iframe[data-devknobs-frame]',
+          )!.contentDocument!;
+        const link = inner.createElement('a');
+        link.href = 'next';
+        inner.body.append(link);
+        link.click();
+      });
+      const slowClick = await opens('the next page');
+      await tab.evaluate(() => {
+        const inner = document
+          .querySelector('[data-devknobs="viewport"]')!
+          .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')!;
+        inner.contentDocument!.querySelector('h1')!.textContent = 'before the reload';
+        inner.contentWindow!.location.reload();
+      });
+      await tab.waitForTimeout(100);
+      const slowReload = await opens('the next page');
+      log(`first open frame-src slow ${kind}`, { slowClick, slowReload });
+      assert.deepEqual(
+        [slowClick.text, slowClick.noticed, slowReload.text, slowReload.noticed],
+        ['the next page', false, 'the next page', false],
+        kind,
+      );
+      await Promise.all([
+        tab.waitForURL(`${url}slow/${kind}/next`),
+        set(tab, { frame: false, width: 'full' }).catch(() => {}),
+      ]);
+      await ready(tab);
+    }
 
     // A frame of the page's own its policy refuses leaves devknobs' frame where it is.
     const inFrame = () =>

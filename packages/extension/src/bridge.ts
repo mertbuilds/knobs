@@ -111,7 +111,9 @@ const RELOAD_MS = 2000;
 // devknobs' frames that hear their loads here.
 const heard = new WeakSet<HTMLIFrameElement>();
 
-function onFrameLoad(this: HTMLIFrameElement) {
+// Heard first, in the capture phase: a reload from here hides the error page from devknobs' own
+// listener, which would show its notice, or load the old address again, meanwhile.
+function onFrameLoad(this: HTMLIFrameElement, event: Event) {
   const now = performance.now();
   const { url } = refused;
   if (this.contentDocument !== null || now - refused.at > REFUSED_MS || url === '') {
@@ -123,6 +125,7 @@ function onFrameLoad(this: HTMLIFrameElement) {
   }
   reloaded.times += 1;
   if (reloaded.times <= RELOAD_MAX) {
+    event.stopImmediatePropagation();
     this.src = url;
   }
 }
@@ -143,7 +146,7 @@ document.addEventListener(
     refused = { at: performance.now(), url: event.blockedURI };
     if (!heard.has(frame)) {
       heard.add(frame);
-      frame.addEventListener('load', onFrameLoad);
+      frame.addEventListener('load', onFrameLoad, true);
     }
   },
   true,

@@ -38,6 +38,9 @@ describe('sameSite', () => {
     expect(sameSite('a.co.uk', 'b.co.uk')).toBe(false);
     expect(sameSite('x.co.uk', 'm.x.co.uk')).toBe(true);
     expect(sameSite('www.x.com.tr', 'm.x.com.tr')).toBe(true);
+    expect(sameSite('www.ok.ru', 'm.ok.ru')).toBe(true);
+    expect(sameSite('www.web.de', 'm.web.de')).toBe(true);
+    expect(sameSite('olx.pl', 'm.olx.pl')).toBe(true);
   });
 
   test('takes an address or a host of one label only as itself', () => {

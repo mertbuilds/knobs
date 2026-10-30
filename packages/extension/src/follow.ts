@@ -19,19 +19,35 @@ export function isFramePage(page: string, url: string): boolean {
   return want !== null && want === unhashed(url);
 }
 
+// Second levels under a country's domain that anyone can take a name under (co.uk, com.tr).
+const PUBLIC_SECOND = new Set([
+  'ac',
+  'co',
+  'com',
+  'edu',
+  'gov',
+  'go',
+  'gob',
+  'mil',
+  'ne',
+  'net',
+  'nic',
+  'or',
+  'org',
+]);
+
 /**
  * The host's registrable domain, near enough: its last two labels, or three where the second to
- * last is a short public second level under a country (co.uk, com.tr). An address or a host of
- * one label is its own.
+ * last is a public second level under a country (co.uk, com.tr). An address or a host of one
+ * label is its own.
  */
 function siteOf(host: string): string {
   const labels = host.split('.');
-  if (labels.length < 2 || host.includes(':') || /^\d+$/.test(labels.at(-1)!)) {
+  const [second = '', tld = ''] = labels.slice(-2);
+  if (labels.length < 2 || host.includes(':') || /^\d+$/.test(tld)) {
     return host;
   }
-  const tld = labels.at(-1)!;
-  const second = labels.at(-2)!;
-  const take = tld.length === 2 && second.length <= 3 && labels.length > 2 ? 3 : 2;
+  const take = tld.length === 2 && PUBLIC_SECOND.has(second) && labels.length > 2 ? 3 : 2;
   return labels.slice(-take).join('.');
 }
 
