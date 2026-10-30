@@ -912,12 +912,19 @@ describe("the frame over the page", () => {
 
   test("shows the notice once the host has not answered in time", async () => {
     const timers: (() => void)[] = [];
-    Reflect.set(window, "setTimeout", (run: () => void) => timers.push(run));
+    const delays: number[] = [];
+    Reflect.set(window, "setTimeout", (run: () => void, delay: number) => {
+      delays.push(delay);
+      return timers.push(run);
+    });
     onRefused(() => new Promise(() => {}));
     apply(VIEWPORT);
     await load(PAGE, "other");
     const notice = everything().find((element) => Reflect.get(element, "className") === "blocked");
     expect(notice && Reflect.get(notice, "hidden")).toBe(true);
+    const waited = delays.at(-1) ?? 0;
+    expect(waited).toBeGreaterThan(0);
+    expect(waited).toBeLessThanOrEqual(6000);
     for (const run of timers.splice(0)) run();
     expect(notice && Reflect.get(notice, "hidden")).toBe(false);
   });
@@ -927,6 +934,17 @@ describe("the frame over the page", () => {
     await load(PAGE, "other");
     const notice = everything().find((element) => Reflect.get(element, "className") === "blocked");
     expect(notice && Reflect.get(notice, "hidden")).toBe(false);
+  });
+
+  test("hands a host with nothing to wait for the frame once it is in the document", () => {
+    const attached: boolean[] = [];
+    onLoader((frame) => {
+      attached.push(everything().some((element) => Object.is(element, frame)));
+      return true;
+    });
+    apply(VIEWPORT);
+    expect(attached).toEqual([true]);
+    expect(Reflect.get(frameElement(), "src")).toBeUndefined();
   });
 
   test("has the host load the frame's page where it takes it, and sets the address itself where it does not", async () => {

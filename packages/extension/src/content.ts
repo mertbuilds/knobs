@@ -171,6 +171,12 @@ async function refused(url: string): Promise<FrameRefusal | null> {
   if (!top) {
     return null;
   }
+  // The service worker never said the frame's rules are in, as with an extension reloaded since
+  // the page loaded: no load again gets past that, so the notice says so at once.
+  const { error } = await ruled;
+  if (error !== undefined) {
+    return { why: error };
+  }
   const worker = (await scopeOf(url)) !== null;
   const wait = RELOAD_MS[reloads];
   if (worker && wait !== undefined) {

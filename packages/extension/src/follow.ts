@@ -19,6 +19,26 @@ export function isFramePage(page: string, url: string): boolean {
   return want !== null && want === unhashed(url);
 }
 
+// Hosts that give each of their customers a name of their own under them: alice.github.io and
+// bob.github.io are two sites.
+const SHARED_HOSTS = [
+  'github.io',
+  'gitlab.io',
+  'vercel.app',
+  'netlify.app',
+  'pages.dev',
+  'workers.dev',
+  'herokuapp.com',
+  'web.app',
+  'firebaseapp.com',
+  'blogspot.com',
+  'azurewebsites.net',
+  'cloudfront.net',
+  'appspot.com',
+  'onrender.com',
+  'fly.dev',
+];
+
 // Second levels under a country's domain that anyone can take a name under (co.uk, com.tr).
 const PUBLIC_SECOND = new Set([
   'ac',
@@ -47,6 +67,10 @@ function siteOf(host: string): string {
   if (labels.length < 2 || host.includes(':') || /^\d+$/.test(tld)) {
     return host;
   }
+  const shared = SHARED_HOSTS.find((suffix) => host.endsWith(`.${suffix}`));
+  if (shared) {
+    return labels.slice(-(shared.split('.').length + 1)).join('.');
+  }
   const take = tld.length === 2 && PUBLIC_SECOND.has(second) && labels.length > 2 ? 3 : 2;
   return labels.slice(-take).join('.');
 }
@@ -57,8 +81,8 @@ export function sameSite(a: string, b: string): boolean {
 }
 
 /**
- * Where a frame sent to `sent` landed on another origin of the same site: `landed`, or null for
- * the same origin, another site, or no web page.
+ * Where a frame sent to `sent` landed on another origin of the same site, by the same scheme:
+ * `landed`, or null for the same origin, another scheme or site, or no web page.
  */
 export function movedTo(sent: string, landed: string): string | null {
   const from = URL.parse(sent);
@@ -66,11 +90,23 @@ export function movedTo(sent: string, landed: string): string | null {
   if (!from || !to || (to.protocol !== 'https:' && to.protocol !== 'http:')) {
     return null;
   }
-  return from.origin === to.origin || !sameSite(from.hostname, to.hostname) ? null : to.href;
+  return from.origin === to.origin ||
+    from.protocol !== to.protocol ||
+    !sameSite(from.hostname, to.hostname)
+    ? null
+    : to.href;
 }
 
-/** Knobs a page handed on, for the tab's next page on `origin`, until `until` (ms). */
-export type Handoff<T> = { origin: string; state: T; until: number };
+/** Knobs a page handed on, for the tab's next page on `origin`, loaded from `url`, until `until` (ms). */
+export type Handoff<T> = { origin: string; state: T; until: number; url: string };
+
+/**
+ * Does a handoff outlive the tab loading `url`, or its frame going (no `url`)? Only the load it
+ * was made for keeps it: one the user started instead, or a canceled follow, drops it.
+ */
+export function keepsHandoff<T>(handoff: Handoff<T> | undefined, url: string | undefined): boolean {
+  return handoff !== undefined && url !== undefined && isFramePage(handoff.url, url);
+}
 
 /**
  * What becomes of a handoff as the tab's page at `url` asks at `now`: the knobs, once, for a page

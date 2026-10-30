@@ -1183,7 +1183,7 @@ function open(veiled: number | null, first: boolean): void {
       opened.addEventListener("load", onLoad);
       navigate(opened, frameUrl);
     });
-  } else {
+  } else if (!loader) {
     frame.addEventListener("load", onLoad);
     navigate(frame, frameUrl);
   }
@@ -1221,6 +1221,11 @@ function open(veiled: number | null, first: boolean): void {
   window.addEventListener("resize", resize);
   window.addEventListener("pagehide", keep);
   body.append(host);
+  // A host that loads the page itself hears the frame from the document, so it goes once in.
+  if (!waiting && loader) {
+    frame.addEventListener("load", onLoad);
+    navigate(frame, frameUrl);
+  }
   stopKeeping = keepMounted(host, { restored: remounted });
   const now = scene();
   if (veiled !== null && now) openVeiled(now, veiled);

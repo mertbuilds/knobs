@@ -1,5 +1,5 @@
 import type { NativeUa, SystemMedia } from '@vinena/knobs';
-import { type Handoff, isFramePage, movedTo, takeHandoff } from './follow.ts';
+import { type Handoff, isFramePage, keepsHandoff, movedTo, takeHandoff } from './follow.ts';
 import { commands, DEFAULT_STATE, isDefault, type KnobState, sameState } from './knobs.ts';
 import {
   type Answer,
@@ -375,10 +375,13 @@ async function setFramed(tabId: number, host: string | null): Promise<void> {
 }
 
 /** The tab's devknobs frame is gone, with the page it was on. */
-function unframed(tabId: number) {
+function unframed(tabId: number, url?: string) {
   forgetReopen(tabId);
   firstLoads.delete(tabId);
   follows.delete(tabId);
+  if (!keepsHandoff(handoffs.get(tabId), url)) {
+    handoffs.delete(tabId);
+  }
   void setFramed(tabId, null);
   void unbypass(tabId).catch(() => {
     // The debugger already left.
@@ -400,7 +403,7 @@ async function pageLoads(tabId: number, url: string) {
   const host = URL.parse(url)?.hostname;
   const framedOn = (await framedHosts()).get(tabId);
   if (!bypassing.has(tabId) || !host || framedOn !== host) {
-    unframed(tabId);
+    unframed(tabId, url);
     return;
   }
   void setFramed(tabId, null);
@@ -561,7 +564,7 @@ async function follow(tabId: number, state: Carry) {
   if (!to) {
     return;
   }
-  handoffs.set(tabId, { origin: to.origin, state, until: Date.now() + HANDOFF_MS });
+  handoffs.set(tabId, { origin: to.origin, state, until: Date.now() + HANDOFF_MS, url: to.href });
   await chrome.tabs.update(tabId, { url: to.href });
 }
 

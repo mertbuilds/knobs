@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isFramePage, movedTo, sameSite, takeHandoff } from '../src/follow.ts';
+import { isFramePage, keepsHandoff, movedTo, sameSite, takeHandoff } from '../src/follow.ts';
 
 describe('isFramePage', () => {
   test('is a load of the page above, its fragment aside', () => {
@@ -23,6 +23,7 @@ describe('movedTo', () => {
   test('is null on the same origin, another site, or for no web page', () => {
     expect(movedTo('http://127.0.0.1:8000/a', 'http://localhost:8000/b')).toBeNull();
     expect(movedTo('https://example.com/', 'https://accounts.google.com/')).toBeNull();
+    expect(movedTo('https://www.youtube.com/', 'http://m.youtube.com/')).toBeNull();
     expect(movedTo('https://a.test/', 'https://a.test/other')).toBeNull();
     expect(movedTo('https://a.test/', 'chrome-error://chromewebdata/')).toBeNull();
     expect(movedTo('https://a.test/', 'about:blank')).toBeNull();
@@ -43,6 +44,15 @@ describe('sameSite', () => {
     expect(sameSite('olx.pl', 'm.olx.pl')).toBe(true);
   });
 
+  test("tells a shared host's customers apart", () => {
+    expect(sameSite('alice.github.io', 'bob.github.io')).toBe(false);
+    expect(sameSite('www.alice.github.io', 'alice.github.io')).toBe(true);
+    expect(sameSite('a.vercel.app', 'b.vercel.app')).toBe(false);
+    expect(sameSite('x.pages.dev', 'y.pages.dev')).toBe(false);
+    expect(sameSite('one.blogspot.com', 'two.blogspot.com')).toBe(false);
+    expect(sameSite('a.b.cloudfront.net', 'c.cloudfront.net')).toBe(false);
+  });
+
   test('takes an address or a host of one label only as itself', () => {
     expect(sameSite('127.0.0.1', '127.0.0.1')).toBe(true);
     expect(sameSite('127.0.0.1', '10.0.0.1')).toBe(false);
@@ -52,7 +62,12 @@ describe('sameSite', () => {
 });
 
 describe('takeHandoff', () => {
-  const handoff = { origin: 'https://m.youtube.com', state: { device: 'iphone' }, until: 1000 };
+  const handoff = {
+    origin: 'https://m.youtube.com',
+    state: { device: 'iphone' },
+    until: 1000,
+    url: 'https://m.youtube.com/?ra=m',
+  };
 
   test('hands the knobs once to a page on its origin in time', () => {
     expect(takeHandoff(handoff, 'https://m.youtube.com/?ra=m', 500)).toEqual({
@@ -69,5 +84,26 @@ describe('takeHandoff', () => {
   test('drops them once too late, and has nothing with none', () => {
     expect(takeHandoff(handoff, 'https://m.youtube.com/', 1500)).toEqual({ keep: false });
     expect(takeHandoff(undefined, 'https://m.youtube.com/', 500)).toEqual({ keep: false });
+  });
+});
+
+describe('keepsHandoff', () => {
+  const handoff = {
+    origin: 'https://m.youtube.com',
+    state: {},
+    until: 1000,
+    url: 'https://m.youtube.com/?ra=m',
+  };
+
+  test('lives through the load it was made for alone', () => {
+    expect(keepsHandoff(handoff, 'https://m.youtube.com/?ra=m')).toBe(true);
+    expect(keepsHandoff(handoff, 'https://m.youtube.com/?ra=m#top')).toBe(true);
+    expect(keepsHandoff(handoff, 'https://m.youtube.com/other')).toBe(false);
+    expect(keepsHandoff(handoff, 'https://www.youtube.com/')).toBe(false);
+  });
+
+  test('goes with the frame, and there is none to keep without one', () => {
+    expect(keepsHandoff(handoff, undefined)).toBe(false);
+    expect(keepsHandoff(undefined, 'https://m.youtube.com/?ra=m')).toBe(false);
   });
 });
