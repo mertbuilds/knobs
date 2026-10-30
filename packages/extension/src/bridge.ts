@@ -2,6 +2,7 @@
 // devknobs and the service worker, which only this world can reach.
 import {
   type Answer,
+  LOAD_FRAME,
   type PageMessage,
   PREFER_KEY,
   type Question,
@@ -53,13 +54,41 @@ document.addEventListener(TO_BRIDGE, (event) => {
   });
 });
 
+// devknobs names the frame it loads the page in so (`FRAME_NAME` in its engine/frame.ts).
+const FRAME_NAME = 'devknobs-frame';
+
+// devknobs' frame loads the page from here: an address set from the extension's world is not
+// held to the page's own frame-src policy, which can leave the page itself out. Any script of
+// the page can send this event too, so it loads only a frame named as devknobs' frame is, and
+// only an address on the page's own origin, which the page could load itself.
+document.addEventListener(
+  LOAD_FRAME,
+  (event) => {
+    const frame = event.composedPath()[0] as Partial<HTMLIFrameElement> | undefined;
+    const url = (event as CustomEvent<unknown>).detail;
+    if (
+      frame?.nodeName !== 'IFRAME' ||
+      frame.name !== FRAME_NAME ||
+      typeof url !== 'string' ||
+      URL.parse(url)?.origin !== location.origin
+    ) {
+      return;
+    }
+    event.preventDefault();
+    frame.src = url;
+  },
+  true,
+);
+
 chrome.runtime.onMessage.addListener((message: TabMessage) => {
   toPage(message);
 });
 
 // A content script is a classic script, with no top-level await.
-chrome.runtime.sendMessage<Request, Response>({ type: 'get' }, ({ native = true, state, system }) =>
-  toPage({ base, native, state, system, type: 'state' }),
+chrome.runtime.sendMessage<Request, Response>(
+  { type: 'get' },
+  ({ carry, native = true, state, system }) =>
+    toPage({ base, carry, native, state, system, type: 'state' }),
 );
 
 // Who runs the panel, straight from storage, which answers sooner than the service

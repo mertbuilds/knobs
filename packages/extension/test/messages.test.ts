@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { DEFAULT_STATE } from '../src/knobs.ts';
 import {
   detachMessage,
+  readCarry,
   readPageMessage,
   readPrefer,
   readState,
@@ -52,6 +53,11 @@ describe('readPageMessage', () => {
       prefer: 'page',
       type: 'prefer',
     });
+    expect(readPageMessage({ id: 6, state: { device: 'iphone-18-pro' }, type: 'carry' })).toEqual({
+      id: 6,
+      state: { device: 'iphone-18-pro' },
+      type: 'carry',
+    });
   });
 
   test("drops the extension's own messages and anything malformed", () => {
@@ -65,6 +71,8 @@ describe('readPageMessage', () => {
       { id: 1, type: 'ua', ua: { userAgent: 7 } },
       { id: 1, prefer: 'both', type: 'prefer' },
       { prefer: 'page', type: 'prefer' },
+      { id: 1, state: 'iphone', type: 'carry' },
+      { state: {}, type: 'carry' },
       { state: { ...DEFAULT_STATE, scheme: 'sepia' }, type: 'set' },
       null,
       'set',
@@ -76,6 +84,15 @@ describe('readPageMessage', () => {
 
   test('the bridge alone asks for the knobs', () => {
     expect(readTabRequest({ type: 'get' })).toEqual({ type: 'get' });
+  });
+});
+
+describe('readCarry', () => {
+  test('takes an object of knobs, not one too big or of another kind', () => {
+    expect(readCarry({ device: 'pixel-10' })).toEqual({ device: 'pixel-10' });
+    expect(readCarry({ big: 'x'.repeat(70_000) })).toBeNull();
+    expect(readCarry([])).toBeNull();
+    expect(readCarry(null)).toBeNull();
   });
 });
 
