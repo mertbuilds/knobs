@@ -45,7 +45,7 @@ function recorder() {
     viewport: [] as (NativeViewport | null)[],
     ua: [] as (NativeUa | null)[],
   };
-  const driver: Required<Omit<NativeDriver, "setting" | "refused" | "framed">> = {
+  const driver: Required<Omit<NativeDriver, "setting" | "refused" | "framed" | "load">> = {
     text: (value) => calls.text.push(value),
     offline: (value) => calls.offline.push(value),
     media: (value) => calls.media.push(value),

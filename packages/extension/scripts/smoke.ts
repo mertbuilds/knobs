@@ -63,6 +63,25 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(caches.match('/worker/${kind}/page').then((cached) => cached ?? fetch(event.request)));
   }
 });`;
+// As X's: answers the frame at once from a copy it saved as it installed, which refuses frames,
+// and saves a new copy from the network behind it, for the next load, 1.5 seconds on: past the
+// first load again, so only the second gets it.
+const staleWorker = `self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  event.waitUntil(caches.open('pages').then((cache) => cache.put('/worker/stale/page', new Response(
+    '<!doctype html><html><head><meta charset="utf-8"></head><body><h1>from the cache</h1></body></html>',
+    { headers: { 'content-type': 'text/html', 'x-frame-options': 'DENY', 'content-security-policy': "frame-ancestors 'none'" } },
+  ))));
+});
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode === 'navigate' && event.request.destination === 'iframe') {
+    event.respondWith(caches.match('/worker/stale/page'));
+    event.waitUntil(new Promise((resolve) => setTimeout(resolve, 1500))
+      .then(() => fetch('/worker/stale/page', { cache: 'no-store' }))
+      .then((fresh) => caches.open('pages').then((cache) => cache.put('/worker/stale/page', fresh))));
+  }
+});`;
 // As an app that renders into <body> as it starts, such as a React root there: it takes out
 // every node it did not put there (`clears`) or puts a new <body> in (`replaces`). `reloads`
 // clears too, and reloads the tab once its frame's copy loads past the service worker, as a
@@ -89,6 +108,8 @@ addEventListener('message', (event) => {
   }
 });
 </script>`;
+// How many times the server sent each next page of the frame-src pages.
+const nextLoads = new Map<string, number>();
 // How many times the server sent each kind's page.
 const workerLoads = new Map<string, number>();
 // The user agent and client hints of the last request of each kind under /ua/: the page as a
@@ -253,12 +274,14 @@ self.addEventListener('fetch', (event) => {
   }
   // Pages under /worker/<kind>/ that refuse frames, each kind with a service worker of its scope:
   // `network` fetches the page from the server, `cache` answers it from Cache Storage.
-  const worker = /^\/worker\/(network|cache|clears|replaces|reloads)\/(sw\.js)?/.exec(path);
+  const worker = /^\/worker\/(network|cache|stale|clears|replaces|reloads)\/(sw\.js)?/.exec(path);
   if (worker) {
     const [, kind, script] = worker;
     if (script) {
       response.setHeader('content-type', 'text/javascript');
-      response.end(kind === 'network' ? networkWorker : cacheWorker(kind!));
+      response.end(
+        kind === 'network' ? networkWorker : kind === 'stale' ? staleWorker : cacheWorker(kind!),
+      );
       return;
     }
     workerLoads.set(kind!, (workerLoads.get(kind!) ?? 0) + 1);
@@ -267,7 +290,7 @@ self.addEventListener('fetch', (event) => {
     response.setHeader('content-security-policy', "frame-ancestors 'none'");
     response.end(
       page(
-        `<script>navigator.serviceWorker.register("/worker/${kind}/sw.js")</script>${kind === 'network' || kind === 'cache' ? '' : app(kind!)}`,
+        `<script>navigator.serviceWorker.register("/worker/${kind}/sw.js")</script>${kind === 'network' || kind === 'cache' || kind === 'stale' ? '' : app(kind!)}`,
       ).replace('<h1>devknobs smoke</h1>', '<h1>from the network</h1>'),
     );
     return;
@@ -279,7 +302,82 @@ self.addEventListener('fetch', (event) => {
     response.end();
     return;
   }
+  // As a site that sends a phone's browser to its mobile host: on www.knobs.localhost, a
+  // request that comes as an iPhone goes to the same page on m.knobs.localhost, which only its
+  // own origin may frame.
+  if (path === '/phone') {
+    if (
+      request.headers.host?.startsWith('www.knobs.localhost:') &&
+      request.headers['user-agent']?.includes('iPhone')
+    ) {
+      response.statusCode = 302;
+      response.setHeader('location', `http://m.knobs.localhost:${port}/phone`);
+      response.end();
+      return;
+    }
+    response.setHeader('content-type', 'text/html');
+    response.setHeader('x-frame-options', 'SAMEORIGIN');
+    response.end(page());
+    return;
+  }
   response.setHeader('content-type', 'text/html');
+  // A page whose own policy lets no frame of its origin in, and one whose frame-ancestors
+  // already lets the page itself frame it, whose policy then stays: its inline script is blocked.
+  // The same, with a next page that takes 1.5 seconds to answer, with or without a service
+  // worker that lets every load through.
+  const slow = /^\/slow\/(plain|sw)\/(page|next|sw\.js)$/.exec(path);
+  if (slow) {
+    const [, kind, part] = slow;
+    if (part === 'sw.js') {
+      response.setHeader('content-type', 'text/javascript');
+      response.end(networkWorker);
+      return;
+    }
+    response.setHeader('content-type', 'text/html');
+    response.setHeader('content-security-policy', 'frame-src https://example.com');
+    const register =
+      kind === 'sw' ? `<script>navigator.serviceWorker.register("/slow/sw/sw.js")</script>` : '';
+    if (part === 'next') {
+      setTimeout(
+        () =>
+          response.end(page(register).replace('<h1>devknobs smoke</h1>', '<h1>the next page</h1>')),
+        1500,
+      );
+      return;
+    }
+    response.end(page(register));
+    return;
+  }
+  // The same with a policy that only reports, and the times each next page was sent.
+  if (path === '/frame-src-report' || path === '/frame-src-next?report') {
+    response.setHeader('content-security-policy-report-only', 'frame-src https://example.com');
+  }
+  if (path.startsWith('/frame-src-next')) {
+    nextLoads.set(path, (nextLoads.get(path) ?? 0) + 1);
+  }
+  if (path === '/frame-src' || path === '/frame-src-next') {
+    response.setHeader('content-security-policy', 'frame-src https://example.com');
+  }
+  if (path === '/frame-src-report') {
+    response.end(page());
+    return;
+  }
+  if (path.startsWith('/frame-src-next')) {
+    response.end(page().replace('<h1>devknobs smoke</h1>', '<h1>the next page</h1>'));
+    return;
+  }
+  const ancestors = /^\/ancestors-(self|none|absent)$/.exec(path)?.[1];
+  if (ancestors) {
+    response.setHeader('x-frame-options', 'DENY');
+    response.setHeader(
+      'content-security-policy',
+      ancestors === 'absent'
+        ? "script-src 'self'"
+        : `frame-ancestors '${ancestors}'; script-src 'self'`,
+    );
+    response.end(page('<script>window.inlineRan = true;</script>'));
+    return;
+  }
   if (path === '/csp') {
     response.setHeader('content-security-policy', "default-src 'self'");
   }
@@ -922,7 +1020,7 @@ async function refusalCauses() {
         unknown
       >;
     };
-    // The framing rule stays off this tab, so its own frame is refused.
+    // The framing rules stay off this tab, so its own frame is refused.
     const dropRule = () =>
       worker.evaluate((tabId) => {
         const rules = chrome.declarativeNetRequest;
@@ -931,7 +1029,7 @@ async function refusalCauses() {
           updateSessionRules: (options: chrome.declarativeNetRequest.UpdateRuleOptions) =>
             update({
               ...options,
-              addRules: options.addRules?.filter((rule) => rule.id !== tabId),
+              addRules: options.addRules?.filter((rule) => !rule.condition.tabIds?.includes(tabId)),
             }),
         });
       }, tabId);
@@ -969,7 +1067,7 @@ async function refusalCauses() {
     assert.equal(await attached(), false, 'the debugger leaves once it has watched');
     await unframe();
 
-    // (b) A knob keeps the debugger on: a redirect to another host is named.
+    // (b) A knob keeps the debugger on: a redirect to another site is named, not followed.
     await tab.goto(`${url}bounce`);
     await ready(tab);
     await set(tab, { text: 20 });
@@ -989,7 +1087,8 @@ async function refusalCauses() {
     );
     await unframe();
 
-    // (c) A service worker answers the frame with X-Frame-Options, which no rule can strip.
+    // (c) A service worker answers the frame with X-Frame-Options, which no rule can strip: once
+    // the loads again fail, the notice says so in plain words, the record has the cause.
     await tab.goto(`${url}sw-deny`);
     await ready(tab);
     await tab.evaluate(async () => {
@@ -1000,7 +1099,7 @@ async function refusalCauses() {
     log('refusal: service worker', fromWorker);
     assert.equal(
       fromWorker,
-      `127.0.0.1:${port}/sw-deny answered 200 with X-Frame-Options: DENY (from a service worker)`,
+      `127.0.0.1:${port}/sw-deny answered 200 with X-Frame-Options: DENY (from a service worker); this site's service worker serves a saved copy of the page that refuses frames`,
     );
     const served = (await copied()).response as Record<string, unknown>;
     log('refusal: service worker response', served);
@@ -1145,7 +1244,9 @@ async function workerFrames() {
         rules,
       });
       assert.deepEqual(seen, { notice: false, text: 'from the network' });
-      assert.deepEqual(rules, [{ hosts: ['127.0.0.1'], tabIds: [-1], types: ['xmlhttprequest'] }]);
+      // One takes X-Frame-Options off, the other the CSP whose frame-ancestors refuses the page.
+      const rule = { hosts: ['127.0.0.1'], tabIds: [-1], types: ['xmlhttprequest'] };
+      assert.deepEqual(rules, [rule, rule]);
       assert.equal(await attached(tabId), false, 'no debugger for a network fetch');
       await unframe(tab);
       assert.equal(await noWorkerRules(), true, 'the rule goes with the frame');
@@ -1160,7 +1261,7 @@ async function workerFrames() {
       notice: false,
       text: 'from the network',
     });
-    assert.equal((await workerRules()).length, 1);
+    assert.equal((await workerRules()).length, 2);
     await other.close();
     assert.equal(await noWorkerRules(), true, 'the rule goes with the tab');
     log('worker rule', 'gone with the frame and with the tab');
@@ -1170,16 +1271,16 @@ async function workerFrames() {
     const cache = `${url}worker/cache/page`;
     await controlled(tab, cache);
     const why = tab.locator('[data-devknobs="viewport"] .blocked .why');
-    const bypass = why.locator('button.retry', { hasText: 'without the service worker' });
+    const bypass = why.locator('button.retry', { hasText: 'past the service worker' });
     await set(tab, { text: 20 });
     await tab.waitForFunction(() => getComputedStyle(document.documentElement).fontSize === '20px');
     await set(tab, { frame: true, width: 400 });
-    await why.locator('div', { hasText: /from a service worker/ }).waitFor({ timeout: 10_000 });
+    await why.locator('div', { hasText: /saved copy/ }).waitFor({ timeout: 10_000 });
     const cached = await why.locator('div').first().textContent();
     log('worker cache', cached);
     assert.equal(
       cached,
-      `blocked by Chrome: frame-ancestors 'none' on 127.0.0.1 (from a service worker)`,
+      "blocked by Chrome: frame-ancestors 'none' on 127.0.0.1 (from a service worker); this site's service worker serves a saved copy of the page that refuses frames",
     );
     log('worker cache button', await bypass.textContent());
     await bypass.click();
@@ -1238,7 +1339,7 @@ async function workerFrames() {
       }));
       assert.deepEqual(kept, { body: 'from the app', panel: true, viewport: true }, kind);
       const appWhy = tab.locator('[data-devknobs="viewport"] .blocked .why');
-      const appBypass = appWhy.locator('button.retry', { hasText: 'without the service worker' });
+      const appBypass = appWhy.locator('button.retry', { hasText: 'past the service worker' });
       await appBypass.waitFor({ timeout: 10_000 });
       const reloaded = kind === 'reloads' ? tab.waitForEvent('load') : null;
       await appBypass.click();
@@ -1271,6 +1372,260 @@ async function workerFrames() {
     }
   } finally {
     await workers.close();
+    await rm(own, { force: true, recursive: true });
+  }
+}
+
+/**
+ * Pages that refused devknobs' frame on its first open load with no notice and no debugger: one
+ * whose own frame-src policy leaves its origin out, one whose service worker answers from a copy
+ * that refuses frames and saves a new one behind it, as X's does, and one whose server sends a
+ * phone to another origin, where the tab follows with its device. X-Frame-Options always goes,
+ * and a CSP whose frame-ancestors lets the page itself in stays.
+ */
+async function firstOpen() {
+  const own = await mkdtemp(join(tmpdir(), 'knobs-smoke-first-'));
+  const first = await chromium.launchPersistentContext(own, {
+    args: [
+      `--disable-extensions-except=${dist}`,
+      `--load-extension=${dist}`,
+      `--window-size=${viewport.width},${viewport.height}`,
+    ],
+    channel: 'chromium',
+    colorScheme: null,
+    headless: true,
+    viewport,
+  });
+  try {
+    const worker = first.serviceWorkers()[0] ?? (await first.waitForEvent('serviceworker'));
+    const tab = first.pages()[0] ?? (await first.newPage());
+    const tabId = await worker.evaluate(async () => (await chrome.tabs.query({}))[0]!.id!);
+    const attached = () =>
+      worker.evaluate(
+        (tabId) =>
+          chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', { expression: '1' }).then(
+            () => true,
+            () => false,
+          ),
+        tabId,
+      );
+    // Polls the frame until it shows `want`, noting whether the notice ever came up meanwhile.
+    const opens = async (want: string) => {
+      const start = Date.now();
+      let noticed = false;
+      let seen = await framedText(tab);
+      while (!(seen.text === want && seen.notice === false) && Date.now() - start < 10_000) {
+        noticed ||= seen.notice === true;
+        await tab.waitForTimeout(20);
+        seen = await framedText(tab);
+      }
+      return { ...seen, ms: Date.now() - start, noticed };
+    };
+    const innerRan = () =>
+      tab.evaluate(
+        () =>
+          (
+            document
+              .querySelector('[data-devknobs="viewport"]')
+              ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')
+              ?.contentWindow as (Window & { inlineRan?: boolean }) | null
+          )?.inlineRan === true,
+      );
+    const unframe = async () => {
+      await set(tab, { device: 'none', frame: false, width: 'full' });
+      await tab.evaluate(() => window.devknobs!.ready());
+    };
+
+    // (a) The page's own frame-src leaves its origin out.
+    await tab.goto(`${url}frame-src`);
+    await ready(tab);
+    await set(tab, { frame: true, width: 400 });
+    const framed = await opens('devknobs smoke');
+    log('first open frame-src', framed);
+    assert.equal(framed.text, 'devknobs smoke');
+    assert.equal(framed.noticed, false);
+    // A link clicked in the frame, then a reload of it from the page above, as devknobs' own
+    // reloads go: the page's frame-src holds them too, and they land all the same.
+    await tab.evaluate(() => {
+      const inner = document
+        .querySelector('[data-devknobs="viewport"]')!
+        .shadowRoot!.querySelector<HTMLIFrameElement>(
+          'iframe[data-devknobs-frame]',
+        )!.contentDocument!;
+      const link = inner.createElement('a');
+      link.href = '/frame-src-next';
+      inner.body.append(link);
+      link.click();
+    });
+    const clicked = await opens('the next page');
+    await tab.evaluate(() => {
+      const inner = document
+        .querySelector('[data-devknobs="viewport"]')!
+        .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')!;
+      inner.contentDocument!.querySelector('h1')!.textContent = 'before the reload';
+      inner.contentWindow!.location.reload();
+    });
+    const reloadedFrame = await opens('the next page');
+    log('first open frame-src link and reload', { clicked, reloadedFrame });
+    assert.equal(clicked.text, 'the next page');
+    assert.equal(reloadedFrame.text, 'the next page');
+    // Closed, the frame hands the tab the page it went to.
+    await Promise.all([
+      tab.waitForURL(`${url}frame-src-next`),
+      set(tab, { frame: false, width: 'full' }).catch(() => {}),
+    ]);
+    await ready(tab);
+
+    // A next page slow to answer, with and without a service worker: the frame lands on it,
+    // a link clicked and a reload alike, and the notice never shows meanwhile.
+    for (const kind of ['plain', 'sw']) {
+      await tab.goto(`${url}slow/${kind}/page`);
+      if (kind === 'sw') {
+        await tab.evaluate(async () => {
+          await navigator.serviceWorker.ready;
+        });
+        await tab.reload();
+      }
+      await ready(tab);
+      await set(tab, { frame: true, width: 400 });
+      await opens('devknobs smoke');
+      await tab.evaluate(() => {
+        const inner = document
+          .querySelector('[data-devknobs="viewport"]')!
+          .shadowRoot!.querySelector<HTMLIFrameElement>(
+            'iframe[data-devknobs-frame]',
+          )!.contentDocument!;
+        const link = inner.createElement('a');
+        link.href = 'next';
+        inner.body.append(link);
+        link.click();
+      });
+      const slowClick = await opens('the next page');
+      await tab.evaluate(() => {
+        const inner = document
+          .querySelector('[data-devknobs="viewport"]')!
+          .shadowRoot!.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')!;
+        inner.contentDocument!.querySelector('h1')!.textContent = 'before the reload';
+        inner.contentWindow!.location.reload();
+      });
+      await tab.waitForTimeout(100);
+      const slowReload = await opens('the next page');
+      log(`first open frame-src slow ${kind}`, { slowClick, slowReload });
+      assert.deepEqual(
+        [slowClick.text, slowClick.noticed, slowReload.text, slowReload.noticed],
+        ['the next page', false, 'the next page', false],
+        kind,
+      );
+      await Promise.all([
+        tab.waitForURL(`${url}slow/${kind}/next`),
+        set(tab, { frame: false, width: 'full' }).catch(() => {}),
+      ]);
+      await ready(tab);
+    }
+
+    // A frame of the page's own its policy refuses leaves devknobs' frame where it is.
+    const inFrame = () =>
+      tab.evaluate(
+        () =>
+          document
+            .querySelector('[data-devknobs="viewport"]')
+            ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe[data-devknobs-frame]')
+            ?.contentDocument?.querySelector('h1')?.textContent ?? null,
+      );
+    await tab.goto(`${url}frame-src`);
+    await ready(tab);
+    await set(tab, { frame: true, width: 400 });
+    await opens('devknobs smoke');
+    await tab.evaluate(() => {
+      const own = document.createElement('iframe');
+      own.src = '/frame-src-next?own';
+      document.body.append(own);
+    });
+    await tab.waitForTimeout(1500);
+    const ownFrame = {
+      devknobs: await inFrame(),
+      loads: nextLoads.get('/frame-src-next?own') ?? 0,
+    };
+    log('first open frame-src, own frame refused', ownFrame);
+    assert.deepEqual(ownFrame, { devknobs: 'devknobs smoke', loads: 0 });
+    await unframe();
+
+    // A policy that only reports: a link clicked in the frame loads once, as Chrome loads it.
+    await tab.goto(`${url}frame-src-report`);
+    await ready(tab);
+    await set(tab, { frame: true, width: 400 });
+    await opens('devknobs smoke');
+    await tab.evaluate(() => {
+      const inner = document
+        .querySelector('[data-devknobs="viewport"]')!
+        .shadowRoot!.querySelector<HTMLIFrameElement>(
+          'iframe[data-devknobs-frame]',
+        )!.contentDocument!;
+      const link = inner.createElement('a');
+      link.href = '/frame-src-next?report';
+      inner.body.append(link);
+      link.click();
+    });
+    await opens('the next page');
+    await tab.waitForTimeout(1500);
+    const reported = nextLoads.get('/frame-src-next?report');
+    log('first open frame-src, report only', { loads: reported });
+    assert.equal(reported, 1);
+    await Promise.all([
+      tab.waitForURL(`${url}frame-src-next?report`),
+      set(tab, { frame: false, width: 'full' }).catch(() => {}),
+    ]);
+    await ready(tab);
+
+    // (b) A CSP whose frame-ancestors has 'self', or that has none, stays, X-Frame-Options
+    // aside; 'none' goes.
+    const policies: Record<string, unknown> = {};
+    for (const kind of ['self', 'none', 'absent']) {
+      await tab.goto(`${url}ancestors-${kind}`);
+      await ready(tab);
+      await set(tab, { frame: true, width: 400 });
+      const seen = await opens('devknobs smoke');
+      policies[kind] = { inlineRan: await innerRan(), text: seen.text };
+      await unframe();
+    }
+    log('first open frame-ancestors', policies);
+    assert.deepEqual(policies, {
+      absent: { inlineRan: false, text: 'devknobs smoke' },
+      none: { inlineRan: true, text: 'devknobs smoke' },
+      self: { inlineRan: false, text: 'devknobs smoke' },
+    });
+
+    // (c) The service worker answers from a copy that refuses frames and saves a new one behind.
+    await tab.goto(`${url}worker/stale/page`);
+    await tab.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    await tab.reload();
+    await ready(tab);
+    await set(tab, { frame: true, width: 400 });
+    const stale = await opens('from the network');
+    const debuggerOn = await attached();
+    log('first open stale worker', { ...stale, debuggerOn });
+    assert.equal(stale.text, 'from the network');
+    assert.equal(stale.noticed, false, 'no notice while it loads again');
+    assert.equal(debuggerOn, false, 'no debugger');
+    await unframe();
+
+    // (d) As an iPhone, the frame's page on www.knobs.localhost is sent to m.knobs.localhost,
+    // of the same site: the tab follows.
+    await tab.goto(`http://www.knobs.localhost:${port}/phone`);
+    await ready(tab);
+    await set(tab, { device: 'iphone-18-pro', mock: true });
+    await tab.waitForURL(`http://m.knobs.localhost:${port}/phone`, { timeout: 10_000 });
+    await ready(tab);
+    const followed = await opens('devknobs smoke');
+    const device = await tab.evaluate(() => window.devknobs!.getState().device);
+    log('first open followed', { ...followed, device, url: tab.url() });
+    assert.equal(device, 'iphone-18-pro');
+    assert.equal(followed.text, 'devknobs smoke');
+    await unframe();
+  } finally {
+    await first.close();
     await rm(own, { force: true, recursive: true });
   }
 }
@@ -2416,7 +2771,8 @@ try {
     worker.evaluate(async () =>
       (await chrome.declarativeNetRequest.getSessionRules())
         .filter(({ condition }) => !condition.tabIds?.includes(chrome.tabs.TAB_ID_NONE))
-        .map(({ condition, id }) => ({
+        .map(({ action, condition, id }) => ({
+          header: action.responseHeaders?.[0]?.header,
           host: condition.requestDomains,
           id,
           tabIds: condition.tabIds,
@@ -2463,9 +2819,13 @@ try {
   // Its frame of devknobs open: the rule is its own, and a frame of a host that is not its own keeps the headers.
   await set(other, { frame: true, width: 400 });
   await other.evaluate(() => window.devknobs!.ready());
-  const rules = await settledRules(1);
+  const rules = await settledRules(2);
   log('session rules', rules);
-  assert.deepEqual(rules, [{ host: ['localhost'], id: otherId, tabIds: [otherId] }]);
+  assert.deepEqual(rules, [
+    { header: 'x-frame-options', host: ['localhost'], id: otherId, tabIds: [otherId] },
+    { header: 'content-security-policy', host: ['localhost'], id: rules[1]?.id, tabIds: [otherId] },
+  ]);
+  assert.notEqual(rules[1]?.id, otherId);
   const ownHost = await frameOf(`${otherOrigin}deny`);
   const foreignHost = await frameOf(`${url}deny`);
   log('other tab frames, devknobs frame open', { foreignHost, ownHost });
@@ -2500,6 +2860,7 @@ try {
   await inPageMode();
   await refusalCauses();
   await workerFrames();
+  await firstOpen();
   await uaRequests();
   await strictPolicy();
   await pageOwnCopy();

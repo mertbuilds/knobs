@@ -35,7 +35,7 @@ Real or in-page: the real knobs use Chrome's debugger, so Chrome shows its "star
 
 The panel also has the views a front end developer reaches for: grab (click an element to copy its html, the components that rendered it and where they live in the code, for a coding agent), inspect, a requests view laid out like the browser's network panel, storage, replay animations, and a phone or foldable drawn around the page.
 
-What servers see: nothing changes until you set a knob. The user agent knob changes the User-Agent and client hint headers of that tab, and of what that page's service worker fetches from its own host. While the panel's width frame is open, frames of the page's own host in that tab load without X-Frame-Options and Content-Security-Policy, so the page can show inside the frame.
+What servers see: nothing changes until you set a knob. The user agent knob changes the User-Agent and client hint headers of that tab, and of what that page's service worker fetches from its own host. While the panel's width frame is open, frames of the page's own host in that tab load without X-Frame-Options, and without a Content-Security-Policy whose frame-ancestors refuses the page, so the page can show inside the frame.
 
 Privacy: the extension sends nothing to the developer or any third party, and has no analytics. The panel's only requests go to the page you are on: its bundles and source maps for grab, its fonts, and a second load of the page in the frame. The device images ship in the extension. The extension keeps its settings in Chrome's storage on your computer, and the panel keeps its settings under devknobs keys in that page's own storage. Privacy policy: https://knobs.dev/docs/privacy
 
@@ -80,13 +80,13 @@ knobs puts a developer panel on the page you are building, so you can see how it
 `debugger` (the store takes at most 1000 characters per justification)
 
 ```
-Used only on the user's action, to apply a setting for real to the tab they are working on. It attaches in three cases: (1) "real browser settings" is on and the user sets text size, offline, a media preference or a viewport; it detaches when all are back to default. (2) The user presses "find out why" after a page refused to load in the panel's frame; it watches that frame's next load. (3) The user presses "load without the service worker"; it detaches when the frame closes. Commands: Page.getFrameTree, Page.setFontSizes, Emulation.setEmulatedMedia, setDeviceMetricsOverride, clearDeviceMetricsOverride, setTouchEmulationEnabled, setEmitTouchEventsForMouse, setUserAgentOverride, Network.enable, emulateNetworkConditions, setBypassServiceWorker, Audits.enable, Log.enable. While attached it notes frame loads in memory; only Sec-Fetch values are shown in the panel, nothing is stored or sent. With real browser settings off it never attaches for a setting.
+Used only on the user's action, to apply a setting for real to the tab they are working on. It attaches in three cases: (1) "real browser settings" is on and the user sets text size, offline, a media preference or a viewport; it detaches when all are back to default. (2) The user presses "find out why" after a page refused to load in the panel's frame; it watches that frame's next load. (3) The user presses "load past the service worker"; it detaches when the frame closes. Commands: Page.getFrameTree, Page.setFontSizes, Emulation.setEmulatedMedia, setDeviceMetricsOverride, clearDeviceMetricsOverride, setTouchEmulationEnabled, setEmitTouchEventsForMouse, setUserAgentOverride, Network.enable, emulateNetworkConditions, setBypassServiceWorker, Audits.enable, Log.enable. While attached it notes frame loads in memory; only Sec-Fetch values are shown in the panel, nothing is stored or sent. With real browser settings off it never attaches for a setting.
 ```
 
 `declarativeNetRequestWithHostAccess`
 
 ```
-Session rules for the tab the user is working on, added and removed by the user's settings. (1) The user agent setting: a rule sets the User-Agent and client hint request headers on that tab's requests, and on what that page's service worker fetches from its own host. It goes when the setting goes back to system or the tab closes. (2) The width frame: only while the panel's frame is open in a tab, a rule removes X-Frame-Options and Content-Security-Policy from frame loads of the page's own host in that tab (and from what that host's service worker fetches from itself), so the page can load inside the frame. It goes when the frame closes, the tab loads another page or the tab closes.
+Session rules for the tab the user is working on, added and removed by the user's settings. (1) The user agent setting: a rule sets the User-Agent and client hint request headers on that tab's requests, and on what that page's service worker fetches from its own host. It goes when the setting goes back to system or the tab closes. (2) The width frame: only while the panel's frame is open in a tab, rules remove X-Frame-Options, and a Content-Security-Policy whose frame-ancestors refuses the page (one that allows 'self', or has no frame-ancestors, stays), from frame loads of the page's own host in that tab (and from what that host's service worker fetches from itself), so the page can load inside the frame. It goes when the frame closes, the tab loads another page or the tab closes.
 ```
 
 `offscreen`
@@ -104,7 +104,7 @@ chrome.storage.session keeps each tab's settings, which tabs have the panel's fr
 `webNavigation`
 
 ```
-Listens to onBeforeNavigate for a tab's top frame only, to remove that tab's frame rules (and stop skipping service workers) when the tab loads another page, since the frame they were for is gone with the old page.
+Listens to onBeforeNavigate for a tab's top frame, to remove that tab's frame rules (and stop skipping service workers) when the tab loads another page, since the frame they were for is gone with the old page. While the panel's frame is open, it also listens to onBeforeNavigate, onCommitted and onErrorOccurred for subframes of that tab, only to find the panel's frame's first load and where it ended. If a server sent that load to another host of the same site, such as a phone's mobile host, the extension moves that tab to that address (chrome.tabs.update), as the phone would be sent, and hands the panel's settings to the new page. No navigation data is stored or sent.
 ```
 
 Host permission `<all_urls>`

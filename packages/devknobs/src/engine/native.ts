@@ -96,6 +96,13 @@ export interface NativeDriver {
    * settles, so the host can let it in first.
    */
   framed?: (open: boolean) => void | Promise<void>;
+  /**
+   * Load the frame's page at `url`, an address on the page's own origin, in
+   * place of devknobs setting the frame's `src`, as a browser extension can
+   * from its own world, which the page's own `frame-src` policy does not
+   * reach. False leaves it to devknobs.
+   */
+  load?: (frame: HTMLIFrameElement, url: string) => boolean;
 }
 
 /** Why the frame's page was refused, as the host knows it. */
@@ -104,7 +111,10 @@ export interface FrameRefusal {
   why: string;
   /** What the notice's "copy details" button puts on the clipboard. */
   details?: string;
-  /** A button that runs `run`, then loads the frame again, to find out more. `now` runs it at once, unpressed. */
+  /**
+   * A button that runs `run`, then loads the frame again, to find out more.
+   * `now` runs it at once, unpressed, with the notice kept hidden meanwhile.
+   */
   retry?: { label: string; run: () => Promise<void>; now?: boolean };
 }
 

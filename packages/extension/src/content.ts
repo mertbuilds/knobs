@@ -17,6 +17,7 @@ import {
   type Answer,
   type Ask,
   LEGACY_TO_PAGE,
+  LOAD_FRAME,
   type NativeReason,
   type PageMessage,
   type Question,
@@ -94,26 +95,48 @@ function send() {
 let asked = 0;
 const answers = new Map<number, (answer: Answer) => void>();
 
+// How long a question waits for the service worker, in ms: past it, the extension was reloaded
+// or removed since the page loaded, and nothing answers.
+const ASK_MS = 5000;
+
 function ask(question: Ask): Promise<Answer> {
   const id = ++asked;
   return new Promise((resolve) => {
-    answers.set(id, resolve);
+    const timer = setTimeout(() => {
+      answers.delete(id);
+      resolve({ error: 'the extension did not answer: reload the page' });
+    }, ASK_MS);
+    answers.set(id, (answer) => {
+      clearTimeout(timer);
+      resolve(answer);
+    });
     toBridge({ ...question, id });
   });
 }
 
 // The frame now up: the service worker's word that its framing rules are set,
-// whether it was loaded again for that, and whether its loads skip service workers.
+// how many times it was loaded again for a service worker, and whether its loads skip them.
 let ruled: Promise<Answer> = Promise.resolve({});
-let reloaded = false;
+let reloads = 0;
 let bypassed = false;
+
+// A service worker's fetch can beat the rule that lets the frame in. And one can answer from a
+// copy it saved, refusing frames, and save a new one from the network behind it, as X's does:
+// that fetch goes through the service worker's rule, so the copy it saves lets the frame in.
+// So a page with one is loaded again after each of these waits, in ms, before the notice shows.
+const RELOAD_MS = [1000, 3000];
+
+// Why a service worker's page is still refused, and its last way past.
+const WORKER_WHY = "this site's service worker serves a saved copy of the page that refuses frames";
+const MAYBE_WORKER_WHY =
+  "this site's service worker may serve a saved copy of the page that refuses frames";
 
 /** The frame opened or went. Its first load waits for the rules that let it in. */
 async function framed(open: boolean): Promise<void> {
   if (!top) {
     return;
   }
-  reloaded = false;
+  reloads = 0;
   bypassed = false;
   ruled = ask({ open, type: 'frame' });
   await ruled;
@@ -122,7 +145,7 @@ async function framed(open: boolean): Promise<void> {
 /** Load the frame again with the tab's loads skipping service workers, which takes the debugger. */
 function bypass(): NonNullable<FrameRefusal['retry']> {
   return {
-    label: "load without the service worker (shows Chrome's bar)",
+    label: 'load past the service worker (Chrome shows a bar meanwhile)',
     run: async () => {
       const { error } = await ask({ type: 'bypass' });
       if (error !== undefined) {
@@ -148,12 +171,25 @@ async function refused(url: string): Promise<FrameRefusal | null> {
   if (!top) {
     return null;
   }
+  // The service worker never said the frame's rules are in, as with an extension reloaded since
+  // the page loaded: no load again gets past that, so the notice says so at once.
+  const { error } = await ruled;
+  if (error !== undefined) {
+    return { why: error };
+  }
   const worker = (await scopeOf(url)) !== null;
-  // The service worker's fetch may have beaten the rule that lets it through: once, load again.
-  if (worker && !reloaded) {
-    reloaded = true;
+  const wait = RELOAD_MS[reloads];
+  if (worker && wait !== undefined) {
+    reloads += 1;
     return {
-      retry: { label: 'load again', now: true, run: async () => void (await ruled) },
+      retry: {
+        label: 'load again',
+        now: true,
+        run: async () => {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          await ruled;
+        },
+      },
       why: 'loading the page again',
     };
   }
@@ -181,22 +217,38 @@ async function refused(url: string): Promise<FrameRefusal | null> {
                 }
               },
             },
-      why: "Chrome's debugger was not watching as it loaded",
+      why:
+        worker && !bypassed ? MAYBE_WORKER_WHY : "Chrome's debugger was not watching as it loaded",
     };
   }
   const { record } = answer;
   if (record.response?.fromServiceWorker) {
     record.response.serviceWorkerScope = await scopeOf(record.response.url);
   }
+  const saved = record.response?.fromServiceWorker === true && !bypassed;
   return {
     details: JSON.stringify(record, null, 2),
-    why: describeLoad(record),
-    ...(record.response?.fromServiceWorker && !bypassed ? { retry: bypass() } : {}),
+    why: saved ? `${describeLoad(record)}; ${WORKER_WHY}` : describeLoad(record),
+    ...(saved ? { retry: bypass() } : {}),
   };
+}
+
+/**
+ * Have the bridge load devknobs' frame from the extension's world, past the page's own frame-src
+ * policy. The bridge cancels the event as it does; where it did not, devknobs sets the address.
+ */
+function load(frame: HTMLIFrameElement, url: string): boolean {
+  return (
+    top &&
+    !frame.dispatchEvent(
+      new CustomEvent(LOAD_FRAME, { bubbles: true, cancelable: true, composed: true, detail: url }),
+    )
+  );
 }
 
 const driver: NativeDriver = {
   framed,
+  load,
   media: (media) => {
     knobs = { ...knobs, ...media };
     send();
@@ -349,6 +401,9 @@ function onMessage(event: Event) {
     setPrefer(message.prefer);
   } else if (message.type === 'toggle') {
     setState({ panel: { open: !getState().panel.open } });
+  } else if (message.type === 'carry') {
+    // The tab follows its frame to another origin: the page there takes these knobs.
+    void ask({ state: { ...getState() }, type: 'carry' });
   } else if (message.type === 'detached') {
     // The tab's own size is back too, so a size the tab had goes with it.
     const sized: DevknobsStatePatch = knobs.viewport
@@ -379,6 +434,14 @@ function onMessage(event: Event) {
     // as it loads. Not after a refusal, which would only be refused again.
     if (first && !sameState(message.state, knobs)) {
       send();
+    }
+    // The knobs of the page on another origin the tab followed its frame from.
+    if (message.carry) {
+      try {
+        setState(message.carry as DevknobsStatePatch);
+      } catch {
+        // Knobs this copy of devknobs does not take: the page keeps its own.
+      }
     }
   }
 }

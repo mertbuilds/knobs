@@ -269,6 +269,7 @@ export function start(options: EngineOptions = {}): void {
   // A host can say why a page refused the frame.
   width.onRefused(native?.refused ?? null);
   width.onFramed(native?.framed ?? null);
+  width.onLoader(native?.load ?? null);
   applyState(merge(stored ? load() : { ...DEFAULT_STATE }, options.state ?? {}));
   if (!inFrame) return;
   relay(overflow.overflowCount());
@@ -289,6 +290,7 @@ export function stop(): void {
   width.onZoom(null);
   width.onRefused(null);
   width.onFramed(null);
+  width.onLoader(null);
   media.destroy();
   touch.reset();
   touchPointer.reset();

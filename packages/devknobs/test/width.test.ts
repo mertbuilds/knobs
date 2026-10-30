@@ -3,6 +3,7 @@ import { SCREENS, turn } from "../src/engine/devices";
 import { type ColumnEdge, DOCK_WIDTH, setDockWidth, watchColumn } from "../src/engine/dock";
 import { FOLD_TIME } from "../src/engine/fold";
 import { UNFRAMED } from "../src/engine/frame";
+import type { FrameRefusal } from "../src/engine/native";
 import { FRESH_ATTRIBUTE, FRESH_RELOAD_KEY } from "../src/engine/fresh";
 import { patchedAs } from "../src/engine/identity";
 import { mockOf } from "../src/engine/mock";
@@ -17,6 +18,7 @@ import {
   idle as caughtUp,
   label,
   onFramed,
+  onLoader,
   onRefused,
   onZoom,
   origin,
@@ -732,6 +734,7 @@ afterEach(() => {
   onZoom(null);
   onRefused(null);
   onFramed(null);
+  onLoader(null);
   FakeDialog.prototype.showModal = NATIVE_SHOW_MODAL;
   for (const name of [
     "window",
@@ -858,6 +861,110 @@ describe("the frame over the page", () => {
     expect(named("why").children[0]?.textContent).toBe("still refused");
     reset();
     expect(heard).toEqual([true, false]);
+  });
+
+  test("keeps the notice hidden while the host answers, and through a load again it runs at once", async () => {
+    let answer = (_refusal: FrameRefusal | null) => {};
+    let finish = () => {};
+    onRefused(() => new Promise((resolve) => (answer = resolve)));
+    apply(VIEWPORT);
+    await load(PAGE, "other");
+    const named = (name: string) =>
+      everything().find((element) => Reflect.get(element, "className") === name) ?? new FakeElement();
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(true);
+    answer({ why: "waiting", retry: { label: "load again", now: true, run: () => new Promise((resolve) => (finish = resolve)) } });
+    await Bun.sleep(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(true);
+    expect(named("why").children).toEqual([]);
+    Reflect.set(frameElement(), "src", "");
+    finish();
+    await Bun.sleep(1);
+    expect(Reflect.get(frameElement(), "src")).toBe(PAGE);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(true);
+  });
+
+  test("shows the notice where the host cannot say, or its load again fails, and keeps it hidden after a good load", async () => {
+    const named = (name: string) =>
+      everything().find((element) => Reflect.get(element, "className") === name) ?? new FakeElement();
+    onRefused(async () => {
+      throw new Error("no host");
+    });
+    apply(VIEWPORT);
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(false);
+    onRefused(async () => ({
+      why: "waiting",
+      retry: { label: "load again", now: true, run: async () => Promise.reject(new Error("could not load again")) },
+    }));
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(false);
+    expect(named("why").children[0]?.textContent).toBe("could not load again");
+    let answer = (_refusal: FrameRefusal | null) => {};
+    onRefused(() => new Promise((resolve) => (answer = resolve)));
+    await load(PAGE, "other");
+    await load(PAGE);
+    answer({ why: "too late" });
+    await Bun.sleep(1);
+    expect(Reflect.get(named("blocked"), "hidden")).toBe(true);
+  });
+
+  test("shows the notice once the host has not answered in time", async () => {
+    const timers: (() => void)[] = [];
+    const delays: number[] = [];
+    Reflect.set(window, "setTimeout", (run: () => void, delay: number) => {
+      delays.push(delay);
+      return timers.push(run);
+    });
+    onRefused(() => new Promise(() => {}));
+    apply(VIEWPORT);
+    await load(PAGE, "other");
+    const notice = everything().find((element) => Reflect.get(element, "className") === "blocked");
+    expect(notice && Reflect.get(notice, "hidden")).toBe(true);
+    const waited = delays.at(-1) ?? 0;
+    expect(waited).toBeGreaterThan(0);
+    expect(waited).toBeLessThanOrEqual(6000);
+    for (const run of timers.splice(0)) run();
+    expect(notice && Reflect.get(notice, "hidden")).toBe(false);
+  });
+
+  test("shows the notice at once with no host to ask", async () => {
+    apply(VIEWPORT);
+    await load(PAGE, "other");
+    const notice = everything().find((element) => Reflect.get(element, "className") === "blocked");
+    expect(notice && Reflect.get(notice, "hidden")).toBe(false);
+  });
+
+  test("hands a host with nothing to wait for the frame once it is in the document", () => {
+    const attached: boolean[] = [];
+    onLoader((frame) => {
+      attached.push(everything().some((element) => Object.is(element, frame)));
+      return true;
+    });
+    apply(VIEWPORT);
+    expect(attached).toEqual([true]);
+    expect(Reflect.get(frameElement(), "src")).toBeUndefined();
+  });
+
+  test("has the host load the frame's page where it takes it, and sets the address itself where it does not", async () => {
+    const loads: string[] = [];
+    let takes = true;
+    onFramed(async () => {});
+    onLoader((_frame, url) => {
+      loads.push(url);
+      return takes;
+    });
+    onRefused(async () => ({ why: "refused", retry: { label: "load again", now: true, run: async () => {} } }));
+    apply(VIEWPORT);
+    await Bun.sleep(1);
+    expect(loads).toEqual([PAGE]);
+    expect(Reflect.get(frameElement(), "src")).toBeUndefined();
+    takes = false;
+    await load(PAGE, "other");
+    await Bun.sleep(1);
+    expect(loads).toEqual([PAGE, PAGE]);
+    expect(Reflect.get(frameElement(), "src")).toBe(PAGE);
   });
 
   test("holds the frame's first load until the host has let it in", async () => {
